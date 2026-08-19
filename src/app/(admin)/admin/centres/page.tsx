@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2 } from 'lucide-react';
+import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy } from 'lucide-react';
 
 export default function CentresPage() {
   const [centres, setCentres] = useState<any[]>([]);
@@ -207,6 +207,27 @@ export default function CentresPage() {
                       >
                         <Phone className="w-3.5 h-3.5" /> {centre.faculty_mobile}
                       </a>
+
+                      {/* Login Credentials Box */}
+                      <div className="mt-4 bg-slate-50 p-3 rounded-xl border-2 border-slate-100">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                          <span>Login Credentials</span>
+                          <button 
+                            onClick={() => {
+                              const creds = `Login ID: ${centre.faculty_mobile}@rit.faculty\nPassword: ${centre.faculty_mobile}`;
+                              navigator.clipboard.writeText(creds);
+                              alert("Credentials Copied to Clipboard!");
+                            }}
+                            className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-100 px-2 py-1 rounded-md transition-colors"
+                          >
+                            <Copy className="w-3 h-3" /> Copy
+                          </button>
+                        </p>
+                        <div className="space-y-1 text-xs font-mono font-bold text-slate-700">
+                          <p><span className="text-slate-400 mr-2">ID:</span> {centre.faculty_mobile}@rit.faculty</p>
+                          <p><span className="text-slate-400 mr-2">PW:</span> {centre.faculty_mobile}</p>
+                        </div>
+                      </div>
                     </div>
                     <button
                       onClick={() => startEdit(centre)}
