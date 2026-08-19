@@ -46,7 +46,7 @@ export default function AdminSidebar() {
       <div className={`
         fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 
         transform transition-transform duration-300 ease-in-out
-        md:static md:translate-x-0 md:w-64 md:min-h-[calc(100vh-5rem)] 
+        md:sticky md:top-20 md:translate-x-0 md:w-64 md:h-[calc(100vh-5rem)] 
         flex flex-col flex-shrink-0
         ${isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}
       `}>
