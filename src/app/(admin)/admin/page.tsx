@@ -93,7 +93,7 @@ export default function AdminDashboard() {
       const allocCounts: Record<string, number> = {};
       const clubMap: Record<string, number> = {};
       const centreMap: Record<string, number> = {};
-      const dayMap: Record<string, number> = {};
+      const dayMap: Record<string, { club: number, centre: number }> = {};
 
       allAllocations.forEach(a => {
         // Count for student completion
@@ -102,13 +102,18 @@ export default function AdminDashboard() {
         // Count for leaderboards and traffic
         const slot = a.slots;
         if (slot) {
+          const isClub = !!slot.club?.name;
+          const isCentre = !!slot.centre?.name;
+          
           if (slot.day) {
-             dayMap[slot.day] = (dayMap[slot.day] || 0) + 1;
+             if (!dayMap[slot.day]) dayMap[slot.day] = { club: 0, centre: 0 };
+             if (isClub) dayMap[slot.day].club++;
+             if (isCentre) dayMap[slot.day].centre++;
           }
-          if (slot.club?.name) {
+          if (isClub) {
             clubMap[slot.club.name] = (clubMap[slot.club.name] || 0) + 1;
           }
-          if (slot.centre?.name) {
+          if (isCentre) {
             centreMap[slot.centre.name] = (centreMap[slot.centre.name] || 0) + 1;
           }
         }
@@ -182,7 +187,7 @@ export default function AdminDashboard() {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
         
-      const dayStats = Object.entries(dayMap).map(([day, count]) => ({ day, count }));
+      const dayStats = Object.entries(dayMap).map(([day, counts]) => ({ day, club: counts.club, centre: counts.centre }));
 
       // 3. Fetch Recent Activity
       const { data: recentActivity, error: recentError } = await supabase
@@ -547,22 +552,18 @@ export default function AdminDashboard() {
           
           <div className="flex-1 w-full h-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.dayStats} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+              <BarChart data={stats.dayStats} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
                 <Tooltip 
-                  cursor={{ stroke: '#8b5cf6', strokeWidth: 2, strokeDasharray: '5 5' }}
+                  cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
-                <Area type="monotone" dataKey="count" name="Allocated Seats" stroke="#8b5cf6" strokeWidth={4} fillOpacity={1} fill="url(#colorCount)" />
-              </AreaChart>
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
+                <Bar dataKey="club" name="Club Seats" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
+                <Bar dataKey="centre" name="Centre Seats" stackId="a" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
