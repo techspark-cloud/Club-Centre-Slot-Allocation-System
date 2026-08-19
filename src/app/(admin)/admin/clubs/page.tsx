@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Building2, Phone, User, Pencil, Check, X, Plus } from 'lucide-react';
+import { Building2, Phone, User, Pencil, Check, X, Plus, Users, Download, Loader2 } from 'lucide-react';
 
 export default function ClubsPage() {
   const [clubs, setClubs] = useState<any[]>([]);
@@ -10,6 +10,13 @@ export default function ClubsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ faculty_name: '', faculty_mobile: '' });
   const [saving, setSaving] = useState(false);
+  
+  // Members Modal State
+  const [membersModalOpen, setMembersModalOpen] = useState(false);
+  const [selectedClub, setSelectedClub] = useState<any>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -45,6 +52,61 @@ export default function ClubsPage() {
       setEditingId(null);
     }
     setSaving(false);
+  };
+
+  const viewMembers = async (club: any) => {
+    setSelectedClub(club);
+    setMembersModalOpen(true);
+    setLoadingMembers(true);
+    
+    const { data } = await supabase
+      .from('allocations')
+      .select(`
+        id,
+        student:students (
+          id, name, register_no, course, section, year, department, hosteller
+        ),
+        slot:slots!inner (
+          id, day, club_id
+        )
+      `)
+      .eq('slot.club_id', club.id);
+      
+    if (data) {
+      const sorted = data
+        .filter(a => a.student) // safety check
+        .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
+      setMembers(sorted);
+    } else {
+      setMembers([]);
+    }
+    setLoadingMembers(false);
+  };
+
+  const downloadCSV = () => {
+    if (!members.length) return;
+    const headers = ['Register No', 'Name', 'Course & Section', 'Year', 'Department', 'Hosteller', 'Slot Day'];
+    const csvContent = [
+      headers.join(','),
+      ...members.map(m => [
+        m.student?.register_no,
+        `"${m.student?.name}"`,
+        `${m.student?.course} - ${m.student?.section}`,
+        m.student?.year,
+        m.student?.department,
+        m.student?.hosteller ? 'Yes' : 'No',
+        m.slot?.day
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${selectedClub?.name.replace(/\s+/g, '_')}_Members.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (loading) {
@@ -162,6 +224,17 @@ export default function ClubsPage() {
                     <Plus className="w-4 h-4" /> Assign Faculty Coordinator
                   </button>
                 )}
+                
+                {/* View Members Button */}
+                <div className="mt-4 pt-4 border-t-2 border-slate-100 flex">
+                  <button 
+                    onClick={() => viewMembers(club)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm transition-colors active:scale-95"
+                  >
+                    <Users className="w-4 h-4" />
+                    View Enrolled Members 
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -175,6 +248,101 @@ export default function ClubsPage() {
           </div>
         )}
       </div>
+
+      {/* Members Modal */}
+      {membersModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300">
+            {/* Modal Header */}
+            <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0">
+                  <Users className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{selectedClub?.name}</h2>
+                  <p className="text-slate-500 font-medium text-sm mt-0.5">Enrolled Student Roster</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setMembersModalOpen(false)}
+                className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-6 sm:p-8 bg-slate-50/30">
+              {loadingMembers ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                  <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-600" />
+                  <p className="font-bold">Fetching members list...</p>
+                </div>
+              ) : members.length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-slate-200">
+                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 font-bold">No students have enrolled in this club yet.</p>
+                </div>
+              ) : (
+                <div className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-slate-50 border-b-2 border-slate-200">
+                          <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Register No</th>
+                          <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Student Name</th>
+                          <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Course & Sec</th>
+                          <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Hosteller</th>
+                          <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Slot Day</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {members.map((m, idx) => (
+                          <tr key={idx} className="hover:bg-blue-50/50 transition-colors">
+                            <td className="px-5 py-4 font-mono font-bold text-slate-700 text-sm">{m.student?.register_no}</td>
+                            <td className="px-5 py-4 font-extrabold text-slate-900 text-sm">{m.student?.name}</td>
+                            <td className="px-5 py-4 font-bold text-slate-600 text-sm">{m.student?.course} - {m.student?.section}</td>
+                            <td className="px-5 py-4">
+                              <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${m.student?.hosteller ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {m.student?.hosteller ? 'Yes' : 'No'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 font-bold text-blue-600 text-sm text-right">{m.slot?.day}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-100 bg-white flex items-center justify-between">
+              <p className="text-sm font-bold text-slate-500">
+                Total Members: <span className="text-slate-900 font-black">{members.length}</span>
+              </p>
+              <div className="flex gap-3">
+                {members.length > 0 && (
+                  <button 
+                    onClick={downloadCSV}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border-2 border-green-200 rounded-xl font-bold text-sm transition-colors"
+                  >
+                    <Download className="w-4 h-4" /> Download CSV
+                  </button>
+                )}
+                <button 
+                  onClick={() => setMembersModalOpen(false)}
+                  className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

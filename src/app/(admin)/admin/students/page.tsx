@@ -142,6 +142,21 @@ export default function StudentsPage() {
     setLoading(false);
   };
 
+  const handleVerifyIDCard = async (studentId: string) => {
+    setLoading(true);
+    const { error } = await supabase
+      .from('students')
+      .update({ id_card_verified: true })
+      .eq('id', studentId);
+      
+    if (error) {
+      alert('Failed to verify.');
+    } else {
+      await fetchStudents();
+    }
+    setLoading(false);
+  };
+
   const handleUpdateAllowedDay = async (section: string, newDay: string) => {
     if (!selectedCourse) return;
     setUpdatingDay(section);
@@ -315,29 +330,50 @@ export default function StudentsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
                     Day Assignment
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={currentDay || ''}
-                      onChange={(e) => handleUpdateAllowedDay(section, e.target.value)}
-                      disabled={updatingDay === section}
-                      className="block w-full pl-4 pr-8 py-2.5 text-sm font-bold border-2 border-slate-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-slate-800 disabled:opacity-50 appearance-none cursor-pointer"
-                    >
-                      <option value="">Unassigned</option>
-                      <option value="MONDAY">Monday</option>
-                      <option value="TUESDAY">Tuesday</option>
-                      <option value="WEDNESDAY">Wednesday</option>
-                      <option value="THURSDAY">Thursday</option>
-                      <option value="FRIDAY">Friday</option>
-                      <option value="INDEPENDENT">Independent (Exempt)</option>
-                    </select>
                     {updatingDay === section && (
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      </div>
+                      <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                     )}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'].map(day => {
+                      const isSelected = currentDay && currentDay !== 'ANY' && currentDay !== 'INDEPENDENT' && currentDay.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          disabled={updatingDay === section}
+                          onClick={() => {
+                            let newDays = (currentDay && currentDay !== 'ANY' && currentDay !== 'INDEPENDENT') ? currentDay.split(',') : [];
+                            if (isSelected) {
+                              newDays = newDays.filter((d: string) => d !== day);
+                            } else {
+                              newDays.push(day);
+                            }
+                            handleUpdateAllowedDay(section, newDays.length > 0 ? newDays.join(',') : '');
+                          }}
+                          className={`px-2 py-1 text-[10px] font-bold rounded border ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50'}`}
+                        >
+                          {day.substring(0,3)}
+                        </button>
+                      )
+                    })}
+                    <button
+                      disabled={updatingDay === section}
+                      onClick={() => handleUpdateAllowedDay(section, currentDay === 'ANY' ? '' : 'ANY')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded border ${currentDay === 'ANY' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}
+                      title="Open Slot (Any Day)"
+                    >
+                      ANY
+                    </button>
+                    <button
+                      disabled={updatingDay === section}
+                      onClick={() => handleUpdateAllowedDay(section, currentDay === 'INDEPENDENT' ? '' : 'INDEPENDENT')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded border ${currentDay === 'INDEPENDENT' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
+                      title="Independent (Exempt)"
+                    >
+                      EXEMPT
+                    </button>
                   </div>
                 </div>
               </div>
@@ -514,10 +550,18 @@ export default function StudentsPage() {
                           </button>
                         </div>
                       ) : (
-                        <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100">
-                          <ShieldAlert className="w-3.5 h-3.5" />
-                          Not Verified
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100">
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                            Not Verified
+                          </span>
+                          <button
+                            onClick={() => handleVerifyIDCard(student.id)}
+                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-colors"
+                          >
+                            Verify Now
+                          </button>
+                        </div>
                       )}
                     </div>
                   </td>

@@ -29,19 +29,16 @@ export default function RoamingDetector({
     let isAuthorized = false;
     let foundVenue = null;
 
-    // 2. Check if today matches their allowed day
-    if (student.allowed_day === currentDay) {
-      // 3. Check if current time falls within Club Slot
-      if (currentTimeStr >= clubAlloc.slot.start_time && currentTimeStr <= clubAlloc.slot.end_time) {
-        isAuthorized = true;
-        foundVenue = `CLUB: ${clubAlloc.slot.club.name}`;
-      }
-      
-      // 4. Check if current time falls within Centre Slot
-      if (currentTimeStr >= centreAlloc.slot.start_time && currentTimeStr <= centreAlloc.slot.end_time) {
-        isAuthorized = true;
-        foundVenue = `CENTRE: ${centreAlloc.slot.centre.name}`;
-      }
+    // 2. Check if current time falls within Club Slot (and day matches)
+    if (clubAlloc.slot.day === currentDay && currentTimeStr >= clubAlloc.slot.start_time && currentTimeStr <= clubAlloc.slot.end_time) {
+      isAuthorized = true;
+      foundVenue = `CLUB: ${clubAlloc.slot.club.name}`;
+    }
+    
+    // 3. Check if current time falls within Centre Slot (and day matches)
+    if (centreAlloc.slot.day === currentDay && currentTimeStr >= centreAlloc.slot.start_time && currentTimeStr <= centreAlloc.slot.end_time) {
+      isAuthorized = true;
+      foundVenue = `CENTRE: ${centreAlloc.slot.centre.name}`;
     }
 
     if (isAuthorized) {

@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { Clock, AlertCircle, CalendarClock, ShieldCheck } from 'lucide-react';
 import BookingClient from './BookingClient';
 import IDVerificationClient from './IDVerificationClient';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function StudentDashboard() {
   const supabase = await createClient();
@@ -32,12 +34,18 @@ export default async function StudentDashboard() {
   let centreSlots: any[] = [];
   
   if (student.activity_session && student.allowed_day) {
-    const { data: slots } = await supabase
+    let query = supabase
       .from('slots')
       .select(`*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(name)`)
       .eq('session', student.activity_session)
-      .eq('day', student.allowed_day)
       .eq('status', 'ACTIVE');
+      
+    if (student.allowed_day !== 'ANY') {
+      const allowedDaysArray = student.allowed_day.split(',');
+      query = query.in('day', allowedDaysArray);
+    }
+    
+    const { data: slots } = await query;
       
     if (slots) {
       clubSlots = slots.filter(s => s.club_id !== null);
@@ -51,8 +59,8 @@ export default async function StudentDashboard() {
     .select(`*, slot:slots(*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(name))`)
     .eq('student_id', student.id);
 
-  const existingClubBooking = allocations?.find(a => a.slot.club_id !== null);
-  const existingCentreBooking = allocations?.find(a => a.slot.centre_id !== null);
+  const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
+  const existingCentreBookings = allocations?.filter(a => a.slot.centre_id !== null) || [];
 
   return (
     <div className="flex flex-col flex-1 gap-4 w-full">
@@ -115,7 +123,7 @@ export default async function StudentDashboard() {
 
               {student.allowed_day ? (
                 <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg font-extrabold text-sm uppercase tracking-wide border border-emerald-200/60 shadow-sm">
-                  {student.allowed_day === 'INDEPENDENT' ? 'INDEPENDENT' : `${student.allowed_day}S ONLY`}
+                  {student.allowed_day === 'INDEPENDENT' ? 'INDEPENDENT' : student.allowed_day === 'ANY' ? 'ANY DAY' : student.allowed_day.split(',').map(d => d.substring(0,3)).join(', ') + ' ONLY'}
                 </div>
               ) : (
                 <div className="bg-red-50 text-red-600 px-3 py-1 rounded-lg font-bold text-sm border border-red-100">
@@ -176,12 +184,12 @@ export default async function StudentDashboard() {
         </div>
       ) : (
         <BookingClient 
-          student={student}
+          student={student} 
           studentId={student.id} 
           clubSlots={clubSlots} 
-          centreSlots={centreSlots} 
-          existingClubBooking={existingClubBooking} 
-          existingCentreBooking={existingCentreBooking} 
+          centreSlots={centreSlots}
+          existingClubBookings={existingClubBookings}
+          existingCentreBookings={existingCentreBookings}
         />
       )}
     </div>
