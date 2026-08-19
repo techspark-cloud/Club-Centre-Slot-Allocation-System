@@ -170,17 +170,17 @@ export default function CoordinatorDashboard({
     doc.setFont("helvetica", "bold");
     doc.text("Entity Name :", 14, 62);
     doc.setFont("helvetica", "normal");
-    doc.text(entityName, 42, 62);
+    doc.text(entityName, 37, 62);
 
     doc.setFont("helvetica", "bold");
     doc.text("Date :", 14, 69);
     doc.setFont("helvetica", "normal");
-    doc.text(selectedDate, 28, 69);
+    doc.text(selectedDate, 25, 69);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Day :", 120, 69);
+    doc.text("Day :", 130, 69);
     doc.setFont("helvetica", "normal");
-    doc.text(day, 132, 69);
+    doc.text(day, 140, 69);
 
     // Calculate Stats
     const totalRegistered = students.length;
@@ -192,19 +192,19 @@ export default function CoordinatorDashboard({
     doc.setTextColor(51, 65, 85);
     doc.text("Total Enrolled :", 14, 76);
     doc.setFont("helvetica", "normal");
-    doc.text(totalRegistered.toString(), 42, 76);
+    doc.text(totalRegistered.toString(), 40, 76);
     
     doc.setFont("helvetica", "bold");
     doc.setTextColor(22, 163, 74); // Green
-    doc.text("Present :", 65, 76);
+    doc.text("Present :", 75, 76);
     doc.setFont("helvetica", "normal");
-    doc.text(totalPresent.toString(), 82, 76);
+    doc.text(totalPresent.toString(), 92, 76);
     
     doc.setFont("helvetica", "bold");
     doc.setTextColor(220, 38, 38); // Red
-    doc.text("Absent :", 105, 76);
+    doc.text("Absent :", 130, 76);
     doc.setFont("helvetica", "normal");
-    doc.text(totalAbsent.toString(), 122, 76);
+    doc.text(totalAbsent.toString(), 145, 76);
 
     const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Status"];
     const tableRows = students.map((m, i) => {
