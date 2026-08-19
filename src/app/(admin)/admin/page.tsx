@@ -18,8 +18,10 @@ export default function AdminDashboard() {
     totalClubs: 0,
     totalCentres: 0,
     totalSlots: 0,
-    totalCapacity: 0,
-    totalAllocated: 0,
+    clubCapacity: 0,
+    centreCapacity: 0,
+    clubAllocated: 0,
+    centreAllocated: 0,
     studentsCompleted: 0,
     departmentStats: [] as any[],
     genderStats: [] as any[],
@@ -140,13 +142,22 @@ export default function AdminDashboard() {
       });
       const departmentStats = Object.values(deptMap);
 
-      // 2. Fetch Slots just for total capacity
-      const { data: slotsData, error: slotsError } = await supabase.from('slots').select('capacity');
+      // 2. Fetch Slots for capacity breakdown
+      const { data: slotsData, error: slotsError } = await supabase.from('slots').select('capacity, club_id, centre_id');
       if (slotsError) throw slotsError;
       
-      let totalCapacity = 0;
+      let clubCapacity = 0;
+      let centreCapacity = 0;
       slotsData?.forEach((slot: any) => {
-        totalCapacity += (slot.capacity || 0);
+        if (slot.club_id) clubCapacity += (slot.capacity || 0);
+        if (slot.centre_id) centreCapacity += (slot.capacity || 0);
+      });
+      
+      let clubAllocatedCount = 0;
+      let centreAllocatedCount = 0;
+      allAllocations.forEach(a => {
+        if (a.slots?.club?.name) clubAllocatedCount++;
+        if (a.slots?.centre?.name) centreAllocatedCount++;
       });
       
       const topClubs = Object.entries(clubMap)
@@ -189,8 +200,10 @@ export default function AdminDashboard() {
         totalClubs: clubCount || 0,
         totalCentres: centreCount || 0,
         totalSlots: slotsData?.length || 0,
-        totalCapacity,
-        totalAllocated,
+        clubCapacity,
+        centreCapacity,
+        clubAllocated: clubAllocatedCount,
+        centreAllocated: centreAllocatedCount,
         studentsCompleted: studentsCompletedCount,
         departmentStats,
         genderStats: [
@@ -224,8 +237,12 @@ export default function AdminDashboard() {
     ? Math.round((stats.studentsCompleted / stats.totalStudents) * 100) 
     : 0;
     
-  const seatUtilizationPercentage = stats.totalCapacity > 0 
-    ? Math.round((stats.totalAllocated / stats.totalCapacity) * 100) 
+  const clubUtilizationPercentage = stats.clubCapacity > 0 
+    ? Math.round((stats.clubAllocated / stats.clubCapacity) * 100) 
+    : 0;
+    
+  const centreUtilizationPercentage = stats.centreCapacity > 0 
+    ? Math.round((stats.centreAllocated / stats.centreCapacity) * 100) 
     : 0;
 
   if (loading) {
@@ -297,25 +314,52 @@ export default function AdminDashboard() {
             <div className="bg-emerald-100 p-2.5 rounded-xl">
               <Activity className="w-6 h-6 text-emerald-600" />
             </div>
-            <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">Seat Utilization</h2>
+            <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">Venues Utilization</h2>
           </div>
           
-          <div className="mb-4 relative z-10">
-            <div className="flex justify-between items-end mb-2">
-              <span className="text-5xl font-black text-slate-900">{stats.totalAllocated}</span>
-              <span className="text-slate-400 font-bold text-lg mb-1">/ {stats.totalCapacity} Total Seats</span>
-            </div>
-            <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-emerald-500 rounded-full transition-all duration-1000 ease-out relative"
-                style={{ width: `${seatUtilizationPercentage}%` }}
-              >
-                <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite]"></div>
+          <div className="space-y-6 relative z-10">
+            {/* Clubs Breakdown */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Clubs</span>
+                  <span className="text-3xl font-black text-slate-900">{stats.clubAllocated}</span>
+                </div>
+                <span className="text-slate-400 font-bold text-sm mb-1">/ {stats.clubCapacity} Seats</span>
+              </div>
+              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-1000 ease-out relative"
+                  style={{ width: `${clubUtilizationPercentage}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite]"></div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-2">
+                <span className="font-black text-emerald-600 text-sm">{clubUtilizationPercentage}% Claimed</span>
               </div>
             </div>
-            <div className="flex justify-between items-center mt-3">
-              <span className="text-slate-500 text-sm font-semibold">Total Claimed Seats</span>
-              <span className="font-black text-emerald-600 text-lg">{seatUtilizationPercentage}%</span>
+
+            {/* Centres Breakdown */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Centres</span>
+                  <span className="text-3xl font-black text-slate-900">{stats.centreAllocated}</span>
+                </div>
+                <span className="text-slate-400 font-bold text-sm mb-1">/ {stats.centreCapacity} Seats</span>
+              </div>
+              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out relative"
+                  style={{ width: `${centreUtilizationPercentage}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite]"></div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-2">
+                <span className="font-black text-indigo-600 text-sm">{centreUtilizationPercentage}% Claimed</span>
+              </div>
             </div>
           </div>
         </div>
