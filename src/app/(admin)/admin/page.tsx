@@ -26,6 +26,7 @@ export default function AdminDashboard() {
     departmentStats: [] as any[],
     genderStats: [] as any[],
     hostelerStats: [] as any[],
+    batchStats: { morningBooked: 0, morningTotal: 0, afternoonBooked: 0, afternoonTotal: 0 },
     topClubs: [] as any[],
     topCentres: [] as any[],
     dayStats: [] as any[],
@@ -48,7 +49,7 @@ export default function AdminDashboard() {
       let fromS = 0;
       const limitS = 1000;
       while (keepFetchingStudents) {
-        const { data, error } = await supabase.from('students').select('id, course, gender, hosteler, status').range(fromS, fromS + limitS - 1);
+        const { data, error } = await supabase.from('students').select('id, course, gender, hosteler, status, activity_session').range(fromS, fromS + limitS - 1);
         
         if (error) throw error;
         
@@ -122,11 +123,19 @@ export default function AdminDashboard() {
       const deptMap: Record<string, { name: string, booked: number, pending: number }> = {};
       let maleBooked = 0, femaleBooked = 0;
       let hostelerBooked = 0, dayScholarBooked = 0;
+      let morningTotal = 0, morningBooked = 0;
+      let afternoonTotal = 0, afternoonBooked = 0;
       let studentsCompletedCount = 0;
 
       allStudents.forEach(s => {
         const c = s.course || 'Unknown';
         if (!deptMap[c]) deptMap[c] = { name: c, booked: 0, pending: 0 };
+        
+        const isMorning = s.activity_session === 'FORENOON';
+        const isAfternoon = s.activity_session === 'AFTERNOON' || s.activity_session === 'EVENING';
+        
+        if (isMorning) morningTotal++;
+        if (isAfternoon) afternoonTotal++;
         
         if (completedStudentIds.has(s.id) || s.status === 'COMPLETED') {
           deptMap[c].booked += 1;
@@ -136,6 +145,9 @@ export default function AdminDashboard() {
           
           if (s.hosteler?.toUpperCase() === 'YES') hostelerBooked++;
           if (s.hosteler?.toUpperCase() === 'NO') dayScholarBooked++;
+          
+          if (isMorning) morningBooked++;
+          if (isAfternoon) afternoonBooked++;
         } else {
           deptMap[c].pending += 1;
         }
@@ -214,6 +226,7 @@ export default function AdminDashboard() {
           { name: 'Hosteler', value: hostelerBooked },
           { name: 'Day Scholar', value: dayScholarBooked }
         ].filter(d => d.value > 0),
+        batchStats: { morningBooked, morningTotal, afternoonBooked, afternoonTotal },
         topClubs,
         topCentres,
         dayStats,
@@ -439,6 +452,40 @@ export default function AdminDashboard() {
                   {entry.name}: {entry.value}
                 </div>
               ))}
+            </div>
+          </div>
+          
+          <div className="border-t-2 border-slate-100 pt-6">
+            <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-wider text-center flex justify-center items-center gap-2">
+              <Clock className="w-4 h-4 text-orange-500" /> Batch Tracking
+            </h3>
+            
+            <div className="space-y-5">
+              <div>
+                <div className="flex justify-between items-end mb-1">
+                  <span className="text-xs font-bold text-slate-500">Morning Batch</span>
+                  <span className="font-black text-slate-700 text-sm">{stats.batchStats.morningBooked} <span className="text-slate-400 text-xs font-normal">/ {stats.batchStats.morningTotal}</span></span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-orange-500 rounded-full"
+                    style={{ width: `${stats.batchStats.morningTotal > 0 ? Math.round((stats.batchStats.morningBooked / stats.batchStats.morningTotal) * 100) : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex justify-between items-end mb-1">
+                  <span className="text-xs font-bold text-slate-500">Afternoon Batch</span>
+                  <span className="font-black text-slate-700 text-sm">{stats.batchStats.afternoonBooked} <span className="text-slate-400 text-xs font-normal">/ {stats.batchStats.afternoonTotal}</span></span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${stats.batchStats.afternoonTotal > 0 ? Math.round((stats.batchStats.afternoonBooked / stats.batchStats.afternoonTotal) * 100) : 0}%` }}
+                  ></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
