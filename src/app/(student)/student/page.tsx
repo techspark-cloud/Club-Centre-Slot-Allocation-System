@@ -115,7 +115,7 @@ export default async function StudentDashboard() {
 
               {student.allowed_day ? (
                 <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg font-extrabold text-sm uppercase tracking-wide border border-emerald-200/60 shadow-sm">
-                  {student.allowed_day}S ONLY
+                  {student.allowed_day === 'INDEPENDENT' ? 'INDEPENDENT' : `${student.allowed_day}S ONLY`}
                 </div>
               ) : (
                 <div className="bg-red-50 text-red-600 px-3 py-1 rounded-lg font-bold text-sm border border-red-100">
@@ -155,6 +155,24 @@ export default async function StudentDashboard() {
             <AlertCircle className="w-4 h-4" />
             Check back later
           </div>
+        </div>
+      ) : student.allowed_day === 'INDEPENDENT' ? (
+        <div className="bg-white rounded-[2rem] p-8 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center justify-center text-center flex-1">
+          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-emerald-50/80 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+          
+          <div className="relative z-10 w-16 h-16 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl flex items-center justify-center mb-5 border border-emerald-100 shadow-inner">
+            <ShieldCheck className="w-8 h-8 text-emerald-500" />
+          </div>
+          
+          <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-3">
+            Independent Student
+          </h3>
+          
+          <p className="relative z-10 text-slate-500 text-base sm:text-lg max-w-xl leading-relaxed">
+            You have been assigned as an Independent student for this semester.
+            <br className="hidden sm:block" />
+            <span className="font-semibold text-slate-700 mt-1 block">You are exempt from the standard Club and Centre slot allocation process.</span>
+          </p>
         </div>
       ) : (
         <BookingClient 

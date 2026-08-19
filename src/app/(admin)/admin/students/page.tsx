@@ -331,6 +331,7 @@ export default function StudentsPage() {
                       <option value="WEDNESDAY">Wednesday</option>
                       <option value="THURSDAY">Thursday</option>
                       <option value="FRIDAY">Friday</option>
+                      <option value="INDEPENDENT">Independent (Exempt)</option>
                     </select>
                     {updatingDay === section && (
                       <div className="absolute right-4 top-1/2 -translate-y-1/2">
