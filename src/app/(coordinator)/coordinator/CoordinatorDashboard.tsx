@@ -364,7 +364,7 @@ export default function CoordinatorDashboard({
                           </div>
                         </div>
                         
-                        <div className="max-h-[500px] overflow-y-auto bg-white relative">
+                        <div className="max-h-[600px] overflow-y-auto bg-white relative">
                           {isAttendanceLoading && (
                             <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-20 flex items-center justify-center">
                               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -377,62 +377,117 @@ export default function CoordinatorDashboard({
                               <p className="font-bold">No students are currently enrolled in this specific slot.</p>
                             </div>
                           ) : (
-                            <table className="w-full text-left whitespace-nowrap">
-                              <thead>
-                                <tr className="bg-slate-50 border-b-2 border-slate-200">
-                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">S.No</th>
-                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Register No</th>
-                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Student Name</th>
-                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Course & Section</th>
-                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10 text-right">Attendance</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
+                            <>
+                              {/* Desktop Table View */}
+                              <div className="hidden lg:block">
+                                <table className="w-full text-left whitespace-nowrap">
+                                  <thead>
+                                    <tr className="bg-slate-50 border-b-2 border-slate-200">
+                                      <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">S.No</th>
+                                      <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Register No</th>
+                                      <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Student Name</th>
+                                      <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Course & Section</th>
+                                      <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10 text-right">Attendance</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {enrolledStudents.map((m, idx) => {
+                                      const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
+                                      const isPresent = studentAttendance?.status === 'PRESENT';
+                                      const isAbsent = studentAttendance?.status === 'ABSENT';
+
+                                      return (
+                                        <tr key={m.id} className="hover:bg-blue-50/40 transition-colors">
+                                          <td className="px-5 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
+                                          <td className="px-5 py-4 text-sm font-bold font-mono text-slate-700">{m.student?.register_no}</td>
+                                          <td className="px-5 py-4">
+                                            <p className="text-sm font-extrabold text-slate-900">{m.student?.name}</p>
+                                            {m.student?.academic_year && <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">{m.student.academic_year}</p>}
+                                          </td>
+                                          <td className="px-5 py-4 text-sm font-bold text-slate-600">
+                                            {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
+                                          </td>
+                                          <td className="px-5 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                              <button 
+                                                onClick={() => m.student && markAttendance(m.student.id, 'PRESENT')}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                                  isPresent 
+                                                    ? 'bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1' 
+                                                    : 'bg-slate-100 text-slate-400 hover:bg-green-50 hover:text-green-600'
+                                                }`}
+                                              >
+                                                <CheckCircle2 className="w-4 h-4" /> Present
+                                              </button>
+                                              <button 
+                                                onClick={() => m.student && markAttendance(m.student.id, 'ABSENT')}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                                  isAbsent 
+                                                    ? 'bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1' 
+                                                    : 'bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600'
+                                                }`}
+                                              >
+                                                <XCircle className="w-4 h-4" /> Absent
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              {/* Mobile Stacked Card View */}
+                              <div className="block lg:hidden divide-y divide-slate-100">
                                 {enrolledStudents.map((m, idx) => {
                                   const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
                                   const isPresent = studentAttendance?.status === 'PRESENT';
                                   const isAbsent = studentAttendance?.status === 'ABSENT';
 
                                   return (
-                                    <tr key={m.id} className="hover:bg-blue-50/40 transition-colors">
-                                      <td className="px-5 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
-                                      <td className="px-5 py-4 text-sm font-bold font-mono text-slate-700">{m.student?.register_no}</td>
-                                      <td className="px-5 py-4">
-                                        <p className="text-sm font-extrabold text-slate-900">{m.student?.name}</p>
-                                        {m.student?.academic_year && <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">{m.student.academic_year}</p>}
-                                      </td>
-                                      <td className="px-5 py-4 text-sm font-bold text-slate-600">
-                                        {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
-                                      </td>
-                                      <td className="px-5 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                          <button 
-                                            onClick={() => m.student && markAttendance(m.student.id, 'PRESENT')}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                              isPresent 
-                                                ? 'bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1' 
-                                                : 'bg-slate-100 text-slate-400 hover:bg-green-50 hover:text-green-600'
-                                            }`}
-                                          >
-                                            <CheckCircle2 className="w-4 h-4" /> Present
-                                          </button>
-                                          <button 
-                                            onClick={() => m.student && markAttendance(m.student.id, 'ABSENT')}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                              isAbsent 
-                                                ? 'bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1' 
-                                                : 'bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600'
-                                            }`}
-                                          >
-                                            <XCircle className="w-4 h-4" /> Absent
-                                          </button>
+                                    <div key={m.id} className="p-4 hover:bg-slate-50 transition-colors">
+                                      <div className="flex items-start justify-between mb-3">
+                                        <div>
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] font-black text-slate-400">#{idx + 1}</span>
+                                            <span className="text-xs font-bold font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{m.student?.register_no}</span>
+                                          </div>
+                                          <h5 className="text-base font-black text-slate-900 leading-tight">{m.student?.name}</h5>
+                                          <p className="text-xs font-bold text-slate-500 mt-1">
+                                            {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
+                                          </p>
                                         </div>
-                                      </td>
-                                    </tr>
+                                      </div>
+                                      
+                                      {/* Full Width Mobile Buttons */}
+                                      <div className="grid grid-cols-2 gap-2 mt-2">
+                                        <button 
+                                          onClick={() => m.student && markAttendance(m.student.id, 'PRESENT')}
+                                          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                                            isPresent 
+                                              ? 'bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1 shadow-sm' 
+                                              : 'bg-slate-100 text-slate-500 hover:bg-green-50'
+                                          }`}
+                                        >
+                                          <CheckCircle2 className="w-5 h-5" /> Present
+                                        </button>
+                                        <button 
+                                          onClick={() => m.student && markAttendance(m.student.id, 'ABSENT')}
+                                          className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                                            isAbsent 
+                                              ? 'bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1 shadow-sm' 
+                                              : 'bg-slate-100 text-slate-500 hover:bg-red-50'
+                                          }`}
+                                        >
+                                          <XCircle className="w-5 h-5" /> Absent
+                                        </button>
+                                      </div>
+                                    </div>
                                   );
                                 })}
-                              </tbody>
-                            </table>
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
