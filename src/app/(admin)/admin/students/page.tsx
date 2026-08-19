@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Users, Search, ChevronRight, ArrowLeft, Users2, BookOpen, Layers, FileDown, Undo2, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Users, Search, ChevronRight, ArrowLeft, Users2, BookOpen, Layers, FileDown, Undo2, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -388,82 +390,181 @@ export default function StudentsPage() {
     const booked = finalStudents.filter(s => s.status === 'COMPLETED');
     const notBooked = finalStudents.filter(s => s.status !== 'COMPLETED');
 
-    const downloadPDF = () => {
-      const pw = window.open('', '_blank');
-      if (!pw) return;
+    const [isDownloading, setIsDownloading] = useState(false);
 
-      const origin = window.location.origin;
-      const now = new Date().toLocaleString('en-IN');
+    const downloadPDF = async () => {
+      setIsDownloading(true);
+      try {
+        const studentIds = booked.map(s => s.id);
+        let allocationsMap: Record<string, { entity: string, day: string }> = {};
 
-      const rowStyle = (i: number, color: string) =>
-        `background:${i % 2 === 0 ? color : '#fff'};`;
+        if (studentIds.length > 0) {
+          const { data: allocations } = await supabase
+            .from('allocations')
+            .select(`
+              student_id,
+              slot:slots (
+                day,
+                club:clubs (name),
+                centre:centres (name)
+              )
+            `)
+            .in('student_id', studentIds);
 
-      const buildRows = (list: any[], baseColor: string) =>
-        list.map((s, i) =>
-          `<tr style="${rowStyle(i, baseColor)}">
-            <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0">${i + 1}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">${s.name || '-'}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0">${s.register_no || '-'}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0">${s.gender || '-'}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0">${s.contact_no || '-'}</td>
-          </tr>`
-        ).join('');
+          if (allocations) {
+            allocations.forEach((a: any) => {
+              const entityName = a.slot?.club?.name || a.slot?.centre?.name || 'Unknown';
+              allocationsMap[a.student_id] = {
+                entity: entityName,
+                day: a.slot?.day || 'Unknown'
+              };
+            });
+          }
+        }
 
-      const th = `padding:8px 10px;text-align:left;background:#1e3a5f;color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;`;
-      const tbl = `width:100%;border-collapse:collapse;font-size:12px;`;
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.width;
 
-      pw.document.write(`<!DOCTYPE html><html><head><title>Section ${selectedSection} Report</title>
-        <style>
-          *{margin:0;padding:0;box-sizing:border-box}
-          @page{margin:0}
-          body{font-family:Arial,sans-serif;color:#1e293b;padding:28px 32px}
-        </style></head><body>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:3px solid #1e3a5f;margin-bottom:20px;gap:20px">
-          <div style="display:flex;align-items:center;gap:16px;flex-shrink:0">
-            <img src="${origin}/rit-logo.png" style="height:52px;object-fit:contain" />
-            <div style="width:1px;height:40px;background:#cbd5e1"></div>
-            <img src="${origin}/techspark-logo.png" style="height:52px;object-fit:contain" />
-          </div>
-          <div style="text-align:right;flex:1;min-width:0">
-            <div style="font-size:18px;font-weight:800;color:#1e3a5f;white-space:nowrap">Student Booking Report</div>
-            <div style="font-size:12px;color:#64748b;margin-top:4px;white-space:nowrap">${selectedCourse} — Section ${selectedSection}</div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:2px;white-space:nowrap">Generated: ${now}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:16px;margin-bottom:24px">
-          <div style="flex:1;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:12px 16px">
-            <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase">Booked</div>
-            <div style="font-size:28px;font-weight:800;color:#15803d">${booked.length}</div>
-          </div>
-          <div style="flex:1;background:#fef2f2;border:2px solid #fecaca;border-radius:10px;padding:12px 16px">
-            <div style="font-size:11px;font-weight:700;color:#dc2626;text-transform:uppercase">Not Booked</div>
-            <div style="font-size:28px;font-weight:800;color:#b91c1c">${notBooked.length}</div>
-          </div>
-          <div style="flex:1;background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:12px 16px">
-            <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase">Total</div>
-            <div style="font-size:28px;font-weight:800;color:#1d4ed8">${finalStudents.length}</div>
-          </div>
-        </div>
-        <div style="margin-bottom:28px">
-          <div style="font-size:14px;font-weight:800;color:#15803d;margin-bottom:10px">Booked Students (${booked.length})</div>
-          ${booked.length > 0 ? `<table style="${tbl}"><thead><tr>
-            <th style="${th}">#</th><th style="${th}">Name</th><th style="${th}">Reg No</th>
-            <th style="${th}">Gender</th><th style="${th}">Contact</th>
-          </tr></thead><tbody>${buildRows(booked, '#f0fdf4')}</tbody></table>`
-          : '<p style="color:#64748b;font-style:italic;padding:8px">No students have booked yet.</p>'}
-        </div>
-        <div>
-          <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:10px">Not Booked Students (${notBooked.length})</div>
-          ${notBooked.length > 0 ? `<table style="${tbl}"><thead><tr>
-            <th style="${th}">#</th><th style="${th}">Name</th><th style="${th}">Reg No</th>
-            <th style="${th}">Gender</th><th style="${th}">Contact</th>
-          </tr></thead><tbody>${buildRows(notBooked, '#fef2f2')}</tbody></table>`
-          : '<p style="color:#64748b;font-style:italic;padding:8px">All students have booked!</p>'}
-        </div>
-      </body></html>`);
-      pw.document.close();
-      setTimeout(() => pw.print(), 600);
+        try {
+          const response = await fetch('/rit-logo.png');
+          const blob = await response.blob();
+          
+          const img = new Image();
+          const imageLoadPromise = new Promise<{width: number, height: number, dataUrl: string}>((resolve, reject) => {
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              ctx?.drawImage(img, 0, 0);
+              resolve({
+                width: img.width,
+                height: img.height,
+                dataUrl: canvas.toDataURL('image/png')
+              });
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(blob);
+          });
+
+          const { width, height, dataUrl } = await imageLoadPromise;
+          const targetHeight = 18;
+          const targetWidth = (width / height) * targetHeight;
+          const xPos = (pageWidth - targetWidth) / 2;
+
+          doc.addImage(dataUrl, 'PNG', xPos, 10, targetWidth, targetHeight);
+        } catch (error) {
+          console.error("Could not load logo for PDF", error);
+          doc.setFontSize(20);
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "bold");
+          doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
+        }
+
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(71, 85, 105);
+        doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 36, { align: "center" });
+
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(37, 99, 235);
+        doc.text("SECTION SLOT BOOKING REPORT", pageWidth / 2, 45, { align: "center" });
+
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.5);
+        doc.line(14, 52, pageWidth - 14, 52);
+
+        doc.setFontSize(10);
+        doc.setTextColor(51, 65, 85);
+        
+        doc.setFont("helvetica", "bold");
+        doc.text("Course & Sec :", 14, 62);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${selectedCourse} - ${selectedSection}`, 42, 62);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Date :", 14, 69);
+        doc.setFont("helvetica", "normal");
+        doc.text(new Date().toISOString().split('T')[0], 25, 69);
+
+        // Stats Box equivalent
+        doc.setFont("helvetica", "bold");
+        doc.text(`Total: ${finalStudents.length}    Booked: ${booked.length}    Not Booked: ${notBooked.length}`, 115, 62);
+
+        let currentY = 76;
+
+        if (booked.length > 0) {
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(21, 128, 61); // green-700
+          doc.text(`Booked Students (${booked.length})`, 14, currentY);
+
+          const bookedColumn = ["S.No", "Register No", "Name", "Allocated Entity", "Day"];
+          const bookedRows = booked.map((s, i) => [
+            i + 1,
+            s.register_no || '-',
+            s.name || '-',
+            allocationsMap[s.id]?.entity || '-',
+            allocationsMap[s.id]?.day || '-'
+          ]);
+
+          autoTable(doc, {
+            head: [bookedColumn],
+            body: bookedRows,
+            startY: currentY + 4,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [21, 128, 61], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [240, 253, 244] }, // green-50
+          });
+          
+          // @ts-ignore
+          currentY = doc.lastAutoTable.finalY + 12;
+        }
+
+        if (notBooked.length > 0) {
+          // Check if we need a new page
+          if (currentY > doc.internal.pageSize.height - 40) {
+            doc.addPage();
+            currentY = 20;
+          }
+
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(185, 28, 28); // red-700
+          doc.text(`Not Booked Students (${notBooked.length})`, 14, currentY);
+
+          const notBookedColumn = ["S.No", "Register No", "Name", "Gender", "Contact"];
+          const notBookedRows = notBooked.map((s, i) => [
+            i + 1,
+            s.register_no || '-',
+            s.name || '-',
+            s.gender || '-',
+            s.contact_no || '-'
+          ]);
+
+          autoTable(doc, {
+            head: [notBookedColumn],
+            body: notBookedRows,
+            startY: currentY + 4,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [254, 242, 242] }, // red-50
+          });
+        }
+
+        doc.save(`${selectedCourse}_Sec_${selectedSection}_Booking_Report.pdf`);
+      } catch (err) {
+        console.error("PDF generation failed:", err);
+        alert("Failed to generate PDF.");
+      } finally {
+        setIsDownloading(false);
+      }
     };
+
+
 
     return (
       <div className="rounded-3xl overflow-hidden border-2 border-slate-200 bg-white shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -486,9 +587,10 @@ export default function StudentsPage() {
             </div>
             <button
               onClick={downloadPDF}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap"
+              disabled={isDownloading}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap disabled:opacity-50"
             >
-              <FileDown className="w-4 h-4" />
+              {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
               Download PDF
             </button>
           </div>
