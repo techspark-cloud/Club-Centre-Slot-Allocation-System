@@ -34,7 +34,14 @@ export async function middleware(request: NextRequest) {
   if (user) {
     if (url.pathname === '/login') {
       url.pathname = '/'
-      return NextResponse.redirect(url)
+      const redirectResponse = NextResponse.redirect(url)
+      
+      // Preserve any cookies set by supabase (e.g. refreshed sessions)
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value)
+      })
+      
+      return redirectResponse
     }
   } else {
     if (
@@ -46,7 +53,14 @@ export async function middleware(request: NextRequest) {
       url.pathname !== '/favicon.webp'
     ) {
       url.pathname = '/login'
-      return NextResponse.redirect(url)
+      const redirectResponse = NextResponse.redirect(url)
+      
+      // Preserve any cookies set by supabase
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value)
+      })
+      
+      return redirectResponse
     }
   }
 
