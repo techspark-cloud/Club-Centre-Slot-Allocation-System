@@ -58,9 +58,9 @@ export default async function VerifyPage(props: { searchParams: Promise<{ reg?: 
 
         {/* Student Profile Info */}
         <div className="px-8 pt-8 pb-6 border-b border-slate-100">
-          <div className="flex justify-between items-start mb-6">
-            <img src="/rit-logo.png" className="h-10 w-auto object-contain" alt="RIT Logo" />
-            <img src="/techspark-logo.png" className="h-10 w-auto object-contain" alt="TechSpark Logo" />
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+            <img src="/rit-logo.png" className="h-8 sm:h-10 w-auto object-contain" alt="RIT Logo" />
+            <img src="/techspark-logo.png" className="h-8 sm:h-10 w-auto object-contain" alt="TechSpark Logo" />
           </div>
 
           <div className="flex items-center gap-4 mb-1">
