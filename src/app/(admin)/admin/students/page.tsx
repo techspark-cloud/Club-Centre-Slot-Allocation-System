@@ -57,6 +57,19 @@ export default function StudentsPage() {
       }
     }
     
+    // Fetch all allocations to calculate true completion status
+    const { data: allocations } = await supabase.from('allocations').select('student_id');
+    const allocCounts: Record<string, number> = {};
+    allocations?.forEach(a => {
+      allocCounts[a.student_id] = (allocCounts[a.student_id] || 0) + 1;
+    });
+    const completedSet = new Set(Object.entries(allocCounts).filter(([_, c]) => c >= 2).map(([id]) => id));
+
+    allData = allData.map(s => ({
+      ...s,
+      isCompleted: completedSet.has(s.id) || s.status === 'COMPLETED'
+    }));
+    
     setStudents(allData);
     setLoading(false);
   };
@@ -91,9 +104,9 @@ export default function StudentsPage() {
     let list = filteredByCourse.filter(s => s.section === selectedSection);
     
     if (statusFilter === 'PENDING') {
-      list = list.filter(s => s.status !== 'COMPLETED');
+      list = list.filter(s => !s.isCompleted);
     } else if (statusFilter === 'BOOKED') {
-      list = list.filter(s => s.status === 'COMPLETED');
+      list = list.filter(s => s.isCompleted);
     }
     
     if (searchQuery) {
@@ -647,11 +660,11 @@ export default function StudentsPage() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col gap-2 items-start">
                       <span className={`px-3 py-1 inline-flex text-xs font-extrabold rounded-xl ${
-                        student.status === 'COMPLETED'
+                        student.isCompleted
                           ? 'bg-green-100 text-green-700'
                           : 'bg-slate-100 text-slate-600'
                       }`}>
-                        {student.status === 'COMPLETED' ? 'Booked' : 'Pending'}
+                        {student.isCompleted ? 'Booked' : 'Pending'}
                       </span>
                       
                       {student.id_card_verified ? (
