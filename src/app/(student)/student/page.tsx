@@ -36,7 +36,7 @@ export default async function StudentDashboard() {
   if (student.activity_session && student.allowed_day) {
     let query = supabase
       .from('slots')
-      .select(`*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(name)`)
+      .select(`*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(id, name, faculty_name, faculty_mobile)`)
       .eq('session', student.activity_session)
       .eq('status', 'ACTIVE');
       
@@ -56,7 +56,7 @@ export default async function StudentDashboard() {
   // Fetch student's existing allocations
   const { data: allocations } = await supabase
     .from('allocations')
-    .select(`*, slot:slots(*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(name))`)
+    .select(`*, slot:slots(*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(id, name, faculty_name, faculty_mobile))`)
     .eq('student_id', student.id);
 
   const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
