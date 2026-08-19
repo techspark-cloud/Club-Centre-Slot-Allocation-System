@@ -64,7 +64,7 @@ export default function CentresPage() {
       .select(`
         id,
         student:students (
-          id, name, register_no, course, section, year, department, hosteller
+          id, name, register_no, course, section, academic_year, hosteler
         ),
         slot:slots!inner (
           id, day, centre_id
@@ -92,9 +92,9 @@ export default function CentresPage() {
         m.student?.register_no,
         `"${m.student?.name}"`,
         `${m.student?.course} - ${m.student?.section}`,
-        m.student?.year,
-        m.student?.department,
-        m.student?.hosteller ? 'Yes' : 'No',
+        m.student?.academic_year,
+        m.student?.course,
+        m.student?.hosteler ? 'Yes' : 'No',
         m.slot?.day
       ].join(','))
     ].join('\n');
