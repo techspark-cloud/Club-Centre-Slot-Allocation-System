@@ -102,14 +102,47 @@ export default function CoordinatorDashboard({
 
     const doc = new jsPDF();
     
-    // Title
-    doc.setFontSize(16);
-    doc.text(`${entityName} - Attendance Report`, 14, 20);
+    // Official Header
+    const pageWidth = doc.internal.pageSize.width;
     
-    // Subtitle
+    doc.setFontSize(20);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 29, { align: "center" });
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(37, 99, 235);
+    doc.text("OFFICIAL ATTENDANCE REPORT", pageWidth / 2, 40, { align: "center" });
+
+    // Line separator
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, 46, pageWidth - 14, 46);
+    
+    // Entity & Date Details
     doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Date: ${selectedDate}  |  Day: ${day}`, 14, 28);
+    doc.setTextColor(51, 65, 85);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Entity Name :", 14, 56);
+    doc.setFont("helvetica", "normal");
+    doc.text(entityName, 42, 56);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Date :", 14, 63);
+    doc.setFont("helvetica", "normal");
+    doc.text(selectedDate, 28, 63);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Day :", 120, 63);
+    doc.setFont("helvetica", "normal");
+    doc.text(day, 132, 63);
 
     const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Status"];
     const tableRows = students.map((m, i) => {
@@ -128,7 +161,7 @@ export default function CoordinatorDashboard({
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 35,
+      startY: 70,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
