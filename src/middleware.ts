@@ -37,7 +37,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
   } else {
-    if (url.pathname !== '/login' && !url.pathname.startsWith('/api') && !url.pathname.startsWith('/_next') && url.pathname !== '/favicon.ico') {
+    if (
+      url.pathname !== '/login' && 
+      !url.pathname.startsWith('/verify') && 
+      !url.pathname.startsWith('/api') && 
+      !url.pathname.startsWith('/_next') && 
+      url.pathname !== '/favicon.ico' && 
+      url.pathname !== '/favicon.webp'
+    ) {
       url.pathname = '/login'
       return NextResponse.redirect(url)
     }
