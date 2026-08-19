@@ -304,8 +304,8 @@ export default function ClubsPage() {
                             <td className="px-5 py-4 font-extrabold text-slate-900 text-sm">{m.student?.name}</td>
                             <td className="px-5 py-4 font-bold text-slate-600 text-sm">{m.student?.course} - {m.student?.section}</td>
                             <td className="px-5 py-4">
-                              <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${m.student?.hosteller ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-                                {m.student?.hosteller ? 'Yes' : 'No'}
+                              <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${m.student?.hosteler ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {m.student?.hosteler ? 'Yes' : 'No'}
                               </span>
                             </td>
                             <td className="px-5 py-4 font-bold text-blue-600 text-sm text-right">{m.slot?.day}</td>
