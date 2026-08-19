@@ -421,10 +421,10 @@ export default function ClubsPage() {
               <div className="flex gap-3">
                 {members.length > 0 && (
                   <button 
-                    onClick={downloadCSV}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border-2 border-green-200 rounded-xl font-bold text-sm transition-colors"
+                    onClick={downloadPDF}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border-2 border-blue-200 rounded-xl font-bold text-sm transition-colors"
                   >
-                    <Download className="w-4 h-4" /> Download CSV
+                    <Download className="w-4 h-4" /> Download PDF
                   </button>
                 )}
                 <button 
