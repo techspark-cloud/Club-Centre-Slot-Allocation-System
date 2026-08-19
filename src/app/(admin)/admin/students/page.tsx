@@ -22,6 +22,7 @@ export default function StudentsPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'BOOKED'>('ALL');
 
   useEffect(() => {
     fetchStudents();
@@ -89,6 +90,12 @@ export default function StudentsPage() {
     if (!selectedSection) return [];
     let list = filteredByCourse.filter(s => s.section === selectedSection);
     
+    if (statusFilter === 'PENDING') {
+      list = list.filter(s => s.status !== 'COMPLETED');
+    } else if (statusFilter === 'BOOKED') {
+      list = list.filter(s => s.status === 'COMPLETED');
+    }
+    
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(s => 
@@ -97,7 +104,7 @@ export default function StudentsPage() {
       );
     }
     return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [filteredByCourse, selectedSection, searchQuery]);
+  }, [filteredByCourse, selectedSection, searchQuery, statusFilter]);
 
   const handleUpdateSession = async (section: string, newSession: string) => {
     if (!selectedCourse) return;
@@ -584,6 +591,17 @@ export default function StudentsPage() {
                 className="block pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-sm font-medium text-slate-800"
               />
             </div>
+            
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="block pl-4 pr-10 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm font-bold text-slate-700 cursor-pointer"
+            >
+              <option value="ALL">All Status</option>
+              <option value="PENDING">Pending Only</option>
+              <option value="BOOKED">Booked Only</option>
+            </select>
+            
             <button
               onClick={downloadPDF}
               disabled={isDownloading}
