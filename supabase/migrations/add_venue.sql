@@ -1,0 +1,1 @@
+ALTER TABLE activity_pairs ADD COLUMN venue TEXT NOT NULL DEFAULT 'TBD';
