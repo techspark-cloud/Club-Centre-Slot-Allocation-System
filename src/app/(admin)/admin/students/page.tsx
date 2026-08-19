@@ -19,6 +19,7 @@ export default function StudentsPage() {
   
   // Section mapping state
   const [updatingDay, setUpdatingDay] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -389,8 +390,6 @@ export default function StudentsPage() {
   const renderStudentTable = () => {
     const booked = finalStudents.filter(s => s.status === 'COMPLETED');
     const notBooked = finalStudents.filter(s => s.status !== 'COMPLETED');
-
-    const [isDownloading, setIsDownloading] = useState(false);
 
     const downloadPDF = async () => {
       setIsDownloading(true);
