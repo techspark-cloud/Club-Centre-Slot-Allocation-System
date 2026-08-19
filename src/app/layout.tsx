@@ -9,6 +9,9 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "RIT Allocation Portal",
   description: "Club & Centre Slot Allocation Portal for Rajalakshmi Institute of Technology",
+  icons: {
+    icon: "/favicon.webp",
+  },
 };
 
 export const viewport = {
