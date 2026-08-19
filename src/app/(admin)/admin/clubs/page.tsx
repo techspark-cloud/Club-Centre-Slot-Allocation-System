@@ -12,6 +12,7 @@ export default function ClubsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ faculty_name: '', faculty_mobile: '' });
   const [saving, setSaving] = useState(false);
+  const [downloadingOverall, setDownloadingOverall] = useState(false);
   
   // Members Modal State
   const [membersModalOpen, setMembersModalOpen] = useState(false);
@@ -183,6 +184,191 @@ export default function ClubsPage() {
     doc.save(`${selectedClub?.name.replace(/\s+/g, '_')}_Enrollment_Report.pdf`);
   };
 
+  const downloadOverallPDF = async () => {
+    setDownloadingOverall(true);
+    try {
+      let allAllocations: any[] = [];
+      let fetchMore = true;
+      let from = 0;
+      const limit = 1000;
+
+      while (fetchMore) {
+        const { data, error } = await supabase
+          .from('allocations')
+          .select(`
+            id,
+            student:students (
+              id, name, register_no, course, section, academic_year, hosteler
+            ),
+            slot:slots!inner (
+              id, day, club_id
+            )
+          `)
+          .not('slot.club_id', 'is', null)
+          .range(from, from + limit - 1);
+
+        if (error) {
+          console.error("Error fetching allocations:", error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allAllocations = [...allAllocations, ...data];
+          from += limit;
+        } else {
+          fetchMore = false;
+        }
+
+        if (data && data.length < limit) {
+          fetchMore = false;
+        }
+      }
+
+      const allocations = allAllocations;
+
+      if (!allocations || allocations.length === 0) {
+        alert("No students enrolled in any clubs yet.");
+        setDownloadingOverall(false);
+        return;
+      }
+
+      const clubMap = new Map(clubs.map(c => [c.id, c.name]));
+      
+      const sortedAllocations = allocations
+        .filter(a => a.student)
+        .sort((a, b) => {
+           const clubA = clubMap.get(a.slot.club_id) || '';
+           const clubB = clubMap.get(b.slot.club_id) || '';
+           if (clubA !== clubB) return clubA.localeCompare(clubB);
+           return (a.student?.register_no || '').localeCompare(b.student?.register_no || '');
+        });
+
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.width;
+
+      try {
+        const response = await fetch('/rit-logo.png');
+        const blob = await response.blob();
+        
+        const img = new Image();
+        const imageLoadPromise = new Promise<{width: number, height: number, dataUrl: string}>((resolve, reject) => {
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0);
+            resolve({
+              width: img.width,
+              height: img.height,
+              dataUrl: canvas.toDataURL('image/png')
+            });
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(blob);
+        });
+
+        const { width, height, dataUrl } = await imageLoadPromise;
+        const targetHeight = 18;
+        const targetWidth = (width / height) * targetHeight;
+        const xPos = (pageWidth - targetWidth) / 2;
+
+        doc.addImage(dataUrl, 'PNG', xPos, 10, targetWidth, targetHeight);
+      } catch (error) {
+        doc.setFontSize(20);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont("helvetica", "bold");
+        doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
+      }
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 36, { align: "center" });
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(37, 99, 235);
+      doc.text("OVERALL CLUBS ENROLLMENT REPORT", pageWidth / 2, 45, { align: "center" });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.line(14, 52, pageWidth - 14, 52);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(51, 65, 85);
+      
+      doc.setFont("helvetica", "bold");
+      doc.text("Report Date :", 14, 62);
+      doc.setFont("helvetica", "normal");
+      doc.text(new Date().toISOString().split('T')[0], 40, 62);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Total Enrolled :", 130, 62);
+      doc.setFont("helvetica", "normal");
+      doc.text(sortedAllocations.length.toString(), 158, 62);
+
+      // Summary Analysis
+      const summaryStats = Array.from(clubMap.entries()).map(([id, name]) => {
+        const count = sortedAllocations.filter(a => a.slot.club_id === id).length;
+        return { name, count };
+      }).filter(s => s.count > 0).sort((a, b) => b.count - a.count);
+
+      const summaryTableColumn = ["S.No", "Club Name", "Total Enrolled"];
+      const summaryTableRows = summaryStats.map((s, i) => [i + 1, s.name, s.count]);
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(31, 41, 55);
+      doc.text("Enrollment Summary Analysis", 14, 76);
+
+      autoTable(doc, {
+        head: [summaryTableColumn],
+        body: summaryTableRows,
+        startY: 80,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [51, 65, 85], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+      });
+
+      // @ts-ignore - jspdf-autotable adds lastAutoTable to doc
+      const finalY = doc.lastAutoTable.finalY || 80;
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(31, 41, 55);
+      doc.text("Detailed Enrollment List", 14, finalY + 12);
+
+      const tableColumn = ["S.No", "Club Name", "Register No", "Student Name", "Course", "Day"];
+      const tableRows = sortedAllocations.map((m, i) => [
+        i + 1,
+        clubMap.get(m.slot.club_id) || '',
+        m.student?.register_no || '',
+        m.student?.name || '',
+        `${m.student?.course || ''} - ${m.student?.section || ''}`,
+        m.slot?.day || ''
+      ]);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: finalY + 16,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+      });
+
+      doc.save(`Overall_Clubs_Enrollment_Report.pdf`);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate overall report");
+    } finally {
+      setDownloadingOverall(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-12 text-center text-slate-400 font-medium">Loading clubs...</div>;
   }
@@ -202,8 +388,18 @@ export default function ClubsPage() {
             Manage all available clubs and their faculty coordinators.
           </p>
         </div>
-        <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border-2 border-slate-200 font-bold text-slate-700">
-          Total Clubs: <span className="text-blue-600 ml-1 text-lg font-black">{clubs.length}</span>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={downloadOverallPDF}
+            disabled={downloadingOverall}
+            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl shadow-sm font-bold text-sm transition-colors disabled:opacity-50"
+          >
+            {downloadingOverall ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            Overall Report
+          </button>
+          <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border-2 border-slate-200 font-bold text-slate-700">
+            Total Clubs: <span className="text-blue-600 ml-1 text-lg font-black">{clubs.length}</span>
+          </div>
         </div>
       </div>
 
