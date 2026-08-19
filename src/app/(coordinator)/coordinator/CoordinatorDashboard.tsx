@@ -70,6 +70,9 @@ export default function CoordinatorDashboard({
     document.body.removeChild(link);
   };
 
+  const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
+  const SESSIONS = ['FORENOON', 'AFTERNOON'];
+
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
       
@@ -111,120 +114,173 @@ export default function CoordinatorDashboard({
 
       {/* Main Content */}
       <div className="space-y-6">
-        {currentEntities.map((entity) => (
-          <div key={entity.id} className="bg-white rounded-3xl border-2 border-slate-100 shadow-sm overflow-hidden">
-            <div className="p-6 sm:p-8 border-b-2 border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0">
-                  {activeTab === 'clubs' ? <Users className="w-7 h-7 text-blue-600" /> : <Building2 className="w-7 h-7 text-blue-600" />}
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{entity.name}</h2>
-                  <p className="text-slate-500 font-medium text-sm mt-1 max-w-2xl">{entity.description || 'No description provided.'}</p>
+        {currentEntities.map((entity) => {
+          const entitySlots = slotsByEntity(entity.id);
+          const selectedSlot = entitySlots.find(s => s.id === selectedSlotId);
+          const enrolledStudents = selectedSlot ? allocationsForSlot(selectedSlot.id) : [];
+
+          return (
+            <div key={entity.id} className="bg-white rounded-3xl border-2 border-slate-100 shadow-sm overflow-hidden">
+              <div className="p-6 sm:p-8 border-b-2 border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0">
+                    {activeTab === 'clubs' ? <Users className="w-7 h-7 text-blue-600" /> : <Building2 className="w-7 h-7 text-blue-600" />}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">{entity.name}</h2>
+                    <p className="text-slate-500 font-medium text-sm mt-1 max-w-2xl">{entity.description || 'No description provided.'}</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="p-6 sm:p-8">
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Allocated Slots
-              </h3>
+              <div className="p-6 sm:p-8">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> Allocated Weekly Timetable
+                </h3>
 
-              {slotsByEntity(entity.id).length === 0 ? (
-                <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                  <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500 font-bold">No timetable slots have been allocated yet.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {slotsByEntity(entity.id).map(slot => {
-                    const enrolledStudents = allocationsForSlot(slot.id);
-                    const isSelected = selectedSlotId === slot.id;
-
-                    return (
-                      <div key={slot.id} className={`border-2 rounded-2xl transition-all duration-300 ${isSelected ? 'border-blue-500 shadow-md ring-4 ring-blue-50' : 'border-slate-100 hover:border-slate-300'}`}>
-                        
-                        {/* Slot Header */}
-                        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer" onClick={() => setSelectedSlotId(isSelected ? null : slot.id)}>
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-black uppercase tracking-widest border border-indigo-100">
-                                {slot.day}
-                              </span>
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-100">
-                                {slot.session}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm font-bold text-slate-600 mt-2">
-                              <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-slate-400" /> {slot.start_time} - {slot.end_time}</span>
-                              {slot.venue && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-slate-400" /> {slot.venue}</span>}
-                            </div>
-                          </div>
-                          
-                          <div className="text-center sm:text-right flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center">
-                             <div className="text-2xl font-black text-slate-800">{enrolledStudents.length} <span className="text-sm font-bold text-slate-400">/ {slot.capacity}</span></div>
-                             <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Enrolled</div>
-                          </div>
-                        </div>
-
-                        {/* Expandable Student Roster */}
-                        {isSelected && (
-                          <div className="border-t-2 border-slate-100 bg-slate-50/50 rounded-b-2xl overflow-hidden animate-in slide-in-from-top-2 duration-300">
-                            <div className="p-4 flex items-center justify-between bg-white border-b border-slate-100">
-                              <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">Student Roster</h4>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); downloadCSV(slot.id, entity.name, slot.day); }}
-                                className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
-                              >
-                                <Download className="w-3.5 h-3.5" /> Export CSV
-                              </button>
-                            </div>
-                            
-                            <div className="max-h-96 overflow-y-auto">
-                              {enrolledStudents.length === 0 ? (
-                                <div className="p-8 text-center text-slate-400 font-bold text-sm">
-                                  No students are enrolled in this slot.
-                                </div>
-                              ) : (
-                                <table className="w-full text-left whitespace-nowrap">
-                                  <thead>
-                                    <tr className="bg-slate-50 border-b-2 border-slate-200">
-                                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50">S.No</th>
-                                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50">Reg No</th>
-                                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50">Name</th>
-                                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50">Course & Sec</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100 bg-white">
-                                    {enrolledStudents.map((m, idx) => (
-                                      <tr key={m.id} className="hover:bg-blue-50/30 transition-colors">
-                                        <td className="px-4 py-3 text-xs font-bold text-slate-400">{idx + 1}</td>
-                                        <td className="px-4 py-3 text-xs font-bold font-mono text-slate-700">{m.student?.register_no}</td>
-                                        <td className="px-4 py-3">
-                                          <p className="text-xs font-extrabold text-slate-900">{m.student?.name}</p>
-                                          {m.student?.academic_year && <p className="text-[10px] font-bold text-slate-400 mt-0.5">{m.student.academic_year}</p>}
-                                        </td>
-                                        <td className="px-4 py-3 text-xs font-bold text-slate-600">
-                                          {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
+                {entitySlots.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                    <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-500 font-bold">No timetable slots have been allocated yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {/* Visual Timetable Grid */}
+                    <div className="overflow-x-auto pb-4">
+                      <div className="min-w-[700px] border-2 border-slate-200 rounded-2xl overflow-hidden bg-white">
+                        <table className="w-full text-left table-fixed border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b-2 border-slate-200">
+                              <th className="w-32 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-500 border-r-2 border-slate-200 bg-slate-100">Day</th>
+                              <th className="w-1/2 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-500 border-r-2 border-slate-200 text-center">Forenoon</th>
+                              <th className="w-1/2 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-500 text-center">Afternoon</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y-2 divide-slate-100">
+                            {DAYS.map(day => (
+                              <tr key={day} className="hover:bg-slate-50/30 transition-colors">
+                                <td className="px-4 py-4 border-r-2 border-slate-100 font-black text-xs text-slate-400 uppercase tracking-widest bg-slate-50/50">
+                                  {day}
+                                </td>
+                                {SESSIONS.map(session => {
+                                  // Find slots for this day and session
+                                  const cellSlots = entitySlots.filter(s => s.day === day && s.session === session);
+                                  
+                                  return (
+                                    <td key={`${day}-${session}`} className="px-4 py-4 border-r-2 border-slate-100 align-top">
+                                      {cellSlots.length > 0 ? (
+                                        <div className="space-y-3">
+                                          {cellSlots.map(slot => {
+                                            const isSelected = selectedSlotId === slot.id;
+                                            const enrolledCount = allocationsForSlot(slot.id).length;
+                                            
+                                            return (
+                                              <div 
+                                                key={slot.id}
+                                                onClick={() => setSelectedSlotId(isSelected ? null : slot.id)}
+                                                className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                                                  isSelected 
+                                                    ? 'border-blue-500 bg-blue-50 shadow-sm ring-4 ring-blue-50/50' 
+                                                    : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                                }`}
+                                              >
+                                                <div className="flex items-start justify-between gap-2">
+                                                  <div className="flex flex-col gap-1.5">
+                                                    <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                                                      <Clock className="w-3.5 h-3.5 text-slate-400" /> {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
+                                                    </span>
+                                                    {slot.venue && (
+                                                      <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                                                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> {slot.venue}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  <div className="text-right">
+                                                    <div className="text-sm font-black text-slate-800">
+                                                      {enrolledCount} <span className="text-xs font-bold text-slate-400">/ {slot.capacity}</span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <div className="h-full min-h-[60px] flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-slate-300">
+                                          -
+                                        </div>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
 
+                    {/* Selected Slot Roster Section */}
+                    {selectedSlot && (
+                      <div className="border-2 border-slate-200 rounded-2xl overflow-hidden shadow-sm animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="p-5 sm:p-6 bg-slate-50 border-b-2 border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <h4 className="text-lg font-black text-slate-900 tracking-tight">Student Roster</h4>
+                            <p className="text-sm font-bold text-slate-500 mt-1">
+                              {selectedSlot.day} {selectedSlot.session} ({selectedSlot.start_time.slice(0,5)} - {selectedSlot.end_time.slice(0,5)})
+                            </p>
+                          </div>
+                          <button 
+                            onClick={() => downloadCSV(selectedSlot.id, entity.name, selectedSlot.day)}
+                            className="flex items-center justify-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+                          >
+                            <Download className="w-4 h-4" /> Export CSV
+                          </button>
+                        </div>
+                        
+                        <div className="max-h-[500px] overflow-y-auto bg-white">
+                          {enrolledStudents.length === 0 ? (
+                            <div className="p-12 text-center text-slate-400">
+                              <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                              <p className="font-bold">No students are currently enrolled in this specific slot.</p>
+                            </div>
+                          ) : (
+                            <table className="w-full text-left whitespace-nowrap">
+                              <thead>
+                                <tr className="bg-slate-50 border-b-2 border-slate-200">
+                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">S.No</th>
+                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Register No</th>
+                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Student Name</th>
+                                  <th className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 sticky top-0 bg-slate-50 z-10">Course & Section</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {enrolledStudents.map((m, idx) => (
+                                  <tr key={m.id} className="hover:bg-blue-50/40 transition-colors">
+                                    <td className="px-5 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
+                                    <td className="px-5 py-4 text-sm font-bold font-mono text-slate-700">{m.student?.register_no}</td>
+                                    <td className="px-5 py-4">
+                                      <p className="text-sm font-extrabold text-slate-900">{m.student?.name}</p>
+                                      {m.student?.academic_year && <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">{m.student.academic_year}</p>}
+                                    </td>
+                                    <td className="px-5 py-4 text-sm font-bold text-slate-600">
+                                      {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
     </div>
