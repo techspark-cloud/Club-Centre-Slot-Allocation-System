@@ -182,6 +182,30 @@ export default function CoordinatorDashboard({
     doc.setFont("helvetica", "normal");
     doc.text(day, 132, 69);
 
+    // Calculate Stats
+    const totalRegistered = students.length;
+    const totalPresent = attendanceData.filter(a => a.status === 'PRESENT').length;
+    const totalAbsent = attendanceData.filter(a => a.status === 'ABSENT').length;
+
+    // Display Stats
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(51, 65, 85);
+    doc.text("Total Enrolled :", 14, 76);
+    doc.setFont("helvetica", "normal");
+    doc.text(totalRegistered.toString(), 42, 76);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(22, 163, 74); // Green
+    doc.text("Present :", 65, 76);
+    doc.setFont("helvetica", "normal");
+    doc.text(totalPresent.toString(), 82, 76);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(220, 38, 38); // Red
+    doc.text("Absent :", 105, 76);
+    doc.setFont("helvetica", "normal");
+    doc.text(totalAbsent.toString(), 122, 76);
+
     const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Status"];
     const tableRows = students.map((m, i) => {
       const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
@@ -199,7 +223,7 @@ export default function CoordinatorDashboard({
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 76,
+      startY: 82,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
