@@ -93,7 +93,7 @@ export default function CoordinatorDashboard({
       .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
   };
 
-  const downloadPDF = (slotId: string, entityName: string, day: string) => {
+  const downloadPDF = async (slotId: string, entityName: string, day: string) => {
     const students = allocationsForSlot(slotId);
     if (students.length === 0) {
       alert("No students enrolled in this slot yet.");
@@ -104,45 +104,83 @@ export default function CoordinatorDashboard({
     
     // Official Header
     const pageWidth = doc.internal.pageSize.width;
+
+    try {
+      // Fetch and embed the RIT Logo
+      const response = await fetch('/rit-logo.png');
+      const blob = await response.blob();
+      
+      // Get image dimensions to maintain aspect ratio
+      const img = new Image();
+      const imageLoadPromise = new Promise<{width: number, height: number, dataUrl: string}>((resolve, reject) => {
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0);
+          resolve({
+            width: img.width,
+            height: img.height,
+            dataUrl: canvas.toDataURL('image/png')
+          });
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(blob);
+      });
+
+      const { width, height, dataUrl } = await imageLoadPromise;
+      
+      // Calculate dimensions (e.g. max height of 18)
+      const targetHeight = 18;
+      const targetWidth = (width / height) * targetHeight;
+      const xPos = (pageWidth - targetWidth) / 2;
+
+      // Add Logo centered
+      doc.addImage(dataUrl, 'PNG', xPos, 10, targetWidth, targetHeight);
+    } catch (error) {
+      console.error("Could not load logo for PDF", error);
+      // Fallback text if logo fails
+      doc.setFontSize(20);
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
+    }
     
-    doc.setFontSize(20);
-    doc.setTextColor(15, 23, 42);
-    doc.setFont("helvetica", "bold");
-    doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
-    
+    // Title Texts below the logo (Logo is approx at y=10 to y=28, so we start text at 34)
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(71, 85, 105);
-    doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 29, { align: "center" });
+    doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 36, { align: "center" });
 
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(37, 99, 235);
-    doc.text("OFFICIAL ATTENDANCE REPORT", pageWidth / 2, 40, { align: "center" });
+    doc.text("OFFICIAL ATTENDANCE REPORT", pageWidth / 2, 45, { align: "center" });
 
     // Line separator
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.5);
-    doc.line(14, 46, pageWidth - 14, 46);
+    doc.line(14, 52, pageWidth - 14, 52);
     
     // Entity & Date Details
     doc.setFontSize(10);
     doc.setTextColor(51, 65, 85);
     
     doc.setFont("helvetica", "bold");
-    doc.text("Entity Name :", 14, 56);
+    doc.text("Entity Name :", 14, 62);
     doc.setFont("helvetica", "normal");
-    doc.text(entityName, 42, 56);
+    doc.text(entityName, 42, 62);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Date :", 14, 63);
+    doc.text("Date :", 14, 69);
     doc.setFont("helvetica", "normal");
-    doc.text(selectedDate, 28, 63);
+    doc.text(selectedDate, 28, 69);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Day :", 120, 63);
+    doc.text("Day :", 120, 69);
     doc.setFont("helvetica", "normal");
-    doc.text(day, 132, 63);
+    doc.text(day, 132, 69);
 
     const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Status"];
     const tableRows = students.map((m, i) => {
@@ -161,7 +199,7 @@ export default function CoordinatorDashboard({
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 70,
+      startY: 76,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
@@ -411,6 +449,17 @@ export default function CoordinatorDashboard({
                             <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
                               {selectedSlot.day} {selectedSlot.session} ({selectedSlot.start_time.slice(0,5)} - {selectedSlot.end_time.slice(0,5)})
                             </p>
+                            <div className="flex flex-wrap items-center gap-3 mt-3">
+                              <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">
+                                Total: {enrolledStudents.length}
+                              </span>
+                              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-bold border border-green-200">
+                                Present: {attendanceData.filter(a => a.status === 'PRESENT').length}
+                              </span>
+                              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-bold border border-red-200">
+                                Absent: {attendanceData.filter(a => a.status === 'ABSENT').length}
+                              </span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-3">
                             <input 
