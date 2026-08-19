@@ -212,8 +212,16 @@ export default function BookingClient({
             <h3 className={`font-extrabold text-lg truncate ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>
               {name}
             </h3>
-            <span className="text-xs font-bold text-slate-500 mt-0.5">
-              Every {slot.day.charAt(0) + slot.day.slice(1).toLowerCase()}
+            <span className="text-xs font-bold text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>Every {slot.day.charAt(0) + slot.day.slice(1).toLowerCase()}</span>
+              {slot.session && (
+                <>
+                  <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                  <span className={`${slot.session === 'MORNING' ? 'text-orange-600' : 'text-indigo-600'} font-black tracking-wide`}>
+                    {slot.session === 'MORNING' ? 'Morning' : 'Evening'}
+                  </span>
+                </>
+              )}
             </span>
           </div>
             
@@ -399,7 +407,15 @@ export default function BookingClient({
                                   {typeLabel}
                                 </span>
                                 <h4 className="text-base sm:text-lg font-extrabold mb-0.5 relative z-10">{name}</h4>
-                                <p className="text-xs font-semibold text-slate-600 relative z-10">Venue: {slot.venue}</p>
+                                <div className="text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap items-center justify-center gap-1.5">
+                                  <span>Venue: {slot.venue}</span>
+                                  {slot.session && (
+                                    <>
+                                      <span className="w-1 h-1 bg-slate-400 rounded-full"></span>
+                                      <span className="text-slate-800 font-bold">{slot.session === 'MORNING' ? 'Morning' : 'Evening'}</span>
+                                    </>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
