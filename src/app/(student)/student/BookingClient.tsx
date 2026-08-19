@@ -369,14 +369,14 @@ export default function BookingClient({
             <div className="px-6 sm:px-8 pb-6 sm:pb-8 flex justify-between items-end mt-4 relative z-10">
               <div className="text-left flex items-end gap-4">
                 <a 
-                  href={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?reg=${student.register_no}&hash=${existingClubBooking.id.split('-')[0].toUpperCase()}-${existingCentreBooking.id.split('-')[0].toUpperCase()}`}
+                  href={`https://techspark-slots.vercel.app/verify?reg=${student.register_no}&hash=${existingClubBooking.id.split('-')[0].toUpperCase()}-${existingCentreBooking.id.split('-')[0].toUpperCase()}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 bg-white border-2 border-slate-900 rounded-lg shadow-sm hover:scale-105 transition-transform block cursor-pointer"
                   title="Click to test Verification Page"
                 >
                   <QRCode 
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?reg=${student.register_no}&hash=${existingClubBooking.id.split('-')[0].toUpperCase()}-${existingCentreBooking.id.split('-')[0].toUpperCase()}`}
+                    value={`https://techspark-slots.vercel.app/verify?reg=${student.register_no}&hash=${existingClubBooking.id.split('-')[0].toUpperCase()}-${existingCentreBooking.id.split('-')[0].toUpperCase()}`}
                     size={72} 
                     level="Q" 
                   />

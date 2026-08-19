@@ -167,7 +167,7 @@ export default function LoginPage() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-slate-900 text-sm font-semibold placeholder-slate-400 transition-all"
-                placeholder="e.g. 211001 or admin"
+                placeholder="e.g. 2117240030025 or admin"
               />
             </div>
             
