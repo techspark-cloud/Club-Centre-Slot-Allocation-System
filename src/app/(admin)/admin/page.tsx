@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Users, Building2, Layers, Calendar, Activity, CheckCircle, RefreshCw, Trophy, Clock, Target } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -46,7 +46,10 @@ export default function AdminDashboard() {
       let fromS = 0;
       const limitS = 1000;
       while (keepFetchingStudents) {
-        const { data } = await supabase.from('students').select('id, course, gender, hosteler, status').range(fromS, fromS + limitS - 1);
+        const { data, error } = await supabase.from('students').select('id, course, gender, hosteler, status').range(fromS, fromS + limitS - 1);
+        
+        if (error) throw error;
+        
         if (data && data.length > 0) {
           allStudents = [...allStudents, ...data];
           fromS += limitS;
@@ -55,6 +58,63 @@ export default function AdminDashboard() {
           keepFetchingStudents = false;
         }
       }
+
+      // Fetch all allocations bypassing 1000 limit to determine exact completion and true demand
+      let allAllocations: any[] = [];
+      let keepFetchingAllocations = true;
+      let fromA = 0;
+      const limitA = 1000;
+      while (keepFetchingAllocations) {
+        const { data, error } = await supabase.from('allocations').select(`
+          student_id,
+          slots(
+            day,
+            club:clubs(name),
+            centre:centres(name)
+          )
+        `).range(fromA, fromA + limitA - 1);
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allAllocations = [...allAllocations, ...data];
+          fromA += limitA;
+          if (data.length < limitA) keepFetchingAllocations = false;
+        } else {
+          keepFetchingAllocations = false;
+        }
+      }
+      
+      const totalAllocated = allAllocations.length;
+      
+      const allocCounts: Record<string, number> = {};
+      const clubMap: Record<string, number> = {};
+      const centreMap: Record<string, number> = {};
+      const dayMap: Record<string, number> = {};
+
+      allAllocations.forEach(a => {
+        // Count for student completion
+        allocCounts[a.student_id] = (allocCounts[a.student_id] || 0) + 1;
+        
+        // Count for leaderboards and traffic
+        const slot = a.slots;
+        if (slot) {
+          if (slot.day) {
+             dayMap[slot.day] = (dayMap[slot.day] || 0) + 1;
+          }
+          if (slot.club?.name) {
+            clubMap[slot.club.name] = (clubMap[slot.club.name] || 0) + 1;
+          }
+          if (slot.centre?.name) {
+            centreMap[slot.centre.name] = (centreMap[slot.centre.name] || 0) + 1;
+          }
+        }
+      });
+      
+      // A student is fully allocated if they have at least 2 bookings (1 club + 1 centre)
+      const completedStudentIds = new Set(
+        Object.entries(allocCounts).filter(([_, count]) => count >= 2).map(([id]) => id)
+      );
 
       // Department Stats
       const deptMap: Record<string, { name: string, booked: number, pending: number }> = {};
@@ -66,7 +126,7 @@ export default function AdminDashboard() {
         const c = s.course || 'Unknown';
         if (!deptMap[c]) deptMap[c] = { name: c, booked: 0, pending: 0 };
         
-        if (s.status === 'COMPLETED') {
+        if (completedStudentIds.has(s.id) || s.status === 'COMPLETED') {
           deptMap[c].booked += 1;
           studentsCompletedCount++;
           if (s.gender?.toUpperCase() === 'MALE') maleBooked++;
@@ -80,33 +140,13 @@ export default function AdminDashboard() {
       });
       const departmentStats = Object.values(deptMap);
 
-      // 2. Fetch Slots, Clubs, Centres
-      const { data: slotsData } = await supabase.from('slots').select(`
-        id, capacity, allocated_count, day,
-        club:clubs(name), centre:centres(name)
-      `);
+      // 2. Fetch Slots just for total capacity
+      const { data: slotsData, error: slotsError } = await supabase.from('slots').select('capacity');
+      if (slotsError) throw slotsError;
       
       let totalCapacity = 0;
-      let totalAllocated = 0;
-      
-      const clubMap: Record<string, number> = {};
-      const centreMap: Record<string, number> = {};
-      const dayMap: Record<string, number> = {};
-      
       slotsData?.forEach((slot: any) => {
         totalCapacity += (slot.capacity || 0);
-        totalAllocated += (slot.allocated_count || 0);
-        
-        if (slot.day) {
-           dayMap[slot.day] = (dayMap[slot.day] || 0) + (slot.allocated_count || 0);
-        }
-        
-        if (slot.club?.name) {
-          clubMap[slot.club.name] = (clubMap[slot.club.name] || 0) + (slot.allocated_count || 0);
-        }
-        if (slot.centre?.name) {
-          centreMap[slot.centre.name] = (centreMap[slot.centre.name] || 0) + (slot.allocated_count || 0);
-        }
       });
       
       const topClubs = Object.entries(clubMap)
@@ -122,7 +162,7 @@ export default function AdminDashboard() {
       const dayStats = Object.entries(dayMap).map(([day, count]) => ({ day, count }));
 
       // 3. Fetch Recent Activity
-      const { data: recentActivity } = await supabase
+      const { data: recentActivity, error: recentError } = await supabase
         .from('allocations')
         .select(`
           id,
@@ -136,9 +176,13 @@ export default function AdminDashboard() {
         `)
         .order('created_at', { ascending: false })
         .limit(10);
+      if (recentError) throw recentError;
         
-      const { count: clubCount } = await supabase.from('clubs').select('*', { count: 'exact', head: true });
-      const { count: centreCount } = await supabase.from('centres').select('*', { count: 'exact', head: true });
+      const { count: clubCount, error: clubError } = await supabase.from('clubs').select('*', { count: 'exact', head: true });
+      if (clubError) throw clubError;
+      
+      const { count: centreCount, error: centreError } = await supabase.from('centres').select('*', { count: 'exact', head: true });
+      if (centreError) throw centreError;
 
       setStats({
         totalStudents: allStudents.length,
@@ -174,12 +218,6 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchStats();
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchStats();
-    }, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const completionPercentage = stats.totalStudents > 0 
@@ -204,9 +242,9 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Live Analytics Dashboard</h1>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Overall Analytics Dashboard</h1>
           <p className="text-slate-500 font-medium flex items-center gap-2">
-            Advanced System Telemetry
+            System-wide Allocation Insights
           </p>
         </div>
         
@@ -407,61 +445,34 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Live Activity Feed */}
+        {/* Day-wise Traffic Visualization */}
         <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm lg:col-span-2 flex flex-col min-h-[400px]">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-indigo-500" />
-              Live Allocation Feed
+              <Calendar className="w-5 h-5 text-indigo-500" />
+              Day-wise Seat Allocation Traffic
             </h3>
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-              </span>
-              <span className="text-xs font-bold text-red-500 uppercase tracking-wider">Live</span>
-            </div>
           </div>
           
-          <div className="flex-1 bg-slate-50 rounded-2xl p-4 overflow-hidden border border-slate-100 relative">
-            {stats.recentActivity.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">
-                No recent activity.
-              </div>
-            ) : (
-              <div className="space-y-4 max-h-[400px] overflow-y-auto pb-16">
-                {stats.recentActivity.map((activity, idx) => {
-                  const isClub = !!activity.slot?.club;
-                  const entityName = activity.slot?.club?.name || activity.slot?.centre?.name || 'Unknown';
-                  const time = new Date(activity.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-                  
-                  return (
-                    <div key={activity.id} className="flex gap-4 items-start p-3 bg-white rounded-xl shadow-sm border border-slate-100 animate-in slide-in-from-right-4 fade-in duration-500" style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'both' }}>
-                      <div className={`p-2.5 rounded-lg flex-shrink-0 ${isClub ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                        {isClub ? <Building2 className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-800 leading-tight">
-                          <span className="font-extrabold">{activity.student?.name}</span>
-                          <span className="text-slate-500 font-medium"> ({activity.student?.course} - {activity.student?.section})</span>
-                          {' '}booked{' '}
-                          <span className={`font-black ${isClub ? 'text-blue-600' : 'text-emerald-600'}`}>{entityName}</span>
-                        </p>
-                        <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1.5">
-                          <Calendar className="w-3 h-3" />
-                          <span>{activity.slot?.day}</span>
-                          <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                          <span>{time}</span>
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            
-            {/* Fade effect at bottom */}
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none rounded-b-2xl"></div>
+          <div className="flex-1 w-full h-full min-h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.dayStats} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                <Tooltip 
+                  cursor={{ stroke: '#8b5cf6', strokeWidth: 2, strokeDasharray: '5 5' }}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                />
+                <Area type="monotone" dataKey="count" name="Allocated Seats" stroke="#8b5cf6" strokeWidth={4} fillOpacity={1} fill="url(#colorCount)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
