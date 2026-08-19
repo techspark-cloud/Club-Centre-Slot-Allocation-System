@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy } from 'lucide-react';
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function CentresPage() {
   const [centres, setCentres] = useState<any[]>([]);
@@ -83,30 +85,102 @@ export default function CentresPage() {
     setLoadingMembers(false);
   };
 
-  const downloadCSV = () => {
+  const downloadPDF = async () => {
     if (!members.length) return;
-    const headers = ['Register No', 'Name', 'Course & Section', 'Year', 'Department', 'Hosteller', 'Slot Day'];
-    const csvContent = [
-      headers.join(','),
-      ...members.map(m => [
-        m.student?.register_no,
-        `"${m.student?.name}"`,
-        `${m.student?.course} - ${m.student?.section}`,
-        m.student?.academic_year,
-        m.student?.course,
-        m.student?.hosteler ? 'Yes' : 'No',
-        m.slot?.day
-      ].join(','))
-    ].join('\n');
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${selectedCentre?.name.replace(/\s+/g, '_')}_Members.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const response = await fetch('/rit-logo.png');
+      const blob = await response.blob();
+      
+      const img = new Image();
+      const imageLoadPromise = new Promise<{width: number, height: number, dataUrl: string}>((resolve, reject) => {
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0);
+          resolve({
+            width: img.width,
+            height: img.height,
+            dataUrl: canvas.toDataURL('image/png')
+          });
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(blob);
+      });
+
+      const { width, height, dataUrl } = await imageLoadPromise;
+      
+      const targetHeight = 18;
+      const targetWidth = (width / height) * targetHeight;
+      const xPos = (pageWidth - targetWidth) / 2;
+
+      doc.addImage(dataUrl, 'PNG', xPos, 10, targetWidth, targetHeight);
+    } catch (error) {
+      console.error("Could not load logo for PDF", error);
+      doc.setFontSize(20);
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
+    }
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 36, { align: "center" });
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(37, 99, 235);
+    doc.text("OFFICIAL ENROLLMENT REPORT", pageWidth / 2, 45, { align: "center" });
+
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, 52, pageWidth - 14, 52);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Entity Name :", 14, 62);
+    doc.setFont("helvetica", "normal");
+    doc.text(selectedCentre?.name || '', 37, 62);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Date :", 14, 69);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toISOString().split('T')[0], 25, 69);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Total Enrolled :", 130, 69);
+    doc.setFont("helvetica", "normal");
+    doc.text(members.length.toString(), 155, 69);
+
+    const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Year", "Day"];
+    const tableRows = members.map((m, i) => [
+      i + 1,
+      m.student?.register_no || '',
+      m.student?.name || '',
+      `${m.student?.course || ''} - ${m.student?.section || ''}`,
+      m.student?.academic_year || '',
+      m.slot?.day || ''
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 76,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' }, // indigo-600
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
+
+    doc.save(`${selectedCentre?.name.replace(/\s+/g, '_')}_Enrollment_Report.pdf`);
   };
 
   if (loading) {
