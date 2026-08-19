@@ -7,10 +7,35 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "RIT Allocation Portal",
-  description: "Club & Centre Slot Allocation Portal for Rajalakshmi Institute of Technology",
+  title: "RIT Club & Centre Allocation",
+  description: "Official portal for RIT students to book their Club and Centre activity slots.",
+  keywords: ["RIT", "Rajalakshmi Institute of Technology", "Club Allocation", "Centre Allocation", "Student Portal", "TechSpark"],
+  authors: [{ name: "TechSpark" }],
+  openGraph: {
+    title: "RIT Club & Centre Allocation Portal",
+    description: "Secure your slots for RIT Clubs and Centres for the upcoming academic session.",
+    url: "https://techspark-slots.vercel.app",
+    siteName: "RIT Allocation Portal",
+    images: [
+      {
+        url: "/rit-logo.png",
+        width: 800,
+        height: 600,
+        alt: "RIT Logo",
+      },
+    ],
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RIT Club & Centre Allocation Portal",
+    description: "Secure your slots for RIT Clubs and Centres for the upcoming academic session.",
+    images: ["/rit-logo.png"],
+  },
   icons: {
     icon: "/favicon.webp",
+    apple: "/rit-logo.png",
   },
 };
 
