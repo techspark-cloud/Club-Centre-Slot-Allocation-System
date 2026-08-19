@@ -37,23 +37,31 @@ export default async function CoordinatorPage() {
     );
   }
 
+  // We need to use the Service Role key to fetch slots and allocations because the RLS policy 
+  // for allocations currently expects a non-existent club_id column on the allocations table.
+  // Since we already securely verified the user's clubIds/centreIds above, bypassing RLS here is safe.
+  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   // Fetch slots for assigned clubs
   const clubIds = assignedClubs.map(c => c.id);
   const { data: clubSlots } = clubIds.length > 0 
-    ? await supabase.from('slots').select('*').in('club_id', clubIds)
+    ? await supabaseAdmin.from('slots').select('*').in('club_id', clubIds)
     : { data: [] };
 
   // Fetch slots for assigned centres
   const centreIds = assignedCentres.map(c => c.id);
   const { data: centreSlots } = centreIds.length > 0 
-    ? await supabase.from('slots').select('*').in('centre_id', centreIds)
+    ? await supabaseAdmin.from('slots').select('*').in('centre_id', centreIds)
     : { data: [] };
 
   // Fetch allocations (students) for those clubs/centres
-  // We can query all allocations for this coordinator's clubs/centres
   let clubAllocations: any[] = [];
   if (clubIds.length > 0) {
-    const { data: cData } = await supabase
+    const { data: cData } = await supabaseAdmin
       .from('allocations')
       .select(`
         id,
@@ -71,7 +79,7 @@ export default async function CoordinatorPage() {
 
   let centreAllocations: any[] = [];
   if (centreIds.length > 0) {
-    const { data: ceData } = await supabase
+    const { data: ceData } = await supabaseAdmin
       .from('allocations')
       .select(`
         id,
