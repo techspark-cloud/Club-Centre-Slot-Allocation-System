@@ -49,7 +49,17 @@ export default function RoamingDetector({
       setActiveVenue(foundVenue);
     } else {
       setStatus('ROAMING');
+      
+      // Browsers block autoplay. Try immediately, but also add a touch listener as fallback.
       playWarningBeeps();
+      
+      const unlockAudio = () => {
+        playWarningBeeps();
+        document.removeEventListener('touchstart', unlockAudio);
+        document.removeEventListener('click', unlockAudio);
+      };
+      document.addEventListener('touchstart', unlockAudio);
+      document.addEventListener('click', unlockAudio);
     }
   }, [student, clubAlloc, centreAlloc]);
 
@@ -57,6 +67,9 @@ export default function RoamingDetector({
   const playWarningBeeps = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       
       const playBeep = (startTime: number) => {
         const oscillator = audioCtx.createOscillator();
