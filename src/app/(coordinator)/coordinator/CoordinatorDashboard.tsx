@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, CheckCircle2, XCircle } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface CoordinatorDashboardProps {
   assignedClubs: any[];
@@ -91,34 +93,63 @@ export default function CoordinatorDashboard({
       .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
   };
 
-  const downloadCSV = (slotId: string, entityName: string, day: string) => {
+  const downloadPDF = (slotId: string, entityName: string, day: string) => {
     const students = allocationsForSlot(slotId);
     if (students.length === 0) {
       alert("No students enrolled in this slot yet.");
       return;
     }
 
-    const headers = ['S.No', 'Register Number', 'Student Name', 'Course & Section', 'Academic Year', 'Hosteller'];
-    const csvData = [
-      headers.join(','),
-      ...students.map((m, i) => [
-        i + 1,
-        m.student?.register_no,
-        `"${m.student?.name}"`,
-        `${m.student?.course} - ${m.student?.section}`,
-        m.student?.academic_year,
-        m.student?.hosteler ? 'Yes' : 'No'
-      ].join(','))
-    ].join('\n');
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(16);
+    doc.text(`${entityName} - Attendance Report`, 14, 20);
+    
+    // Subtitle
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Date: ${selectedDate}  |  Day: ${day}`, 14, 28);
 
-    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${entityName}_${day}_Enrolled_Students.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Status"];
+    const tableRows = students.map((m, i) => {
+      const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
+      const status = studentAttendance?.status === 'PRESENT' ? 'Present' : (studentAttendance?.status === 'ABSENT' ? 'Absent' : 'Unmarked');
+      
+      return [
+        i + 1,
+        m.student?.register_no || '',
+        m.student?.name || '',
+        `${m.student?.course || ''} - ${m.student?.section || ''}`,
+        status
+      ];
+    });
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 35,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        4: { fontStyle: 'bold' }
+      },
+      didParseCell: function (data: any) {
+        if (data.section === 'body' && data.column.index === 4) {
+          if (data.cell.raw === 'Present') {
+            data.cell.styles.textColor = [22, 163, 74]; // Green
+          } else if (data.cell.raw === 'Absent') {
+            data.cell.styles.textColor = [220, 38, 38]; // Red
+          } else {
+            data.cell.styles.textColor = [148, 163, 184]; // Slate
+          }
+        }
+      }
+    });
+
+    doc.save(`${entityName.replace(/\s+/g, '_')}_Attendance_${selectedDate}.pdf`);
   };
 
   const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
@@ -356,10 +387,10 @@ export default function CoordinatorDashboard({
                               className="px-4 py-2 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors"
                             />
                             <button 
-                              onClick={() => downloadCSV(selectedSlot.id, entity.name, selectedSlot.day)}
+                              onClick={() => downloadPDF(selectedSlot.id, entity.name, selectedSlot.day)}
                               className="flex items-center justify-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-xl transition-colors shadow-sm"
                             >
-                              <Download className="w-4 h-4" /> Export CSV
+                              <Download className="w-4 h-4" /> Download PDF
                             </button>
                           </div>
                         </div>
