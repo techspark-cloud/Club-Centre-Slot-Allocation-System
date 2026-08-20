@@ -8,13 +8,14 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function syncFacultyAuthUser(name: string, mobileRaw: string) {
+export async function syncFacultyAuthUser(name: string, mobileRaw: string, type: 'CLUB' | 'CENTRE' = 'CLUB') {
   try {
     const mobile = mobileRaw?.trim();
     if (!mobile || !name) return { success: false, error: 'Missing faculty details' };
 
     const email = `${mobile}@rit.faculty`;
     const password = mobile; // Default password is the mobile number
+    const userRole = type === 'CLUB' ? 'CLUB_COORDINATOR' : 'CENTRE_COORDINATOR';
 
     // Check if user already exists
     const { data: users, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -34,7 +35,7 @@ export async function syncFacultyAuthUser(name: string, mobileRaw: string) {
         email_confirm: true,
         user_metadata: {
           full_name: name,
-          role: 'CLUB_CENTRE_COORDINATOR'
+          role: userRole
         }
       });
 
