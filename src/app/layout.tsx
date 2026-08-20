@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-
+import { GoogleAnalytics } from '@next/third-parties/google';
 const jakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"],
 });
@@ -55,6 +55,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${jakarta.className} antialiased`} suppressHydrationWarning>
         {children}
+        {process.env.NEXT_PUBLIC_GA_ID && <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />}
       </body>
     </html>
   );
