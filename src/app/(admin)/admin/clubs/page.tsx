@@ -483,10 +483,10 @@ export default function ClubsPage() {
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Faculty Coordinator</p>
                       <p className="text-sm font-extrabold text-slate-800 truncate">{club.faculty_name}</p>
                       <a
-                        href={`tel:${club.faculty_mobile}`}
+                        href={`tel:${club.faculty_mobile?.trim()}`}
                         className="flex items-center gap-1.5 text-blue-600 font-bold text-sm mt-1.5 hover:underline"
                       >
-                        <Phone className="w-3.5 h-3.5" /> {club.faculty_mobile}
+                        <Phone className="w-3.5 h-3.5" /> {club.faculty_mobile?.trim()}
                       </a>
                       
                       {/* Login Credentials Box */}
@@ -495,7 +495,7 @@ export default function ClubsPage() {
                           <span>Login Credentials</span>
                           <button 
                             onClick={() => {
-                              const creds = `Login ID: ${club.faculty_mobile}@rit.faculty\nPassword: ${club.faculty_mobile}`;
+                              const creds = `Login ID: ${club.faculty_mobile?.trim()}@rit.faculty\nPassword: ${club.faculty_mobile?.trim()}`;
                               navigator.clipboard.writeText(creds);
                               alert("Credentials Copied to Clipboard!");
                             }}
@@ -505,8 +505,14 @@ export default function ClubsPage() {
                           </button>
                         </p>
                         <div className="space-y-1 text-xs font-mono font-bold text-slate-700">
-                          <p><span className="text-slate-400 mr-2">ID:</span> {club.faculty_mobile}@rit.faculty</p>
-                          <p><span className="text-slate-400 mr-2">PW:</span> {club.faculty_mobile}</p>
+                          <p className="flex flex-wrap items-center gap-1">
+                            <span className="text-slate-400">ID:</span> 
+                            <span className="break-all">{club.faculty_mobile?.trim()}@rit.faculty</span>
+                          </p>
+                          <p className="flex items-center gap-1">
+                            <span className="text-slate-400">PW:</span> 
+                            <span>{club.faculty_mobile?.trim()}</span>
+                          </p>
                         </div>
                       </div>
                     </div>
