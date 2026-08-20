@@ -67,7 +67,7 @@ export default function StudentsPage() {
 
     allData = allData.map(s => ({
       ...s,
-      isCompleted: completedSet.has(s.id) || s.status === 'COMPLETED'
+      isCompleted: completedSet.has(s.id) || s.status === 'COMPLETED' || s.allowed_day === 'INDEPENDENT'
     }));
     
     setStudents(allData);
@@ -408,8 +408,8 @@ export default function StudentsPage() {
   );
 
   const renderStudentTable = () => {
-    const booked = finalStudents.filter(s => s.status === 'COMPLETED');
-    const notBooked = finalStudents.filter(s => s.status !== 'COMPLETED');
+    const booked = finalStudents.filter(s => s.isCompleted);
+    const notBooked = finalStudents.filter(s => !s.isCompleted);
 
     const downloadPDF = async () => {
       setIsDownloading(true);
@@ -720,7 +720,8 @@ export default function StudentsPage() {
   const downloadGlobalDefaultersPDF = async () => {
     setIsDownloading(true);
     try {
-      const defaulters = students.filter(s => !s.isCompleted);
+      // Only count students as defaulters if they are mapped to a session and day, but haven't completed
+      const defaulters = students.filter(s => !s.isCompleted && s.activity_session && s.allowed_day);
       
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.width;

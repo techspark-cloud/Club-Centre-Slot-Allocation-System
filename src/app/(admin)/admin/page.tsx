@@ -142,7 +142,7 @@ export default function AdminDashboard() {
         if (isMorning) morningTotal++;
         if (isAfternoon) afternoonTotal++;
         
-        if (completedStudentIds.has(s.id) || s.status === 'COMPLETED') {
+        if (completedStudentIds.has(s.id) || s.status === 'COMPLETED' || s.allowed_day === 'INDEPENDENT') {
           deptMap[c].booked += 1;
           studentsCompletedCount++;
           if (s.gender?.toUpperCase() === 'MALE') maleBooked++;
