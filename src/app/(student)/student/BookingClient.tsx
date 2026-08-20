@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import html2canvas from 'html2canvas';
 import QRCode from 'react-qr-code';
+import CampusMapModal from '@/components/3d/CampusMapModal';
 
 export default function BookingClient({ 
   student,
@@ -32,6 +33,11 @@ export default function BookingClient({
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 3D Navigator State
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  const [targetVenueName, setTargetVenueName] = useState('');
+  const [targetNodeId, setTargetNodeId] = useState('');
   
   const router = useRouter();
   const supabase = createClient();
@@ -179,6 +185,33 @@ export default function BookingClient({
       } catch (err) {
         console.error("Failed to download timetable", err);
       }
+    }
+  };
+
+  const mapVenueToNodeId = (venue: string): string => {
+    if (!venue) return '';
+    const v = venue.toUpperCase();
+    
+    // Match standard classrooms like "B0-07" -> "B0_07"
+    const classMatch = v.match(/B\d-\d{2}/);
+    if (classMatch) return classMatch[0].replace('-', '_');
+    
+    // Special rooms
+    if (v.includes('MECH')) return 'B0_MECH';
+    if (v.includes('SEMINAR')) return 'B2_SEMINAR';
+    if (v.includes('EMPTY')) return 'B1_EMPTY';
+    
+    return '';
+  };
+
+  const handleNavigateClick = (venue: string) => {
+    const nodeId = mapVenueToNodeId(venue);
+    if (nodeId) {
+      setTargetVenueName(venue);
+      setTargetNodeId(nodeId);
+      setIsMapModalOpen(true);
+    } else {
+      alert("Sorry, 3D navigation is not mapped for this venue yet.");
     }
   };
 
@@ -407,7 +440,7 @@ export default function BookingClient({
                                   {typeLabel}
                                 </span>
                                 <h4 className="text-base sm:text-lg font-extrabold mb-0.5 relative z-10">{name}</h4>
-                                <div className="text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap items-center justify-center gap-1.5">
+                                <div className="text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap items-center justify-center gap-1.5 mt-2">
                                   <span>Venue: {slot.venue}</span>
                                   {slot.session && (
                                     <>
@@ -415,6 +448,14 @@ export default function BookingClient({
                                       <span className="text-slate-800 font-bold">{slot.session === 'MORNING' ? 'Morning' : 'Evening'}</span>
                                     </>
                                   )}
+                                </div>
+                                <div className="mt-3 flex justify-center relative z-10">
+                                  <button
+                                    onClick={() => handleNavigateClick(slot.venue)}
+                                    className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-extrabold px-3 py-1.5 rounded-lg border border-blue-200 transition-colors"
+                                  >
+                                    <MapPin className="w-3 h-3 text-blue-600" /> NAVIGATE TO VENUE
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -774,6 +815,13 @@ export default function BookingClient({
         </div>,
         document.body
       )}
+      {/* 3D MAP MODAL */}
+      <CampusMapModal 
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        destinationNodeId={targetNodeId}
+        venueName={targetVenueName}
+      />
     </div>
   );
 }

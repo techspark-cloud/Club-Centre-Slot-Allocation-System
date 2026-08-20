@@ -65,9 +65,38 @@ export default function StudentsPage() {
     });
     const completedSet = new Set(Object.entries(allocCounts).filter(([_, c]) => c >= 2).map(([id]) => id));
 
+    // Fetch all preferences using pagination to bypass the 1000 row API limit
+    let allPreferences: any[] = [];
+    let prefFrom = 0;
+    let keepFetchingPrefs = true;
+
+    while (keepFetchingPrefs) {
+      const { data: prefs } = await supabase
+        .from('preferences')
+        .select('student_id')
+        .range(prefFrom, prefFrom + step - 1);
+        
+      if (prefs && prefs.length > 0) {
+        allPreferences = [...allPreferences, ...prefs];
+        prefFrom += step;
+        if (prefs.length < step) {
+          keepFetchingPrefs = false;
+        }
+      } else {
+        keepFetchingPrefs = false;
+      }
+    }
+
+    const prefCounts: Record<string, number> = {};
+    allPreferences.forEach(p => {
+      prefCounts[p.student_id] = (prefCounts[p.student_id] || 0) + 1;
+    });
+
     allData = allData.map(s => ({
       ...s,
-      isCompleted: completedSet.has(s.id) || s.status === 'COMPLETED' || s.allowed_day === 'INDEPENDENT'
+      allocCount: allocCounts[s.id] || 0,
+      prefCount: prefCounts[s.id] || 0,
+      isCompleted: completedSet.has(s.id) || (prefCounts[s.id] || 0) > 0 || s.allowed_day === 'INDEPENDENT'
     }));
     
     setStudents(allData);
@@ -431,11 +460,21 @@ export default function StudentsPage() {
             .in('student_id', studentIds);
 
           if (allocations) {
+            const groupedAllocations: Record<string, { entities: string[], days: string[] }> = {};
+            
             allocations.forEach((a: any) => {
+              if (!groupedAllocations[a.student_id]) {
+                groupedAllocations[a.student_id] = { entities: [], days: [] };
+              }
               const entityName = a.slot?.club?.name || a.slot?.centre?.name || 'Unknown';
-              allocationsMap[a.student_id] = {
-                entity: entityName,
-                day: a.slot?.day || 'Unknown'
+              groupedAllocations[a.student_id].entities.push(entityName);
+              groupedAllocations[a.student_id].days.push(a.slot?.day || 'Unknown');
+            });
+            
+            Object.keys(groupedAllocations).forEach(studentId => {
+              allocationsMap[studentId] = {
+                entity: groupedAllocations[studentId].entities.join('\n'),
+                day: groupedAllocations[studentId].days.join('\n')
               };
             });
           }
@@ -805,6 +844,90 @@ export default function StudentsPage() {
     }
   };
 
+  const downloadZeroSlotsPDF = async () => {
+    setIsDownloading(true);
+    try {
+      // Find students who have exactly 0 slots booked (in their preferences), but are mapped to a session and day
+      const zeroBooked = students.filter(s => s.prefCount === 0 && s.activity_session && s.allowed_day && s.allowed_day !== 'INDEPENDENT');
+      
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.width;
+
+      try {
+        const response = await fetch('/rit-logo.png');
+        const blob = await response.blob();
+        
+        const img = new Image();
+        const imageLoadPromise = new Promise<{width: number, height: number, dataUrl: string}>((resolve, reject) => {
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0);
+            resolve({
+              width: img.width,
+              height: img.height,
+              dataUrl: canvas.toDataURL('image/png')
+            });
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(blob);
+        });
+
+        const { width, height, dataUrl } = await imageLoadPromise;
+        const targetHeight = 18;
+        const targetWidth = (width / height) * targetHeight;
+        const xPos = (pageWidth - targetWidth) / 2;
+
+        doc.addImage(dataUrl, 'PNG', xPos, 10, targetWidth, targetHeight);
+      } catch (error) {
+        console.error("Could not load logo for PDF", error);
+      }
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 36, { align: "center" });
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(185, 28, 28);
+      doc.text("ZERO SLOTS BOOKED REPORT", pageWidth / 2, 45, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.setTextColor(51, 65, 85);
+      doc.text(`Students with 0 Slots: ${zeroBooked.length}`, pageWidth / 2, 52, { align: "center" });
+
+      const notBookedColumn = ["S.No", "Register No", "Name", "Course", "Sec", "Contact"];
+      const notBookedRows = zeroBooked.map((s, i) => [
+        i + 1,
+        s.register_no || '-',
+        s.name || '-',
+        s.course || '-',
+        s.section || '-',
+        s.contact_no || '-'
+      ]);
+
+      autoTable(doc, {
+        head: [notBookedColumn],
+        body: notBookedRows,
+        startY: 60,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [254, 242, 242] },
+      });
+
+      doc.save(`Zero_Slots_Booked_Report.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
@@ -820,6 +943,15 @@ export default function StudentsPage() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-end gap-3">
+          <button
+            onClick={downloadZeroSlotsPDF}
+            disabled={isDownloading || loading}
+            className="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border-2 border-orange-200 text-orange-700 px-5 py-3 rounded-2xl shadow-sm transition-colors font-bold disabled:opacity-50"
+            title="Download list of students who have booked exactly 0 slots"
+          >
+            {isDownloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
+            Export 0 Slots
+          </button>
           <button
             onClick={downloadGlobalDefaultersPDF}
             disabled={isDownloading || loading}

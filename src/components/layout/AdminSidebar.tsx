@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut } from 'lucide-react';
+import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function AdminSidebar() {
@@ -21,6 +21,7 @@ export default function AdminSidebar() {
     { name: 'Centres', href: '/admin/centres', icon: Layers },
     { name: 'Activity Slots', href: '/admin/slots', icon: Calendar },
     { name: 'Allocations Manager', href: '/admin/allocations', icon: CheckSquare },
+    { name: 'Campus 3D Map', href: '/admin/map', icon: Map },
     { name: 'Import Master Data', href: '/admin/import', icon: Upload },
   ];
 

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy } from 'lucide-react';
+import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -15,6 +16,7 @@ export default function CentresPage() {
   const [editForm, setEditForm] = useState({ faculty_name: '', faculty_mobile: '' });
   const [saving, setSaving] = useState(false);
   const [downloadingOverall, setDownloadingOverall] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
   
   // Members Modal State
   const [membersModalOpen, setMembersModalOpen] = useState(false);
@@ -193,6 +195,87 @@ export default function CentresPage() {
     });
 
     doc.save(`${selectedCentre?.name.replace(/\s+/g, '_')}_Enrollment_Report.pdf`);
+  };
+
+  const downloadOverallExcel = async () => {
+    setDownloadingExcel(true);
+    try {
+      let allAllocations: any[] = [];
+      let fetchMore = true;
+      let from = 0;
+      const limit = 1000;
+
+      while (fetchMore) {
+        const { data, error } = await supabase
+          .from('allocations')
+          .select(`
+            id,
+            student:students (
+              id, name, register_no, course, section, academic_year, hosteler
+            ),
+            slot:slots!inner (
+              id, day, centre_id
+            )
+          `)
+          .not('slot.centre_id', 'is', null)
+          .range(from, from + limit - 1);
+
+        if (error) {
+          console.error("Error fetching allocations:", error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allAllocations = [...allAllocations, ...data];
+          from += limit;
+        } else {
+          fetchMore = false;
+        }
+
+        if (data && data.length < limit) {
+          fetchMore = false;
+        }
+      }
+
+      if (!allAllocations || allAllocations.length === 0) {
+        alert("No students enrolled in any centres yet.");
+        setDownloadingExcel(false);
+        return;
+      }
+
+      const centreMap = new Map(centres.map(c => [c.id, c.name]));
+      
+      const sortedAllocations = allAllocations
+        .filter(a => a.student)
+        .sort((a, b) => {
+           const centreA = centreMap.get(a.slot.centre_id) || '';
+           const centreB = centreMap.get(b.slot.centre_id) || '';
+           if (centreA !== centreB) return centreA.localeCompare(centreB);
+           return (a.student?.register_no || '').localeCompare(b.student?.register_no || '');
+        });
+
+      const excelData = sortedAllocations.map((m, i) => ({
+        "S.No": i + 1,
+        "Centre Name": centreMap.get(m.slot.centre_id) || '',
+        "Register No": m.student?.register_no || '',
+        "Student Name": m.student?.name || '',
+        "Course": `${m.student?.course || ''} - ${m.student?.section || ''}`,
+        "Year": m.student?.academic_year || '',
+        "Day": m.slot?.day || '',
+        "Hosteler": m.student?.hosteler ? 'Yes' : 'No'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Overall Centres Report");
+      XLSX.writeFile(workbook, "Overall_Centres_Enrollment_Report.xlsx");
+      
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate overall Excel report");
+    } finally {
+      setDownloadingExcel(false);
+    }
   };
 
   const downloadOverallPDF = async () => {
@@ -402,11 +485,19 @@ export default function CentresPage() {
         <div className="flex items-center gap-3">
           <button 
             onClick={downloadOverallPDF}
-            disabled={downloadingOverall}
+            disabled={downloadingOverall || downloadingExcel}
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl shadow-sm font-bold text-sm transition-colors disabled:opacity-50"
           >
             {downloadingOverall ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            Overall Report
+            PDF Report
+          </button>
+          <button 
+            onClick={downloadOverallExcel}
+            disabled={downloadingOverall || downloadingExcel}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-2xl shadow-sm font-bold text-sm transition-colors disabled:opacity-50"
+          >
+            {downloadingExcel ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+            Excel Report
           </button>
           <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border-2 border-slate-200 font-bold text-slate-700">
             Total Centres: <span className="text-indigo-600 ml-1 text-lg font-black">{centres.length}</span>
