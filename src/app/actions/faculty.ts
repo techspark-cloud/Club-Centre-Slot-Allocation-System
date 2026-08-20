@@ -8,8 +8,9 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function syncFacultyAuthUser(name: string, mobile: string) {
+export async function syncFacultyAuthUser(name: string, mobileRaw: string) {
   try {
+    const mobile = mobileRaw?.trim();
     if (!mobile || !name) return { success: false, error: 'Missing faculty details' };
 
     const email = `${mobile}@rit.faculty`;

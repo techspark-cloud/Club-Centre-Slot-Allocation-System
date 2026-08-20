@@ -47,15 +47,18 @@ export default function ClubsPage() {
 
   const saveEdit = async (clubId: string) => {
     setSaving(true);
+    const facultyNameStr = editForm.faculty_name?.trim() || null;
+    const facultyMobileStr = editForm.faculty_mobile?.trim() || null;
+    
     const { error } = await supabase
       .from('clubs')
-      .update({ faculty_name: editForm.faculty_name || null, faculty_mobile: editForm.faculty_mobile || null })
+      .update({ faculty_name: facultyNameStr, faculty_mobile: facultyMobileStr })
       .eq('id', clubId);
 
     if (!error) {
-      if (editForm.faculty_mobile && editForm.faculty_name) {
+      if (facultyMobileStr && facultyNameStr) {
         // Sync faculty user to Supabase Auth so they can log in
-        await syncFacultyAuthUser(editForm.faculty_name, editForm.faculty_mobile);
+        await syncFacultyAuthUser(facultyNameStr, facultyMobileStr);
       }
       setClubs(prev => prev.map(c => c.id === clubId ? { ...c, ...editForm } : c));
       setEditingId(null);
