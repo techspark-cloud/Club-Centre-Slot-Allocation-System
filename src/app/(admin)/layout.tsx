@@ -26,8 +26,8 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col text-slate-900">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div className="h-screen overflow-hidden bg-[#f8fafc] flex flex-col text-slate-900">
+      <nav className="bg-white border-b border-slate-200 z-50 shadow-sm shrink-0">
         <div className="w-full px-4 sm:px-6 lg:px-6">
           <div className="flex justify-between h-20 items-center relative">
             
