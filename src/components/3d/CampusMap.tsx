@@ -521,16 +521,37 @@ function AnimatedWalker({ pathPoints, isWalking, onComplete }: { pathPoints: [nu
     }
     
     // Smoothly interpolate the camera/character direction to avoid sharp snaps on corners/stairs
-    smoothedDirRef.current.lerp(horizontalDir, delta * 8).normalize();
+    smoothedDirRef.current.lerp(horizontalDir, safeDelta * 8).normalize();
     
+    // Dynamically adjust camera height based on whether we are climbing stairs
+    const isGoingUp = p2.y > p1.y;
+    // If going up stairs, lower the camera (1.5) and look higher (5.0) to simulate looking up the stairs
+    const targetCamHeight = isStairs && isGoingUp ? 1.5 : 4.5;
+    const targetLookHeight = isStairs && isGoingUp ? 5.0 : 2.0;
+    
+    // We attach these directly to the camera object or use local state, but since we can't easily add refs 
+    // at the top of the component without replacing the whole AnimatedWalker block, we can just use 
+    // properties on the smoothedDirRef object as a hack, or calculate them dynamically.
+    // Let's use a simpler approach: calculate it based on the exact Y progression!
+    // We can lerp it based on progress if it's a stair segment, but an ease function works best.
+    
+    // Instead of refs, we can just use the scene state or delta to lerp a custom property we attach to the markerRef
+    if (markerRef.current.userData.camHeight === undefined) {
+      markerRef.current.userData.camHeight = 4.5;
+      markerRef.current.userData.lookHeight = 2.0;
+    }
+    
+    markerRef.current.userData.camHeight = THREE.MathUtils.lerp(markerRef.current.userData.camHeight, targetCamHeight, safeDelta * 3);
+    markerRef.current.userData.lookHeight = THREE.MathUtils.lerp(markerRef.current.userData.lookHeight, targetLookHeight, safeDelta * 3);
+
     const cameraOffset = smoothedDirRef.current.clone().multiplyScalar(-6); // 6 units behind
-    cameraOffset.y = 4.5; // 4.5 units high to stay under the 6.0 unit floor height
+    cameraOffset.y = markerRef.current.userData.camHeight; 
     const targetCameraPos = new THREE.Vector3().copy(currentPos).add(cameraOffset);
     camera.position.copy(targetCameraPos);
     
     // Look slightly ahead of the student using the smoothed direction
     const lookTarget = new THREE.Vector3().copy(currentPos).add(smoothedDirRef.current.clone().multiplyScalar(5));
-    lookTarget.y = currentPos.y + 2; // Look at their head level
+    lookTarget.y = currentPos.y + markerRef.current.userData.lookHeight;
     camera.lookAt(lookTarget);
 
     if (progressRef.current >= 1) {
@@ -622,8 +643,13 @@ function CameraPullBack({ active, orbitRef }: { active: boolean, orbitRef: any }
   useFrame((state, delta) => {
     if (!active || !orbitRef.current) return;
     
-    // Smoothly pull back to a wide FRONT view of B-Block
-    const targetPos = new THREE.Vector3(60, 35, -90); // Far in front (+X), elevated (+Y), centered (-Z)
+    // Dynamically adjust pull-back distance based on screen aspect ratio
+    // If it's a mobile screen (portrait mode, aspect < 1), we must pull back much further to fit the building horizontally.
+    const isMobile = (camera as THREE.PerspectiveCamera).aspect < 1.0;
+    const targetX = isMobile ? 180 : 60; // Pull way back on mobile (triple distance)
+    const targetY = isMobile ? 70 : 35;  // Higher on mobile to keep it centered
+    
+    const targetPos = new THREE.Vector3(targetX, targetY, -90); // Far in front (+X), elevated (+Y), centered (-Z)
     const targetLook = new THREE.Vector3(-22, 10, -90); // Looking at the center of the building
     
     camera.position.lerp(targetPos, delta * 2.0);

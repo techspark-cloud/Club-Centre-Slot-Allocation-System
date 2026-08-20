@@ -53,7 +53,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${jakarta.className} antialiased`}>
+      <body className={`${jakarta.className} antialiased`} suppressHydrationWarning>
         {children}
       </body>
     </html>

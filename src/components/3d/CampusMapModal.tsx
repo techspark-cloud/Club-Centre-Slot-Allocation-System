@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Navigation } from 'lucide-react';
 import CampusMap from './CampusMap';
 
@@ -13,10 +14,15 @@ interface CampusMapModalProps {
 
 export default function CampusMapModal({ isOpen, onClose, destinationNodeId, venueName }: CampusMapModalProps) {
   const [hasStarted, setHasStarted] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 sm:p-6">
       <div className="bg-white w-full max-w-6xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
@@ -70,6 +76,7 @@ export default function CampusMapModal({ isOpen, onClose, destinationNodeId, ven
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
