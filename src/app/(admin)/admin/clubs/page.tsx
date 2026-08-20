@@ -6,6 +6,8 @@ import { Building2, Phone, User, Pencil, Check, X, Plus, Users, Download, Loader
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import { syncFacultyAuthUser } from '@/app/actions/faculty';
+
 export default function ClubsPage() {
   const [clubs, setClubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,8 +53,14 @@ export default function ClubsPage() {
       .eq('id', clubId);
 
     if (!error) {
+      if (editForm.faculty_mobile && editForm.faculty_name) {
+        // Sync faculty user to Supabase Auth so they can log in
+        await syncFacultyAuthUser(editForm.faculty_name, editForm.faculty_mobile);
+      }
       setClubs(prev => prev.map(c => c.id === clubId ? { ...c, ...editForm } : c));
       setEditingId(null);
+    } else {
+      alert("Failed to update club: " + error.message);
     }
     setSaving(false);
   };

@@ -6,6 +6,8 @@ import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy }
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import { syncFacultyAuthUser } from '@/app/actions/faculty';
+
 export default function CentresPage() {
   const [centres, setCentres] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,8 +53,14 @@ export default function CentresPage() {
       .eq('id', centreId);
 
     if (!error) {
+      if (editForm.faculty_mobile && editForm.faculty_name) {
+        // Sync faculty user to Supabase Auth so they can log in
+        await syncFacultyAuthUser(editForm.faculty_name, editForm.faculty_mobile);
+      }
       setCentres(prev => prev.map(c => c.id === centreId ? { ...c, ...editForm } : c));
       setEditingId(null);
+    } else {
+      alert("Failed to update centre: " + error.message);
     }
     setSaving(false);
   };
