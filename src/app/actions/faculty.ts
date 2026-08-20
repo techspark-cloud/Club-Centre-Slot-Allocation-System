@@ -8,7 +8,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function syncFacultyAuthUser(name: string, mobileRaw: string, type: 'CLUB' | 'CENTRE' = 'CLUB') {
+export async function syncFacultyAuthUser(name: string, mobileRaw: string, type: 'CLUB' | 'CENTRE' = 'CLUB', entityId?: string) {
   try {
     const mobile = mobileRaw?.trim();
     if (!mobile || !name) return { success: false, error: 'Missing faculty details' };
@@ -26,6 +26,7 @@ export async function syncFacultyAuthUser(name: string, mobileRaw: string, type:
     }
 
     const existingUser = users.users.find(u => u.email === email);
+    let authUserId = existingUser?.id;
 
     if (!existingUser) {
       // Create the Auth user
@@ -44,9 +45,19 @@ export async function syncFacultyAuthUser(name: string, mobileRaw: string, type:
         return { success: false, error: error.message };
       }
       
+      authUserId = data.user?.id;
       console.log('Successfully created auth user for faculty:', email);
     } else {
       console.log('Faculty auth user already exists:', email);
+    }
+
+    // Link coordinator to club or centre if entityId is provided
+    if (authUserId && entityId) {
+      if (type === 'CLUB') {
+        await supabaseAdmin.from('club_coordinators').upsert({ club_id: entityId, profile_id: authUserId, is_primary: true });
+      } else {
+        await supabaseAdmin.from('centre_coordinators').upsert({ centre_id: entityId, profile_id: authUserId, is_primary: true });
+      }
     }
 
     return { success: true };

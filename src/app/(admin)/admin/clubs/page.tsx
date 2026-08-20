@@ -58,7 +58,7 @@ export default function ClubsPage() {
     if (!error) {
       if (facultyMobileStr && facultyNameStr) {
         // Sync faculty user to Supabase Auth so they can log in
-        await syncFacultyAuthUser(facultyNameStr, facultyMobileStr);
+        await syncFacultyAuthUser(facultyNameStr, facultyMobileStr, 'CLUB', clubId);
       }
       setClubs(prev => prev.map(c => c.id === clubId ? { ...c, ...editForm } : c));
       setEditingId(null);

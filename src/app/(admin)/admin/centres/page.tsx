@@ -58,7 +58,7 @@ export default function CentresPage() {
     if (!error) {
       if (facultyMobileStr && facultyNameStr) {
         // Sync faculty user to Supabase Auth so they can log in
-        await syncFacultyAuthUser(facultyNameStr, facultyMobileStr, 'CENTRE');
+        await syncFacultyAuthUser(facultyNameStr, facultyMobileStr, 'CENTRE', centreId);
       }
       setCentres(prev => prev.map(c => c.id === centreId ? { ...c, ...editForm } : c));
       setEditingId(null);
