@@ -717,6 +717,93 @@ export default function StudentsPage() {
     return <div className="p-12 text-center text-gray-500">Loading student directory...</div>;
   }
 
+  const downloadGlobalDefaultersPDF = async () => {
+    setIsDownloading(true);
+    try {
+      const defaulters = students.filter(s => !s.isCompleted);
+      
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.width;
+
+      try {
+        const response = await fetch('/rit-logo.png');
+        const blob = await response.blob();
+        
+        const img = new Image();
+        const imageLoadPromise = new Promise<{width: number, height: number, dataUrl: string}>((resolve, reject) => {
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0);
+            resolve({
+              width: img.width,
+              height: img.height,
+              dataUrl: canvas.toDataURL('image/png')
+            });
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(blob);
+        });
+
+        const { width, height, dataUrl } = await imageLoadPromise;
+        const targetHeight = 18;
+        const targetWidth = (width / height) * targetHeight;
+        const xPos = (pageWidth - targetWidth) / 2;
+
+        doc.addImage(dataUrl, 'PNG', xPos, 10, targetWidth, targetHeight);
+      } catch (error) {
+        console.error("Could not load logo for PDF", error);
+        doc.setFontSize(20);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont("helvetica", "bold");
+        doc.text("RAJALAKSHMI INSTITUTE OF TECHNOLOGY", pageWidth / 2, 22, { align: "center" });
+      }
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Club & Centre Slot Allocation Portal", pageWidth / 2, 36, { align: "center" });
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(185, 28, 28);
+      doc.text("GLOBAL DEFAULTERS REPORT", pageWidth / 2, 45, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.setTextColor(51, 65, 85);
+      doc.text(`Total Defaulters (Unallocated): ${defaulters.length}`, pageWidth / 2, 52, { align: "center" });
+
+      const notBookedColumn = ["S.No", "Register No", "Name", "Course", "Sec", "Contact"];
+      const notBookedRows = defaulters.map((s, i) => [
+        i + 1,
+        s.register_no || '-',
+        s.name || '-',
+        s.course || '-',
+        s.section || '-',
+        s.contact_no || '-'
+      ]);
+
+      autoTable(doc, {
+        head: [notBookedColumn],
+        body: notBookedRows,
+        startY: 60,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [254, 242, 242] },
+      });
+
+      doc.save(`Global_Defaulters_Report.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
@@ -731,8 +818,19 @@ export default function StudentsPage() {
             Browse and manage all registered students hierarchically.
           </p>
         </div>
-        <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border-2 border-slate-200 font-bold text-slate-700">
-          Total Valid Students: <span className="text-blue-600 ml-1 text-lg font-black">{totalCount}</span>
+        <div className="flex flex-col sm:flex-row items-end gap-3">
+          <button
+            onClick={downloadGlobalDefaultersPDF}
+            disabled={isDownloading || loading}
+            className="flex items-center gap-2 bg-red-50 hover:bg-red-100 border-2 border-red-200 text-red-700 px-5 py-3 rounded-2xl shadow-sm transition-colors font-bold disabled:opacity-50"
+            title="Download list of all students who have not completed slot booking"
+          >
+            {isDownloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
+            Export Unallocated
+          </button>
+          <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border-2 border-slate-200 font-bold text-slate-700 whitespace-nowrap">
+            Total Valid Students: <span className="text-blue-600 ml-1 text-lg font-black">{totalCount}</span>
+          </div>
         </div>
       </div>
 
