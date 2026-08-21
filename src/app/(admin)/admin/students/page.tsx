@@ -57,40 +57,25 @@ export default function StudentsPage() {
       }
     }
     
-    // Fetch all allocations to calculate true completion status
-    const { data: allocations } = await supabase.from('allocations').select('student_id');
-    const allocCounts: Record<string, number> = {};
-    allocations?.forEach(a => {
-      allocCounts[a.student_id] = (allocCounts[a.student_id] || 0) + 1;
-    });
-    const completedSet = new Set(Object.entries(allocCounts).filter(([_, c]) => c >= 2).map(([id]) => id));
-
-    // Fetch all preferences using pagination to bypass the 1000 row API limit
-    let allPreferences: any[] = [];
-    let prefFrom = 0;
-    let keepFetchingPrefs = true;
-
-    while (keepFetchingPrefs) {
-      const { data: prefs } = await supabase
-        .from('preferences')
-        .select('student_id')
-        .range(prefFrom, prefFrom + step - 1);
-        
-      if (prefs && prefs.length > 0) {
-        allPreferences = [...allPreferences, ...prefs];
-        prefFrom += step;
-        if (prefs.length < step) {
-          keepFetchingPrefs = false;
-        }
+    // Fetch allocation & preference counts via server-side API (bypasses RLS correctly)
+    let allocCounts: Record<string, number> = {};
+    let prefCounts: Record<string, number> = {};
+    try {
+      const res = await fetch('/api/admin/student-status');
+      if (res.ok) {
+        const statusData = await res.json();
+        allocCounts = statusData.allocCounts || {};
+        prefCounts = statusData.prefCounts || {};
       } else {
-        keepFetchingPrefs = false;
+        console.error('student-status API error:', res.status);
       }
+    } catch (e) {
+      console.error('Failed to fetch student-status:', e);
     }
 
-    const prefCounts: Record<string, number> = {};
-    allPreferences.forEach(p => {
-      prefCounts[p.student_id] = (prefCounts[p.student_id] || 0) + 1;
-    });
+    const completedSet = new Set(
+      Object.entries(allocCounts).filter(([_, c]) => c >= 1).map(([id]) => id)
+    );
 
     allData = allData.map(s => ({
       ...s,
@@ -445,19 +430,38 @@ export default function StudentsPage() {
       try {
         const studentIds = booked.map(s => s.id);
         let allocationsMap: Record<string, { entity: string, day: string }> = {};
+        let timetableStats: Record<string, { venue: string, count: number }> = {};
 
         if (studentIds.length > 0) {
-          const { data: allocations } = await supabase
-            .from('allocations')
-            .select(`
-              student_id,
-              slot:slots (
-                day,
-                club:clubs (name),
-                centre:centres (name)
-              )
-            `)
-            .in('student_id', studentIds);
+          const chunkSize = 20;
+          let allAllocations: any[] = [];
+          
+          for (let i = 0; i < studentIds.length; i += chunkSize) {
+            const chunk = studentIds.slice(i, i + chunkSize);
+            const { data, error } = await supabase
+              .from('allocations')
+              .select(`
+                student_id,
+                slot:slots (
+                  day,
+                  venue,
+                  club:clubs (name),
+                  centre:centres (name)
+                )
+              `)
+              .in('student_id', chunk);
+
+            if (error) {
+              console.error("Error fetching allocations chunk (JSON):", JSON.stringify(error));
+              console.error("Error code:", error.code, "| message:", error.message, "| details:", error.details);
+            }
+            if (data) {
+              allAllocations = [...allAllocations, ...data];
+            }
+          }
+
+          const allocations = allAllocations.length > 0 ? allAllocations : null;
+
 
           if (allocations) {
             const groupedAllocations: Record<string, { entities: string[], days: string[] }> = {};
@@ -469,6 +473,12 @@ export default function StudentsPage() {
               const entityName = a.slot?.club?.name || a.slot?.centre?.name || 'Unknown';
               groupedAllocations[a.student_id].entities.push(entityName);
               groupedAllocations[a.student_id].days.push(a.slot?.day || 'Unknown');
+
+              // Aggregate for venue summary
+              if (!timetableStats[entityName]) {
+                timetableStats[entityName] = { venue: a.slot?.venue || 'TBD', count: 0 };
+              }
+              timetableStats[entityName].count++;
             });
             
             Object.keys(groupedAllocations).forEach(studentId => {
@@ -544,15 +554,61 @@ export default function StudentsPage() {
         doc.setFont("helvetica", "bold");
         doc.text("Date :", 14, 69);
         doc.setFont("helvetica", "normal");
-        doc.text(new Date().toISOString().split('T')[0], 25, 69);
+        doc.text(new Date().toISOString().split('T')[0], 26, 69);
+
+        const sectionSession = finalStudents[0]?.activity_session || 'Not Assigned';
+        const sectionDay = finalStudents[0]?.allowed_day || 'Not Assigned';
+        
+        doc.setFont("helvetica", "bold");
+        doc.text("Timetable :", 14, 76);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(37, 99, 235); // blue-600
+        doc.text(`${sectionDay} (${sectionSession === 'FORENOON' ? 'Morning' : sectionSession === 'AFTERNOON' ? 'Evening' : sectionSession})`, 37, 76);
 
         // Stats Box equivalent
+        doc.setTextColor(51, 65, 85);
         doc.setFont("helvetica", "bold");
         doc.text(`Total: ${finalStudents.length}    Booked: ${booked.length}    Not Booked: ${notBooked.length}`, 115, 62);
 
-        let currentY = 76;
+        let currentY = 85;
+
+        // Draw Timetable / Venue Summary
+        const venueKeys = Object.keys(timetableStats || {});
+        if (venueKeys.length > 0) {
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(37, 99, 235); // blue-600
+          doc.text("Activity Venues & Student Distribution", 14, currentY);
+
+          const venueColumn = ["S.No", "Club / Centre Name", "Venue", "Total Students"];
+          const venueRows = venueKeys.map((entity, idx) => [
+            idx + 1,
+            entity,
+            timetableStats[entity].venue,
+            timetableStats[entity].count
+          ]);
+
+          autoTable(doc, {
+            head: [venueColumn],
+            body: venueRows,
+            startY: currentY + 4,
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 2 },
+            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [239, 246, 255] }, // blue-50
+          });
+          
+          // @ts-ignore
+          currentY = doc.lastAutoTable.finalY + 12;
+        }
 
         if (booked.length > 0) {
+          // Check if we need a new page
+          if (currentY > doc.internal.pageSize.height - 40) {
+            doc.addPage();
+            currentY = 20;
+          }
+
           doc.setFontSize(12);
           doc.setFont("helvetica", "bold");
           doc.setTextColor(21, 128, 61); // green-700
