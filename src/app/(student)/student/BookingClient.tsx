@@ -15,14 +15,16 @@ export default function BookingClient({
   clubSlots, 
   centreSlots, 
   existingClubBookings, 
-  existingCentreBookings 
+  existingCentreBookings,
+  customRules = []
 }: { 
   student: any,
   studentId: string, 
   clubSlots: any[], 
   centreSlots: any[],
   existingClubBookings: any[],
-  existingCentreBookings: any[]
+  existingCentreBookings: any[],
+  customRules?: any[]
 }) {
   const [selectedClubIds, setSelectedClubIds] = useState<Record<string, string>>({});
   const [selectedCentreIds, setSelectedCentreIds] = useState<Record<string, string>>({});
@@ -77,7 +79,9 @@ export default function BookingClient({
   const sortedClubSlots = [...liveClubSlots].sort((a, b) => (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99));
   const sortedCentreSlots = [...liveCentreSlots].sort((a, b) => (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99));
 
-  const requiredDays = student.allowed_day === 'ANY' ? ['ANY'] : (student.allowed_day || '').split(',');
+  const standardDays = student.allowed_day === 'ANY' ? ['ANY'] : (student.allowed_day && student.allowed_day !== 'EXEMPT' && student.allowed_day !== 'INDEPENDENT' ? student.allowed_day.split(',').filter(Boolean) : []);
+  const customDays = (customRules || []).map((r: any) => r.day);
+  const requiredDays = Array.from(new Set([...standardDays, ...customDays]));
   
   const isFullyBooked = requiredDays.length > 0 && requiredDays.every(day => {
     if (day === 'ANY') {
@@ -86,7 +90,9 @@ export default function BookingClient({
     return existingClubBookings.some(b => b.slot.day === day) && existingCentreBookings.some(b => b.slot.day === day);
   });
 
-  const isReadyToProceed = requiredDays.length > 0 && requiredDays.every(day => {
+  const hasNewSelections = Object.keys(selectedClubIds).length > 0 || Object.keys(selectedCentreIds).length > 0;
+
+  const isReadyToProceed = (requiredDays.length > 0 && requiredDays.every(day => {
     if (day === 'ANY') {
       const hasClub = Object.keys(selectedClubIds).length > 0 || existingClubBookings.length > 0;
       const hasCentre = Object.keys(selectedCentreIds).length > 0 || existingCentreBookings.length > 0;
@@ -95,9 +101,15 @@ export default function BookingClient({
     const hasClub = selectedClubIds[day] || existingClubBookings.some(b => b.slot.day === day);
     const hasCentre = selectedCentreIds[day] || existingCentreBookings.some(b => b.slot.day === day);
     return hasClub && hasCentre;
-  });
+  })) || (requiredDays.length === 0 && hasNewSelections);
 
-  const hasNewSelections = Object.keys(selectedClubIds).length > 0 || Object.keys(selectedCentreIds).length > 0;
+  const allBookingDays = Array.from(new Set([
+    ...requiredDays,
+    ...Object.keys(selectedClubIds),
+    ...Object.keys(selectedCentreIds),
+    ...existingClubBookings.map(b => b.slot.day),
+    ...existingCentreBookings.map(b => b.slot.day)
+  ]));
 
   const handleSelectSlot = (slot: any, type: 'CLUB' | 'CENTRE') => {
     const isAny = student.allowed_day === 'ANY';
@@ -398,7 +410,7 @@ export default function BookingClient({
 
             {/* The Grid */}
             <div className="p-6 sm:p-8 relative z-10 bg-white/50 space-y-8">
-              {requiredDays.map(day => {
+              {allBookingDays.map(day => {
                 const dayBookings = [...existingClubBookings, ...existingCentreBookings]
                   .filter(b => b.slot.day === day || day === 'ANY')
                   .sort((a, b) => a.slot.start_time.localeCompare(b.slot.start_time));
@@ -731,7 +743,7 @@ export default function BookingClient({
             </div>
                         {/* Modal Content */}
             <div className="p-5 sm:p-6 bg-slate-50/80 grid grid-cols-1 gap-6 max-h-[60vh] overflow-y-auto">
-              {requiredDays.map(day => {
+              {allBookingDays.map(day => {
                 const dayKey = day === 'ANY' ? 'ANY' : day;
                 const clubId = selectedClubIds[dayKey];
                 const centreId = selectedCentreIds[dayKey];

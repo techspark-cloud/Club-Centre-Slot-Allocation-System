@@ -353,10 +353,10 @@ export default function SlotsPage() {
             </tr>
             <tr className="bg-[#003399] text-white">
               <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Day</th>
-              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Club (8.00am to 9.15am)</th>
-              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm border-r-2 border-r-[#002266]">Center (9.15am to 10.30am)</th>
-              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Club (1.10pm to 2.25pm)</th>
-              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Center (2.25pm to 3.40pm)</th>
+              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Club (8.00am to 9.40am)</th>
+              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm border-r-2 border-r-[#002266]">Center (9.40am to 10.30am)</th>
+              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Center (1.10pm to 2.00pm)</th>
+              <th className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold text-sm">Club (2.00pm to 3.40pm)</th>
             </tr>
           </thead>
           <tbody>
@@ -377,12 +377,12 @@ export default function SlotsPage() {
                     {getCellData(venueName, day, 'FORENOON', 'CENTRE')}
                   </td>
                   <td className="px-3 py-4 border border-slate-300 text-center text-sm text-slate-800 cursor-pointer hover:bg-blue-50"
-                    onClick={() => setSelectedCell({ venue: venueName, day, session: 'AFTERNOON', type: 'CLUB' })}>
-                    {getCellData(venueName, day, 'AFTERNOON', 'CLUB')}
-                  </td>
-                  <td className="px-3 py-4 border border-slate-300 text-center text-sm text-slate-800 cursor-pointer hover:bg-blue-50"
                     onClick={() => setSelectedCell({ venue: venueName, day, session: 'AFTERNOON', type: 'CENTRE' })}>
                     {getCellData(venueName, day, 'AFTERNOON', 'CENTRE')}
+                  </td>
+                  <td className="px-3 py-4 border border-slate-300 text-center text-sm text-slate-800 cursor-pointer hover:bg-blue-50"
+                    onClick={() => setSelectedCell({ venue: venueName, day, session: 'AFTERNOON', type: 'CLUB' })}>
+                    {getCellData(venueName, day, 'AFTERNOON', 'CLUB')}
                   </td>
                 </tr>
               );
@@ -410,10 +410,10 @@ export default function SlotsPage() {
               <th colSpan={2} className="px-4 py-2 text-center border border-gray-400 dark:border-gray-600 font-bold w-[40%]">Evening (1.10pm to 3.40 pm)</th>
             </tr>
             <tr className="bg-[#0044cc] text-white">
-              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%]">Club<br/><span className="text-xs font-normal opacity-80">(8.00am to 9.15am)</span></th>
-              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%] border-r-2 border-r-[#002266]">Center<br/><span className="text-xs font-normal opacity-80">(9.15am to 10.30am)</span></th>
-              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%]">Club<br/><span className="text-xs font-normal opacity-80">(1.10pm to 2.25pm)</span></th>
-              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%]">Center<br/><span className="text-xs font-normal opacity-80">(2.25pm to 3.40pm)</span></th>
+              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%]">Club<br/><span className="text-xs font-normal opacity-80">(8.00am to 9.40am)</span></th>
+              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%] border-r-2 border-r-[#002266]">Center<br/><span className="text-xs font-normal opacity-80">(9.40am to 10.30am)</span></th>
+              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%]">Center<br/><span className="text-xs font-normal opacity-80">(1.10pm to 2.00pm)</span></th>
+              <th className="px-2 py-2 text-center border border-gray-400 dark:border-gray-600 font-semibold text-sm w-[20%]">Club<br/><span className="text-xs font-normal opacity-80">(2.00pm to 3.40pm)</span></th>
             </tr>
           </thead>
           <tbody>
@@ -438,12 +438,12 @@ export default function SlotsPage() {
                     {getCellData(venue, day, 'FORENOON', 'CENTRE')}
                   </td>
                   <td className="px-3 py-2 border border-slate-300 text-sm text-slate-800 cursor-pointer hover:bg-blue-50"
-                    onClick={() => setSelectedCell({ venue, day, session: 'AFTERNOON', type: 'CLUB' })}>
-                    {getCellData(venue, day, 'AFTERNOON', 'CLUB')}
-                  </td>
-                  <td className="px-3 py-2 border border-slate-300 text-sm text-slate-800 cursor-pointer hover:bg-blue-50"
                     onClick={() => setSelectedCell({ venue, day, session: 'AFTERNOON', type: 'CENTRE' })}>
                     {getCellData(venue, day, 'AFTERNOON', 'CENTRE')}
+                  </td>
+                  <td className="px-3 py-2 border border-slate-300 text-sm text-slate-800 cursor-pointer hover:bg-blue-50"
+                    onClick={() => setSelectedCell({ venue, day, session: 'AFTERNOON', type: 'CLUB' })}>
+                    {getCellData(venue, day, 'AFTERNOON', 'CLUB')}
                   </td>
                 </tr>
               ));

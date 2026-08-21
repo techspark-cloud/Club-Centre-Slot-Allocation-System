@@ -5,6 +5,78 @@ import { createClient } from '@/lib/supabase/client';
 import { Users, Search, ChevronRight, ArrowLeft, Users2, BookOpen, Layers, FileDown, Undo2, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+const CustomDayAccessGroup = ({ 
+  section, 
+  selectedCourse, 
+  currentDay, 
+  bookingRules, 
+  updatingDay, 
+  handleUpdateRule 
+}: any) => {
+  const [activeDay, setActiveDay] = useState<string | null>(null);
+  const unassignedDays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'].filter(d => !(currentDay || '').includes(d));
+
+  if (unassignedDays.length === 0) return <p className="text-[10px] text-slate-400 font-bold mt-2">No unassigned days available.</p>;
+
+  return (
+    <div className="space-y-3">
+      {/* Day Selector Pills */}
+      <div className="flex flex-wrap gap-1.5">
+        {unassignedDays.map(day => {
+          const rule = bookingRules.find((r: any) => r.course === selectedCourse && r.section === section && r.day === day);
+          const hasTimings = rule?.allowed_timings?.length > 0;
+          return (
+            <button
+              key={day}
+              onClick={() => setActiveDay(activeDay === day ? null : day)}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border flex items-center gap-1.5 transition-all ${activeDay === day ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200' : hasTimings ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}
+            >
+              {day.substring(0,3)}
+              {hasTimings && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Active Day Timings */}
+      {activeDay && (
+        <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 sm:p-4 animate-in fade-in slide-in-from-top-2 duration-200 shadow-inner">
+          <h5 className="text-[10px] font-black text-indigo-800 mb-3 uppercase tracking-widest flex items-center justify-between">
+            {activeDay} TIMINGS
+            <span className="text-[9px] font-bold text-indigo-400">Select allowed slots</span>
+          </h5>
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { label: 'Morning Club (8:00 - 9:40)', val: '08:00:00-09:40:00' },
+              { label: 'Morning Center (9:40 - 10:30)', val: '09:40:00-10:30:00' },
+              { label: 'Evening Center (1:10 - 2:00)', val: '13:10:00-14:00:00' },
+              { label: 'Evening Club (2:00 - 3:40)', val: '14:00:00-15:40:00' }
+            ].map(t => {
+              const rule = bookingRules.find((r: any) => r.course === selectedCourse && r.section === section && r.day === activeDay);
+              const timings = rule?.allowed_timings || [];
+              const isChecked = timings.includes(t.val);
+              return (
+                <label key={t.val} className={`flex items-center gap-3 cursor-pointer group p-2 rounded-lg border transition-colors ${isChecked ? 'bg-white border-indigo-200 shadow-sm' : 'bg-transparent border-transparent hover:bg-white hover:border-slate-200'}`}>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300 group-hover:border-indigo-400'}`}>
+                    {isChecked && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={isChecked}
+                    disabled={updatingDay === `${section}-rule`}
+                    onChange={() => handleUpdateRule(section, activeDay, t.val)}
+                    className="hidden"
+                  />
+                  <span className={`text-[11px] font-bold ${isChecked ? 'text-indigo-900' : 'text-slate-600 group-hover:text-slate-800'}`}>{t.label}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -20,6 +92,7 @@ export default function StudentsPage() {
   // Section mapping state
   const [updatingDay, setUpdatingDay] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [bookingRules, setBookingRules] = useState<any[]>([]);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'BOOKED'>('ALL');
@@ -33,6 +106,9 @@ export default function StudentsPage() {
     // Fetch total exact count
     const { count } = await supabase.from('students').select('*', { count: 'exact', head: true });
     setTotalCount(count || 0);
+
+    const { data: rulesData } = await supabase.from('section_booking_rules').select('*');
+    setBookingRules(rulesData || []);
 
     // Fetch all students data using pagination to bypass the 1000 row API limit
     let allData: any[] = [];
@@ -218,6 +294,44 @@ export default function StudentsPage() {
     } catch (err: any) {
       console.error('Error updating allowed day:', err.message);
       alert('Failed to update allowed day.');
+    } finally {
+      setUpdatingDay(null);
+    }
+  };
+
+  const handleUpdateRule = async (section: string, day: string, timing: string) => {
+    if (!selectedCourse) return;
+    setUpdatingDay(`${section}-rule`);
+    
+    // Find existing rule
+    const existingRule = bookingRules.find(r => r.course === selectedCourse && r.section === section && r.day === day);
+    let newTimings = [];
+    if (existingRule) {
+      newTimings = [...existingRule.allowed_timings];
+      if (newTimings.includes(timing)) {
+        newTimings = newTimings.filter((t: string) => t !== timing);
+      } else {
+        newTimings.push(timing);
+      }
+    } else {
+      newTimings = [timing];
+    }
+
+    try {
+      if (newTimings.length === 0 && existingRule) {
+        await supabase.from('section_booking_rules').delete().eq('id', existingRule.id);
+      } else if (existingRule) {
+        await supabase.from('section_booking_rules').update({ allowed_timings: newTimings }).eq('id', existingRule.id);
+      } else {
+        await supabase.from('section_booking_rules').insert({ course: selectedCourse, section, day, allowed_timings: newTimings });
+      }
+
+      // Refetch rules
+      const { data: rulesData } = await supabase.from('section_booking_rules').select('*');
+      setBookingRules(rulesData || []);
+    } catch (err: any) {
+      console.error('Failed to update booking rule:', err);
+      alert('Failed to update rule.');
     } finally {
       setUpdatingDay(null);
     }
@@ -412,6 +526,24 @@ export default function StudentsPage() {
                       EXEMPT
                     </button>
                   </div>
+                </div>
+
+                {/* UNASSIGNED DAYS ACCESS */}
+                <div className="pt-4 border-t-2 border-slate-100">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center justify-between">
+                    Custom Unassigned Day Access
+                    {updatingDay === `${section}-rule` && (
+                      <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                    )}
+                  </label>
+                  <CustomDayAccessGroup 
+                    section={section}
+                    selectedCourse={selectedCourse}
+                    currentDay={currentDay}
+                    bookingRules={bookingRules}
+                    updatingDay={updatingDay}
+                    handleUpdateRule={handleUpdateRule}
+                  />
                 </div>
               </div>
             </div>

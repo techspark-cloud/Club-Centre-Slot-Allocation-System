@@ -32,24 +32,48 @@ export default async function StudentDashboard() {
   // Fetch available slots for the student's assigned session and day
   let clubSlots: any[] = [];
   let centreSlots: any[] = [];
+  let customRules: any[] = [];
   
-  if (student.activity_session && student.allowed_day) {
+  if (student.activity_session) {
+    // Fetch custom section rules
+    const { data: rulesData } = await supabase
+      .from('section_booking_rules')
+      .select('*')
+      .eq('course', student.course)
+      .eq('section', student.section);
+      
+    if (rulesData) {
+      customRules = rulesData;
+    }
+
     let query = supabase
       .from('slots')
       .select(`*, club:clubs(id, name, faculty_name, faculty_mobile), centre:centres(id, name, faculty_name, faculty_mobile)`)
-      .eq('session', student.activity_session)
       .eq('status', 'ACTIVE');
       
-    if (student.allowed_day !== 'ANY') {
-      const allowedDaysArray = student.allowed_day.split(',');
-      query = query.in('day', allowedDaysArray);
-    }
-    
     const { data: slots } = await query;
       
     if (slots) {
-      clubSlots = slots.filter(s => s.club_id !== null);
-      centreSlots = slots.filter(s => s.centre_id !== null);
+      const allowedDaysArray = (student.allowed_day && student.allowed_day !== 'ANY' && student.allowed_day !== 'INDEPENDENT') ? student.allowed_day.split(',') : [];
+      
+      const filteredSlots = slots.filter(s => {
+        if (student.allowed_day === 'ANY' || student.allowed_day === 'INDEPENDENT') return true;
+        
+        // Match standard day assignment (MUST match student's session)
+        if (allowedDaysArray.includes(s.day) && s.session === student.activity_session) return true;
+        
+        // Match custom rules (Any session is allowed if timing matches)
+        const ruleForDay = customRules.find(r => r.day === s.day);
+        if (ruleForDay) {
+          const timingString = `${s.start_time}-${s.end_time}`;
+          if (ruleForDay.allowed_timings.includes(timingString)) return true;
+        }
+        
+        return false;
+      });
+
+      clubSlots = filteredSlots.filter(s => s.club_id !== null);
+      centreSlots = filteredSlots.filter(s => s.centre_id !== null);
     }
   }
 
@@ -136,62 +160,69 @@ export default async function StudentDashboard() {
         </div>
       </div>
 
-      {!student.id_card_verified ? (
-        <IDVerificationClient studentId={student.id} />
-      ) : !student.activity_session || !student.allowed_day ? (
-        <div className="bg-white rounded-[2rem] p-8 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center justify-center text-center flex-1">
-          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-orange-50/80 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-50/50 rounded-full blur-3xl translate-y-1/3 -translate-x-1/3 pointer-events-none"></div>
-          
-          <div className="relative z-10 w-16 h-16 bg-gradient-to-br from-orange-50 to-rose-50 rounded-2xl flex items-center justify-center mb-5 border border-orange-100 shadow-inner rotate-3 transition-transform hover:rotate-6 duration-300">
-            <CalendarClock className="w-8 h-8 text-orange-500 -rotate-3" />
-          </div>
-          
-          <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-3">
-            Booking Schedule Not Assigned
-          </h3>
-          
-          <p className="relative z-10 text-slate-500 text-base sm:text-lg max-w-xl leading-relaxed">
-            {!student.activity_session 
-              ? "You haven't been assigned to a Forenoon or Afternoon session yet." 
-              : "Your specific booking day (e.g. Monday, Tuesday) hasn't been assigned yet."}
-            <br className="hidden sm:block" />
-            <span className="font-semibold text-slate-700 mt-1 block">Please wait for your coordinator to configure your schedule before booking slots.</span>
-          </p>
 
-          <div className="relative z-10 mt-6 flex items-center gap-2 text-xs font-extrabold text-orange-600 bg-orange-50/80 px-4 py-2 rounded-xl border border-orange-100/50 backdrop-blur-sm shadow-sm">
-            <AlertCircle className="w-4 h-4" />
-            Check back later
-          </div>
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 w-full bg-slate-50/50 relative overflow-hidden pb-32">
+        <div className="w-full h-full p-4 sm:p-5 lg:p-6 overflow-y-auto custom-scrollbar">
+          {!student.id_card_verified ? (
+            <IDVerificationClient student={student} studentId={student.id} />
+          ) : !student.activity_session || !student.allowed_day ? (
+            <div className="bg-white rounded-[2rem] p-8 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center justify-center text-center flex-1">
+              <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-orange-50/80 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+              <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-rose-50/50 rounded-full blur-3xl translate-y-1/3 -translate-x-1/3 pointer-events-none"></div>
+              
+              <div className="relative z-10 w-16 h-16 bg-gradient-to-br from-orange-50 to-rose-50 rounded-2xl flex items-center justify-center mb-5 border border-orange-100 shadow-inner rotate-3 transition-transform hover:rotate-6 duration-300">
+                <CalendarClock className="w-8 h-8 text-orange-500 -rotate-3" />
+              </div>
+              
+              <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-3">
+                Booking Schedule Not Assigned
+              </h3>
+              
+              <p className="relative z-10 text-slate-500 text-base sm:text-lg max-w-xl leading-relaxed">
+                {!student.activity_session 
+                  ? "You haven't been assigned to a Forenoon or Afternoon session yet." 
+                  : "Your specific booking day (e.g. Monday, Tuesday) hasn't been assigned yet."}
+                <br className="hidden sm:block" />
+                <span className="font-semibold text-slate-700 mt-1 block">Please wait for your coordinator to configure your schedule before booking slots.</span>
+              </p>
+
+              <div className="relative z-10 mt-6 flex items-center gap-2 text-xs font-extrabold text-orange-600 bg-orange-50/80 px-4 py-2 rounded-xl border border-orange-100/50 backdrop-blur-sm shadow-sm">
+                <AlertCircle className="w-4 h-4" />
+                Check back later
+              </div>
+            </div>
+          ) : student.allowed_day === 'INDEPENDENT' ? (
+            <div className="bg-white rounded-[2rem] p-8 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center justify-center text-center flex-1">
+              <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-emerald-50/80 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+              
+              <div className="relative z-10 w-16 h-16 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl flex items-center justify-center mb-5 border border-emerald-100 shadow-inner">
+                <ShieldCheck className="w-8 h-8 text-emerald-500" />
+              </div>
+              
+              <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-3">
+                Independent Student
+              </h3>
+              
+              <p className="relative z-10 text-slate-500 text-base sm:text-lg max-w-xl leading-relaxed">
+                You have been assigned as an Independent student for this semester.
+                <br className="hidden sm:block" />
+                <span className="font-semibold text-slate-700 mt-1 block">You are exempt from the standard Club and Centre slot allocation process.</span>
+              </p>
+            </div>
+          ) : (
+            <BookingClient 
+              student={student} 
+              studentId={student.id} 
+              clubSlots={clubSlots} 
+              centreSlots={centreSlots} 
+              existingClubBookings={existingClubBookings}
+              existingCentreBookings={existingCentreBookings}
+              customRules={customRules}
+            />
+          )}
         </div>
-      ) : student.allowed_day === 'INDEPENDENT' ? (
-        <div className="bg-white rounded-[2rem] p-8 sm:p-10 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center justify-center text-center flex-1">
-          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-emerald-50/80 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
-          
-          <div className="relative z-10 w-16 h-16 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl flex items-center justify-center mb-5 border border-emerald-100 shadow-inner">
-            <ShieldCheck className="w-8 h-8 text-emerald-500" />
-          </div>
-          
-          <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-3">
-            Independent Student
-          </h3>
-          
-          <p className="relative z-10 text-slate-500 text-base sm:text-lg max-w-xl leading-relaxed">
-            You have been assigned as an Independent student for this semester.
-            <br className="hidden sm:block" />
-            <span className="font-semibold text-slate-700 mt-1 block">You are exempt from the standard Club and Centre slot allocation process.</span>
-          </p>
-        </div>
-      ) : (
-        <BookingClient 
-          student={student} 
-          studentId={student.id} 
-          clubSlots={clubSlots} 
-          centreSlots={centreSlots}
-          existingClubBookings={existingClubBookings}
-          existingCentreBookings={existingCentreBookings}
-        />
-      )}
+      </div>
     </div>
   );
 }

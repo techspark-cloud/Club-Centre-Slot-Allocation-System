@@ -488,6 +488,7 @@ function AnimatedWalker({ pathPoints, isWalking, onComplete }: { pathPoints: [nu
 
   useFrame((state, delta) => {
     if (!isWalking || pathPoints.length < 2 || !markerRef.current) return;
+    if (segmentIndexRef.current >= pathPoints.length - 1) return;
 
     const p1 = new THREE.Vector3(...pathPoints[segmentIndexRef.current]);
     const p2 = new THREE.Vector3(...pathPoints[segmentIndexRef.current + 1]);

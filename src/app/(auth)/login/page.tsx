@@ -46,8 +46,14 @@ export default function LoginPage() {
         return;
       }
 
-      if (profile.role === 'SUPER_ADMIN' || profile.role === 'ALLOCATION_ADMIN') {
+      if (data.user.email === 'clubs@rit.edu') {
+        router.push('/overall-clubs');
+      } else if (data.user.email === 'centres@rit.edu') {
+        router.push('/overall-centres');
+      } else if (profile.role === 'SUPER_ADMIN' || profile.role === 'ALLOCATION_ADMIN') {
         router.push('/admin');
+      } else if (profile.role === 'CLUB_COORDINATOR' || profile.role === 'CENTRE_COORDINATOR') {
+        router.push('/coordinator');
       } else {
         router.push('/student');
       }
