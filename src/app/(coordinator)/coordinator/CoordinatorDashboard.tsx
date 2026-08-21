@@ -539,7 +539,10 @@ export default function CoordinatorDashboard({
                                           <td className="px-5 py-4 text-sm font-bold font-mono text-slate-700">{m.student?.register_no}</td>
                                           <td className="px-5 py-4">
                                             <p className="text-sm font-extrabold text-slate-900">{m.student?.name}</p>
-                                            {m.student?.academic_year && <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">{m.student.academic_year}</p>}
+                                            <div className="flex flex-col gap-0.5 mt-0.5">
+                                              {m.student?.academic_year && <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{m.student.academic_year}</p>}
+                                              {m.student?.contact_no && <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">📞 {m.student.contact_no}</p>}
+                                            </div>
                                           </td>
                                           <td className="px-5 py-4 text-sm font-bold text-slate-600">
                                             {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
@@ -591,9 +594,16 @@ export default function CoordinatorDashboard({
                                             <span className="text-xs font-bold font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{m.student?.register_no}</span>
                                           </div>
                                           <h5 className="text-base font-black text-slate-900 leading-tight">{m.student?.name}</h5>
-                                          <p className="text-xs font-bold text-slate-500 mt-1">
-                                            {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
-                                          </p>
+                                          <div className="flex flex-col gap-1 mt-1">
+                                            <p className="text-xs font-bold text-slate-500">
+                                              {m.student?.course} - <span className="text-blue-600">{m.student?.section}</span>
+                                            </p>
+                                            {m.student?.contact_no && (
+                                              <p className="text-xs font-bold text-slate-500 flex items-center gap-1">
+                                                📞 {m.student.contact_no}
+                                              </p>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                       

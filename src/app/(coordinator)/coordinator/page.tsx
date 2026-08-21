@@ -67,7 +67,7 @@ export default async function CoordinatorPage() {
         id,
         slot_id,
         student:students (
-          id, name, register_no, course, section, academic_year, hosteler
+          id, name, register_no, course, section, academic_year, hosteler, contact_no
         ),
         slot:slots!inner (
           id, day, club_id, session, venue
@@ -85,7 +85,7 @@ export default async function CoordinatorPage() {
         id,
         slot_id,
         student:students (
-          id, name, register_no, course, section, academic_year, hosteler
+          id, name, register_no, course, section, academic_year, hosteler, contact_no
         ),
         slot:slots!inner (
           id, day, centre_id, session, venue
