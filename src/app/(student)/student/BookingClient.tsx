@@ -705,37 +705,11 @@ export default function BookingClient({
                 )}
                 
                 {customRules && customRules.length > 0 && (
-                  <div className="mt-3 p-3 bg-white/60 rounded-xl border border-blue-200/60 shadow-sm">
-                    <p className="text-blue-800 font-bold text-sm mb-1.5 flex items-center gap-1.5">
-                      <span className="bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest">Notice</span> 
-                      Special Lab-Day Access
+                  <div className="mt-3 p-3 bg-white/60 rounded-xl border border-blue-200/60 shadow-sm flex items-start gap-2">
+                    <span className="bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-widest mt-0.5 shrink-0">Notice</span>
+                    <p className="text-blue-800 text-sm font-medium leading-relaxed">
+                      Because of your lab schedule, you also have access to specific slots on <strong>{customRules.map((r: any) => r.day).join(', ')}</strong>. Please pick <strong>EITHER 1 Club OR 1 Centre</strong> during the timings shown below!
                     </p>
-                    <ul className="text-blue-700 text-sm space-y-1 font-medium pl-1">
-                      {customRules.map((rule: any, idx: number) => (
-                        <li key={idx} className="flex flex-col gap-1.5 mb-2 last:mb-0">
-                          <div className="flex items-start gap-2">
-                            <span className="text-blue-400 mt-0.5">•</span>
-                            <span>You also have access to specific slots on <strong>{rule.day}</strong> because of your lab schedule. Please make sure to select a slot for this day as well!</span>
-                          </div>
-                          {rule.allowed_timings && rule.allowed_timings.map((timeStr: string, tIdx: number) => {
-                            let message = '';
-                            if (timeStr.startsWith('08:00')) message = 'Attend Club first (8:00 to 9:40), then proceed to your Lab.';
-                            else if (timeStr.startsWith('09:40')) message = 'Attend your Lab first, then come to Centre (9:40 to 10:30).';
-                            else if (timeStr.startsWith('13:10')) message = 'Attend Centre first (1:10 to 2:00), then proceed to your Lab.';
-                            else if (timeStr.startsWith('14:00')) message = 'Attend your Lab first, then come to Club (2:00 to 3:40).';
-                            
-                            if (!message) return null;
-                            return (
-                              <div key={tIdx} className="ml-4 pl-1">
-                                <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 inline-block leading-tight shadow-sm">
-                                  💡 {message}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 )}
               </div>
