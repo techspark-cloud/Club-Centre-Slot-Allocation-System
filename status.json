@@ -1,0 +1,43 @@
+{
+  "pendingClubs": [],
+  "providedClubs": [
+    "Artist league",
+    "Fusion",
+    "Helios",
+    "Infinitus",
+    "Innovation",
+    "Mediastic Hub",
+    "Nippon",
+    "NSS (National Service Scheme)",
+    "Podcast (PODX)",
+    "Rotaract",
+    "STEAM",
+    "Techspark",
+    "Telugu",
+    "UBA (Unnat Bharat Abhiyan)",
+    "Vaarithi Muthamizh Mandram",
+    "WiSTEM",
+    "Women Empowerment Cell (WEC)",
+    "YRC (Youth Red Cross)",
+    "Yuva"
+  ],
+  "pendingCentres": [
+    "Centre for RADAR",
+    "Centre for ZF",
+    "Sports"
+  ],
+  "providedCentres": [
+    "Center for Apple",
+    "Center for Cloud",
+    "Center for Data Science",
+    "Center for EV & Energy",
+    "Center for Space",
+    "Centre for AI (Artificial Intelligence)",
+    "Centre for ARVR (Augmented Reality / Virtual Reality)",
+    "Centre for Cybersecurity",
+    "Centre For Image Processing",
+    "Centre for IoT (Internet of Things)",
+    "Centre for Semiconductor Design",
+    "Centre for Smart Manufacturing"
+  ]
+}

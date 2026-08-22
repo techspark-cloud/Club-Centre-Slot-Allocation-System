@@ -35,6 +35,7 @@ export default function BookingClient({
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({});
 
   // 3D Navigator State
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -79,8 +80,8 @@ export default function BookingClient({
   const sortedClubSlots = [...liveClubSlots].sort((a, b) => (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99));
   const sortedCentreSlots = [...liveCentreSlots].sort((a, b) => (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99));
 
-  const standardDays = student.allowed_day === 'ANY' ? ['ANY'] : (student.allowed_day && student.allowed_day !== 'EXEMPT' && student.allowed_day !== 'INDEPENDENT' ? student.allowed_day.split(',').filter(Boolean) : []);
-  const customDays = (customRules || []).map((r: any) => r.day);
+  const standardDays = student.allowed_day === 'ANY' ? ['ANY'] : (student.allowed_day && student.allowed_day !== 'EXEMPT' && student.allowed_day !== 'INDEPENDENT' ? student.allowed_day.split(',').map((d: string) => d.trim()).filter(Boolean) : []);
+  const customDays = (customRules || []).map((r: any) => r.day.trim());
   const requiredDays = Array.from(new Set([...standardDays, ...customDays]));
   
   const isFullyBooked = requiredDays.length > 0 && requiredDays.every(day => {
@@ -230,6 +231,7 @@ export default function BookingClient({
   const renderSlotCard = (slot: any, type: 'CLUB' | 'CENTRE', isBooked: boolean) => {
     const isFull = slot.allocated_count >= slot.capacity;
     const name = type === 'CLUB' ? slot.club.name : slot.centre.name;
+    const description = type === 'CLUB' ? slot.club.description : slot.centre.description;
     const availableSeats = slot.capacity - slot.allocated_count;
     
     const isAny = student.allowed_day === 'ANY';
@@ -240,7 +242,7 @@ export default function BookingClient({
       <div 
         key={slot.id} 
         onClick={() => !isBooked && !isFull && handleSelectSlot(slot, type)}
-        className={`border rounded-2xl p-4 sm:px-6 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] ${
+        className={`border rounded-xl sm:rounded-2xl p-3 sm:px-6 sm:py-4 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] ${
           isBooked ? 'bg-green-50/50 border-green-200 cursor-default active:scale-100' :
           isFull ? 'bg-slate-50 border-slate-200 opacity-75 cursor-not-allowed active:scale-100' :
           isSelected ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 shadow-blue-100' :
@@ -252,53 +254,99 @@ export default function BookingClient({
         
         {/* Left Side: Name and Status */}
         <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <h3 className={`font-extrabold text-lg truncate ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 items-start">
+            <h3 className={`font-extrabold text-base sm:text-lg truncate w-full sm:w-auto ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>
               {name}
             </h3>
-            <span className="text-xs font-bold text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-              <span>Every {slot.day.charAt(0) + slot.day.slice(1).toLowerCase()}</span>
-              {slot.session && (
-                <>
-                  <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                  <span className={`${slot.session === 'MORNING' ? 'text-orange-600' : 'text-indigo-600'} font-black tracking-wide`}>
-                    {slot.session === 'MORNING' ? 'Morning' : 'Evening'}
-                  </span>
-                </>
-              )}
-            </span>
-          </div>
             
-            {!isBooked && !isFull && !isSelected && (
-              <span className="flex items-center gap-1.5 bg-red-50 text-red-600 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-widest border border-red-100 shrink-0">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping absolute opacity-75"></span>
-                <span className="w-1.5 h-1.5 bg-red-600 rounded-full relative"></span>
-                LIVE
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!isBooked && !isFull && !isSelected && (
+                <span className="flex items-center gap-1 bg-red-50 text-red-600 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-widest border border-red-100 shrink-0">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping absolute opacity-75"></span>
+                  <span className="w-1.5 h-1.5 bg-red-600 rounded-full relative"></span>
+                  LIVE
+                </span>
+              )}
+              {isSelected && (
+                <span className="flex items-center text-blue-700 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-widest bg-blue-100 px-1.5 py-0.5 rounded-full border border-blue-200 shrink-0">
+                  <Check className="w-3 h-3 mr-1" /> SELECTED
+                </span>
+              )}
+              {isBooked && (
+                <span className="flex items-center text-green-700 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-widest bg-green-100 px-1.5 py-0.5 rounded-full border border-green-200 shrink-0">
+                  <CheckCircle className="w-3 h-3 mr-1" /> BOOKED
+                </span>
+              )}
+              {isFull && !isBooked && (
+                <span className="text-red-600 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest bg-red-50 px-1.5 py-0.5 rounded-full border border-red-100 shrink-0">FULL</span>
+              )}
+            </div>
+          </div>
+          
+          <span className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+            <span>Every {slot.day.charAt(0) + slot.day.slice(1).toLowerCase()}</span>
+            {slot.start_time && slot.end_time && (
+              <>
+                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                <span className="text-slate-700 font-bold tracking-tight">
+                  {slot.start_time.substring(0,5)} - {slot.end_time.substring(0,5)}
+                </span>
+              </>
+            )}
+            {slot.session && (
+              <>
+                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                <span className={`${slot.session === 'FORENOON' || slot.session === 'MORNING' ? 'text-orange-600' : 'text-indigo-600'} font-black tracking-wide uppercase`}>
+                  {slot.session === 'FORENOON' || slot.session === 'MORNING' ? 'Morning' : 'Evening'}
+                </span>
+              </>
+            )}
+          </span>
+          {description && (
+            <div className="mt-1.5">
+              <p className={`text-[11px] sm:text-xs text-slate-600 leading-snug transition-all ${expandedDescriptions[slot.id] ? '' : 'line-clamp-2'}`}>
+                {description}
+              </p>
+              {description.length > 80 && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setExpandedDescriptions(prev => ({ ...prev, [slot.id]: !prev[slot.id] })) }}
+                  className="text-[10px] sm:text-xs font-bold text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                >
+                  {expandedDescriptions[slot.id] ? 'Show less' : 'Read more'}
+                </button>
+              )}
+            </div>
+          )}
+          <div className="mt-1.5">
+            {type === 'CLUB' && slot.start_time.startsWith('08:00') && (
+              <span className="text-[9px] sm:text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border border-emerald-200 inline-block leading-tight mt-0.5">
+                💡 Attend Club first (8:00 to 9:40), then proceed to your Lab.
               </span>
             )}
-            {isSelected && (
-              <span className="flex items-center text-blue-700 font-extrabold text-[10px] uppercase tracking-widest bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200 shrink-0">
-                <Check className="w-3 h-3 mr-1" /> SELECTED
+            {type === 'CENTRE' && slot.start_time.startsWith('09:40') && (
+              <span className="text-[9px] sm:text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border border-emerald-200 inline-block leading-tight mt-0.5">
+                💡 Attend your Lab first, then come to Centre (9:40 to 10:30).
               </span>
             )}
-            {isBooked && (
-              <span className="flex items-center text-green-700 font-extrabold text-[10px] uppercase tracking-widest bg-green-100 px-2 py-0.5 rounded-full border border-green-200 shrink-0">
-                <CheckCircle className="w-3 h-3 mr-1" /> BOOKED
+            {type === 'CENTRE' && slot.start_time.startsWith('13:10') && (
+              <span className="text-[9px] sm:text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border border-emerald-200 inline-block leading-tight mt-0.5">
+                💡 Attend Centre first (1:10 to 2:00), then proceed to your Lab.
               </span>
             )}
-            {isFull && !isBooked && (
-              <span className="text-red-600 text-[10px] font-extrabold uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded-full border border-red-100 shrink-0">FULL</span>
+            {type === 'CLUB' && slot.start_time.startsWith('14:00') && (
+              <span className="text-[9px] sm:text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border border-emerald-200 inline-block leading-tight mt-0.5">
+                💡 Attend your Lab first, then come to Club (2:00 to 3:40).
+              </span>
             )}
           </div>
         </div>
         
         {/* Right Side: Stats */}
-        <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0 mt-2 sm:mt-0">
+        <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-6 shrink-0 mt-3 sm:mt-0 pt-3 sm:pt-0 border-t border-slate-100 sm:border-0">
           {!isBooked && !isFull && (
             <div className="flex flex-col items-start sm:items-end">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available</span>
-              <span className={`text-xl leading-none font-black ${availableSeats <= 10 ? 'text-red-600' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available</span>
+              <span className={`text-lg sm:text-xl leading-none font-black ${availableSeats <= 10 ? 'text-red-600' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                 {availableSeats}
               </span>
             </div>
@@ -306,7 +354,7 @@ export default function BookingClient({
           
           {/* Custom Radio Button Visual */}
           {!isBooked && !isFull && (
-            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+            <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
               isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
             }`}>
               {isSelected && <div className="w-2 h-2 rounded-full bg-white"></div>}
@@ -457,7 +505,7 @@ export default function BookingClient({
                                   {slot.session && (
                                     <>
                                       <span className="w-1 h-1 bg-slate-400 rounded-full"></span>
-                                      <span className="text-slate-800 font-bold">{slot.session === 'MORNING' ? 'Morning' : 'Evening'}</span>
+                                      <span className="text-slate-800 font-bold">{slot.session === 'FORENOON' || slot.session === 'MORNING' ? 'Morning' : 'Evening'}</span>
                                     </>
                                   )}
                                 </div>
@@ -598,8 +646,43 @@ export default function BookingClient({
                   </p>
                 ) : (
                   <p className="text-blue-700 font-medium text-sm leading-relaxed">
-                    You have been assigned strictly to <strong>{student.allowed_day.charAt(0) + student.allowed_day.slice(1).toLowerCase()}s</strong>. Please pick <strong>1 Club</strong> and <strong>1 Centre</strong> from the list below.
+                    You have been assigned to <strong>{student.allowed_day.charAt(0) + student.allowed_day.slice(1).toLowerCase()}s</strong>. Please pick <strong>1 Club</strong> and <strong>1 Centre</strong> from the list below.
                   </p>
+                )}
+                
+                {customRules && customRules.length > 0 && (
+                  <div className="mt-3 p-3 bg-white/60 rounded-xl border border-blue-200/60 shadow-sm">
+                    <p className="text-blue-800 font-bold text-sm mb-1.5 flex items-center gap-1.5">
+                      <span className="bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest">Notice</span> 
+                      Special Lab-Day Access
+                    </p>
+                    <ul className="text-blue-700 text-sm space-y-1 font-medium pl-1">
+                      {customRules.map((rule: any, idx: number) => (
+                        <li key={idx} className="flex flex-col gap-1.5 mb-2 last:mb-0">
+                          <div className="flex items-start gap-2">
+                            <span className="text-blue-400 mt-0.5">•</span>
+                            <span>You also have access to specific slots on <strong>{rule.day}</strong> because of your lab schedule. Please make sure to select a slot for this day as well!</span>
+                          </div>
+                          {rule.allowed_timings && rule.allowed_timings.map((timeStr: string, tIdx: number) => {
+                            let message = '';
+                            if (timeStr.startsWith('08:00')) message = 'Attend Club first (8:00 to 9:40), then proceed to your Lab.';
+                            else if (timeStr.startsWith('09:40')) message = 'Attend your Lab first, then come to Centre (9:40 to 10:30).';
+                            else if (timeStr.startsWith('13:10')) message = 'Attend Centre first (1:10 to 2:00), then proceed to your Lab.';
+                            else if (timeStr.startsWith('14:00')) message = 'Attend your Lab first, then come to Club (2:00 to 3:40).';
+                            
+                            if (!message) return null;
+                            return (
+                              <div key={tIdx} className="ml-4 pl-1">
+                                <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 inline-block leading-tight shadow-sm">
+                                  💡 {message}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             </div>

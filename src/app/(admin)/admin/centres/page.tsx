@@ -13,7 +13,7 @@ export default function CentresPage() {
   const [centres, setCentres] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ faculty_name: '', faculty_mobile: '' });
+  const [editForm, setEditForm] = useState({ description: '', faculty_name: '', faculty_mobile: '' });
   const [saving, setSaving] = useState(false);
   const [downloadingOverall, setDownloadingOverall] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
@@ -39,22 +39,23 @@ export default function CentresPage() {
 
   const startEdit = (centre: any) => {
     setEditingId(centre.id);
-    setEditForm({ faculty_name: centre.faculty_name || '', faculty_mobile: centre.faculty_mobile || '' });
+    setEditForm({ description: centre.description || '', faculty_name: centre.faculty_name || '', faculty_mobile: centre.faculty_mobile || '' });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditForm({ faculty_name: '', faculty_mobile: '' });
+    setEditForm({ description: '', faculty_name: '', faculty_mobile: '' });
   };
 
   const saveEdit = async (centreId: string) => {
     setSaving(true);
+    const descriptionStr = editForm.description?.trim() || null;
     const facultyNameStr = editForm.faculty_name?.trim() || null;
     const facultyMobileStr = editForm.faculty_mobile?.trim() || null;
     
     const { error } = await supabase
       .from('centres')
-      .update({ faculty_name: facultyNameStr, faculty_mobile: facultyMobileStr })
+      .update({ description: descriptionStr, faculty_name: facultyNameStr, faculty_mobile: facultyMobileStr })
       .eq('id', centreId);
 
     if (!error) {
@@ -534,6 +535,16 @@ export default function CentresPage() {
               <div className="mt-4 pt-4 border-t-2 border-slate-100">
                 {editingId === centre.id ? (
                   <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Centre Description</label>
+                      <textarea
+                        value={editForm.description}
+                        onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                        placeholder="e.g. Learn cloud architecture..."
+                        rows={2}
+                        className="w-full px-3 py-2 border-2 border-blue-300 rounded-xl text-sm font-medium focus:outline-none focus:border-blue-500 text-slate-800 resize-none"
+                      />
+                    </div>
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Faculty Name</label>
                       <input
