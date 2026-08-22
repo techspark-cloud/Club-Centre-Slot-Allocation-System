@@ -156,6 +156,18 @@ export default async function StudentDashboard() {
                   Day Unassigned
                 </div>
               )}
+
+              {/* Render custom unassigned day rules */}
+              {customRules && customRules.length > 0 && (
+                <>
+                  {customRules.map(rule => (
+                    <div key={rule.id} className="bg-purple-50 text-purple-700 px-3 py-1 rounded-lg font-extrabold text-xs uppercase tracking-wide border border-purple-200/60 shadow-sm flex items-center gap-1.5" title={rule.allowed_timings.join(', ')}>
+                      <Clock className="w-3.5 h-3.5" />
+                      {rule.day.substring(0,3)} CUSTOM
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
