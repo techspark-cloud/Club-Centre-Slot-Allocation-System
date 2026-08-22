@@ -46,6 +46,13 @@ export default function CapacityDashboard() {
         .eq('status', 'ACTIVE');
       if (slotsError) throw slotsError;
 
+      // 2b. Fetch Custom Booking Rules
+      const { data: rulesData, error: rulesError } = await supabase
+        .from('section_booking_rules')
+        .select('*');
+      if (rulesError) throw rulesError;
+      const customRules = rulesData || [];
+
       // 3. Process Demand
       const demand = {
         FORENOON: { MONDAY: 0, TUESDAY: 0, WEDNESDAY: 0, THURSDAY: 0, FRIDAY: 0, SATURDAY: 0, SUNDAY: 0, ANY: 0 },
@@ -70,11 +77,25 @@ export default function CapacityDashboard() {
         } else {
           const days = s.allowed_day.split(',');
           days.forEach((day: string) => {
-            if (demand[session][day] !== undefined) {
-              demand[session][day]++;
+            const trimmedDay = day.trim();
+            if (demand[session][trimmedDay] !== undefined) {
+              demand[session][trimmedDay]++;
             }
           });
         }
+      });
+
+      // Add demand from Custom Rules
+      customRules.forEach(rule => {
+        const matchingStudents = allStudents.filter(s => s.course === rule.course && s.section === rule.section);
+        matchingStudents.forEach(s => {
+          if (!s.activity_session) return;
+          const session = s.activity_session as 'FORENOON' | 'AFTERNOON';
+          const ruleDay = rule.day.trim();
+          if (demand[session][ruleDay] !== undefined) {
+            demand[session][ruleDay]++;
+          }
+        });
       });
 
       // 4. Process Capacity

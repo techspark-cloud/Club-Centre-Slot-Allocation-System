@@ -92,7 +92,16 @@ export default function BookingClient({
     if (day === 'ANY') {
       return existingClubBookings.length > 0 && existingCentreBookings.length > 0;
     }
-    return existingClubBookings.some(b => b.slot.day === day) && existingCentreBookings.some(b => b.slot.day === day);
+    
+    // Check if slots actually exist for this day
+    const dayHasClub = sortedClubSlots.some(s => s.day === day);
+    const dayHasCentre = sortedCentreSlots.some(s => s.day === day);
+    
+    // A day is "fully booked" if they booked the entity OR if the entity has no slots available on that day
+    const hasBookedClub = !dayHasClub || existingClubBookings.some(b => b.slot.day === day);
+    const hasBookedCentre = !dayHasCentre || existingCentreBookings.some(b => b.slot.day === day);
+    
+    return hasBookedClub && hasBookedCentre;
   });
 
   const hasNewSelections = Object.keys(selectedClubIds).length > 0 || Object.keys(selectedCentreIds).length > 0;
