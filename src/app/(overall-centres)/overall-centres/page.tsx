@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getCentreAllocations } from '@/app/actions/dashboard';
 import { Layers, Users, CalendarClock, Activity, ArrowRight, Download, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 
@@ -30,12 +31,15 @@ export default function CentresCoordinatorDashboard() {
     // 1. Fetch all centres
     const { data: centres } = await supabase.from('centres').select('*').order('name');
     
-    // 2. Fetch all slots that belong to centres to calculate capacities and bookings
+    // 2. Fetch all slots that belong to centres
     const { data: slots } = await supabase
       .from('slots')
       .select('*')
       .not('centre_id', 'is', null)
       .eq('status', 'ACTIVE');
+
+    // 3. Fetch allocations to calculate UNIQUE students per centre
+    const allocations = await getCentreAllocations();
       
     if (centres && slots) {
       let totalCapacity = 0;
@@ -43,8 +47,13 @@ export default function CentresCoordinatorDashboard() {
       
       const enrichedCentres = centres.map(centre => {
         const centreSlots = slots.filter(s => s.centre_id === centre.id);
-        const capacity = centreSlots.reduce((sum, slot) => sum + (slot.capacity || 0), 0);
-        const booked = centreSlots.reduce((sum, slot) => sum + (slot.allocated_count || 0), 0);
+        
+        // UNIQUE CAPACITY: The max physical capacity across its slots
+        const capacity = centreSlots.length > 0 ? Math.max(...centreSlots.map(s => s.capacity || 0)) : 0;
+        
+        // UNIQUE BOOKINGS: The number of unique students booked into this centre
+        const centreAllocs = (allocations || []).filter((a: any) => a.slot?.centre_id === centre.id);
+        const booked = new Set(centreAllocs.map((a: any) => a.student_id)).size;
         
         totalCapacity += capacity;
         totalBooked += booked;
@@ -53,7 +62,7 @@ export default function CentresCoordinatorDashboard() {
           ...centre,
           capacity,
           booked,
-          available: capacity - booked,
+          available: Math.max(0, capacity - booked),
           occupancyRate: capacity > 0 ? Math.round((booked / capacity) * 100) : 0,
           status: capacity === 0 ? 'INACTIVE' : (booked >= capacity ? 'FULL' : 'OPEN')
         };

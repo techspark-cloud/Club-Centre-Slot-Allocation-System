@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CalendarClock, Users } from 'lucide-react';
+import { LayoutDashboard, CalendarClock, Users, UserCheck } from 'lucide-react';
 
 export default function OverallCentresNavigation() {
   const pathname = usePathname();
@@ -11,6 +11,7 @@ export default function OverallCentresNavigation() {
     { name: 'Dashboard', href: '/overall-centres', icon: LayoutDashboard },
     { name: 'Timetable', href: '/overall-centres/timetable', icon: CalendarClock },
     { name: 'Students', href: '/overall-centres/students', icon: Users },
+    { name: 'Attendance', href: '/overall-centres/attendance', icon: UserCheck },
   ];
 
   return (

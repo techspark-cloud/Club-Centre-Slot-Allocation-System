@@ -459,6 +459,23 @@ export default function BookingClient({
             <p className="text-emerald-700 font-medium mt-1">Your Club and Centre allocations are finalized.</p>
           </div>
 
+          {/* DIGITAL ID FOR ATTENDANCE */}
+          <div className="bg-white border-2 border-blue-100 rounded-2xl p-6 text-center mb-8 shadow-sm max-w-sm mx-auto relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-2 bg-blue-500"></div>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight mb-2">Digital ID Card</h3>
+            <p className="text-slate-500 text-sm font-medium mb-6">Show this QR code to your coordinator to mark your attendance.</p>
+            <div className="bg-white p-4 rounded-xl inline-block shadow-sm border border-slate-100 mb-4">
+              <QRCode 
+                value={`ATTENDANCE:${studentId}`}
+                size={160} 
+                level="H" 
+              />
+            </div>
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 py-2 rounded-lg border border-slate-100">
+              SCAN TO MARK PRESENT
+            </div>
+          </div>
+
           <div ref={timetableRef} className="bg-white rounded-xl border-2 border-slate-900 shadow-sm overflow-hidden text-slate-900 mx-auto max-w-4xl relative" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             
             {/* Watermark Overlay (Anti-Forgery) */}

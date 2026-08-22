@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { MapPin, Search, Filter, Users, X } from 'lucide-react';
+import { getSlotGroupedDetails } from '@/app/actions/dashboard';
 
 type Slot = {
   id: string;
@@ -87,33 +88,21 @@ export default function OverallClubsTimetable() {
     return matchesSearch && matchesDay && matchesVenue;
   });
 
+  // Grouped modal state
+  const [groupedDetails, setGroupedDetails] = useState<[string, any][]>([]);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+
   const handleSlotClick = async (slot: Slot) => {
     setSelectedSlot(slot);
     setLoadingDetails(true);
-    setSlotDetails([]);
+    setGroupedDetails([]);
     
-    const { data, error } = await supabase
-      .from('allocations')
-      .select(`
-        students (name, register_no, course, section, semester)
-      `)
-      .eq('slot_id', slot.id);
-      
-    if (!error && data) {
-      setSlotDetails(data as unknown as AllocationDetail[]);
-    }
+    // Use the secure server action to bypass RLS and fetch aggregated data
+    const data = await getSlotGroupedDetails(slot.id);
+    setGroupedDetails(data);
+    
     setLoadingDetails(false);
   };
-
-  // Grouping students by Section and Batch for the modal
-  const groupedDetails = useMemo(() => {
-    const groups: Record<string, number> = {};
-    slotDetails.forEach(d => {
-      const key = `Sem ${d.students.semester} ${d.students.course} - Sec ${d.students.section}`;
-      groups[key] = (groups[key] || 0) + 1;
-    });
-    return Object.entries(groups).sort((a, b) => b[1] - a[1]);
-  }, [slotDetails]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -156,21 +145,18 @@ export default function OverallClubsTimetable() {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+          <table className="w-full text-sm text-left border-collapse min-w-[800px]">
+            <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4">Club Name</th>
-                <th className="px-6 py-4">Day</th>
-                <th className="px-6 py-4">Session</th>
-                <th className="px-6 py-4">Venue</th>
-                <th className="px-6 py-4">Timing</th>
-                <th className="px-6 py-4">Capacity</th>
+                <th className="px-6 py-4 w-32 border-r border-slate-200 text-center uppercase tracking-wider text-xs">Day</th>
+                <th className="px-6 py-4 w-1/2 border-r border-slate-200 uppercase tracking-wider text-xs">Forenoon Session</th>
+                <th className="px-6 py-4 w-1/2 uppercase tracking-wider text-xs">Afternoon Session</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
                     <div className="flex justify-center mb-4">
                       <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                     </div>
@@ -179,55 +165,84 @@ export default function OverallClubsTimetable() {
                 </tr>
               ) : filteredSlots.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={3} className="px-6 py-12 text-center text-slate-500 font-medium">
                     No slots found matching your filters.
                   </td>
                 </tr>
               ) : (
-                filteredSlots.map((slot) => (
-                  <tr 
-                    key={slot.id} 
-                    onClick={() => handleSlotClick(slot)}
-                    className="hover:bg-blue-50 transition-colors cursor-pointer group"
-                    title="Click to view section-wise breakdown"
-                  >
-                    <td className="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-700">
-                      {slot.clubs?.name || 'Unknown Club'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700">
-                        {slot.day}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {slot.session}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1 text-slate-700 font-medium">
-                        <MapPin className="w-4 h-4 text-slate-400" />
-                        {slot.venue}
+                ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'].map(day => {
+                  if (selectedDay !== 'All' && day !== selectedDay) return null;
+                  const daySlots = filteredSlots.filter(s => s.day === day);
+                  if (daySlots.length === 0) return null;
+
+                  const forenoonSlots = daySlots.filter(s => s.session === 'FORENOON');
+                  const afternoonSlots = daySlots.filter(s => s.session === 'AFTERNOON');
+
+                  const getDayStyles = (d: string) => {
+                    switch (d) {
+                      case 'MONDAY': return { bg: 'bg-blue-50/40', badge: 'bg-blue-100 border-blue-200 text-blue-800' };
+                      case 'TUESDAY': return { bg: 'bg-amber-50/40', badge: 'bg-amber-100 border-amber-200 text-amber-800' };
+                      case 'WEDNESDAY': return { bg: 'bg-emerald-50/40', badge: 'bg-emerald-100 border-emerald-200 text-emerald-800' };
+                      case 'THURSDAY': return { bg: 'bg-purple-50/40', badge: 'bg-purple-100 border-purple-200 text-purple-800' };
+                      case 'FRIDAY': return { bg: 'bg-rose-50/40', badge: 'bg-rose-100 border-rose-200 text-rose-800' };
+                      case 'SATURDAY': return { bg: 'bg-cyan-50/40', badge: 'bg-cyan-100 border-cyan-200 text-cyan-800' };
+                      default: return { bg: 'bg-slate-50/40', badge: 'bg-slate-100 border-slate-200 text-slate-800' };
+                    }
+                  };
+                  const styles = getDayStyles(day);
+
+                  const renderSlotCard = (slot: Slot) => (
+                    <div 
+                      key={slot.id}
+                      onClick={() => handleSlotClick(slot)}
+                      className="p-3 border border-slate-200 rounded-xl bg-white shadow-sm hover:border-blue-400 hover:shadow-md cursor-pointer transition-all min-w-[180px] flex-1 max-w-[240px]"
+                      title="Click to view section-wise breakdown"
+                    >
+                      <h4 className="font-bold text-slate-900 text-sm truncate">{slot.clubs?.name || 'Unknown Club'}</h4>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-2 font-medium">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> {slot.venue}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${
-                              slot.allocated_count >= slot.capacity ? 'bg-red-500' : 'bg-green-500'
-                            }`}
-                            style={{ width: `${Math.min(100, (slot.allocated_count / slot.capacity) * 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-600">
+                      <div className="flex items-center justify-between mt-3">
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
+                        </span>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${slot.allocated_count >= slot.capacity ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
                           {slot.allocated_count}/{slot.capacity}
                         </span>
                       </div>
-                    </td>
-                  </tr>
-                ))
+                      <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-2">
+                        <div 
+                          className={`h-full rounded-full ${slot.allocated_count >= slot.capacity ? 'bg-red-500' : 'bg-green-500'}`} 
+                          style={{width: `${Math.min(100, (slot.allocated_count / slot.capacity) * 100)}%`}}
+                        />
+                      </div>
+                    </div>
+                  );
+
+                  return (
+                    <tr key={day} className={`hover:bg-slate-100/50 transition-colors ${styles.bg}`}>
+                      <td className="px-6 py-4 border-r border-slate-200 align-top bg-white/50">
+                        <div className={`font-black text-center tracking-widest text-xs uppercase py-3 rounded-xl border shadow-sm ${styles.badge}`}>
+                          {day.substring(0, 3)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 border-r border-slate-200 align-top">
+                        <div className="flex flex-wrap gap-3">
+                          {forenoonSlots.length > 0 ? forenoonSlots.map(renderSlotCard) : (
+                            <span className="text-sm text-slate-400 font-medium italic">No forenoon slots</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 align-top">
+                        <div className="flex flex-wrap gap-3">
+                          {afternoonSlots.length > 0 ? afternoonSlots.map(renderSlotCard) : (
+                            <span className="text-sm text-slate-400 font-medium italic">No afternoon slots</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -272,12 +287,40 @@ export default function OverallClubsTimetable() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {groupedDetails.map(([key, count]) => (
-                    <div key={key} className="flex justify-between items-center p-3 rounded-lg bg-slate-50 border border-slate-100">
-                      <span className="text-sm font-medium text-slate-700">{key}</span>
-                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-                        {count} {count === 1 ? 'student' : 'students'}
-                      </span>
+                  {groupedDetails.map(([key, groupData]: any) => (
+                    <div key={key} className="flex flex-col rounded-lg bg-slate-50 border border-slate-100 overflow-hidden">
+                      <div 
+                        className="flex justify-between items-center p-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => setExpandedSection(expandedSection === key ? null : key)}
+                      >
+                        <span className="text-sm font-medium text-slate-700 select-none flex-1">{key}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                            {groupData.count} {groupData.count === 1 ? 'student' : 'students'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {expandedSection === key && (
+                        <div className="p-3 border-t border-slate-100 bg-white">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="text-slate-400 border-b border-slate-100">
+                                <th className="pb-2 font-medium w-1/3">Register No</th>
+                                <th className="pb-2 font-medium">Student Name</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {groupData.students.map((student: any) => (
+                                <tr key={student.register_no} className="hover:bg-slate-50">
+                                  <td className="py-2 text-slate-600 font-mono tracking-tight">{student.register_no}</td>
+                                  <td className="py-2 text-slate-800 font-medium">{student.name}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

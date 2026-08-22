@@ -89,6 +89,10 @@ export default function OverallClubsStudents() {
     const matchesVenue = selectedVenue === 'All' || a.slots?.venue === selectedVenue;
 
     return matchesSearch && matchesDept && matchesSem && matchesSec && matchesDay && matchesVenue;
+  }).sort((a, b) => {
+    const regA = a.students?.register_no || '';
+    const regB = b.students?.register_no || '';
+    return regA.localeCompare(regB);
   });
 
   const downloadCSV = () => {

@@ -59,11 +59,11 @@ export async function POST(request: Request) {
 
     let isAuthorized = false;
     if (slot.club_id) {
-      const { data: cc } = await supabaseAdmin.from('club_coordinators').select('id').eq('profile_id', user.id).eq('club_id', slot.club_id).maybeSingle();
+      const { data: cc } = await supabaseAdmin.from('club_coordinators').select('profile_id').eq('profile_id', user.id).eq('club_id', slot.club_id).maybeSingle();
       if (cc) isAuthorized = true;
     }
     if (slot.centre_id && !isAuthorized) {
-      const { data: cec } = await supabaseAdmin.from('centre_coordinators').select('id').eq('profile_id', user.id).eq('centre_id', slot.centre_id).maybeSingle();
+      const { data: cec } = await supabaseAdmin.from('centre_coordinators').select('profile_id').eq('profile_id', user.id).eq('centre_id', slot.centre_id).maybeSingle();
       if (cec) isAuthorized = true;
     }
 
@@ -93,6 +93,7 @@ export async function POST(request: Request) {
     if (error) throw error;
     return NextResponse.json({ data: attendance });
   } catch (err: any) {
+    console.error("Attendance POST Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

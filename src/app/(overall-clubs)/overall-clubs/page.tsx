@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Building2, Users, CalendarClock, Activity, ArrowRight, Download, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import { getClubAllocations } from '@/app/actions/dashboard';
 
 export default function ClubsCoordinatorDashboard() {
   const [loading, setLoading] = useState(true);
@@ -30,12 +31,15 @@ export default function ClubsCoordinatorDashboard() {
     // 1. Fetch all clubs
     const { data: clubs } = await supabase.from('clubs').select('*').order('name');
     
-    // 2. Fetch all slots that belong to clubs to calculate capacities and bookings
+    // 2. Fetch all slots that belong to clubs
     const { data: slots } = await supabase
       .from('slots')
       .select('*')
       .not('club_id', 'is', null)
       .eq('status', 'ACTIVE');
+
+    // 3. Fetch allocations to calculate UNIQUE students per club
+    const allocations = await getClubAllocations();
       
     if (clubs && slots) {
       let totalCapacity = 0;
@@ -43,8 +47,13 @@ export default function ClubsCoordinatorDashboard() {
       
       const enrichedClubs = clubs.map(club => {
         const clubSlots = slots.filter(s => s.club_id === club.id);
-        const capacity = clubSlots.reduce((sum, slot) => sum + (slot.capacity || 0), 0);
-        const booked = clubSlots.reduce((sum, slot) => sum + (slot.allocated_count || 0), 0);
+        
+        // UNIQUE CAPACITY: The max physical capacity across its slots
+        const capacity = clubSlots.length > 0 ? Math.max(...clubSlots.map(s => s.capacity || 0)) : 0;
+        
+        // UNIQUE BOOKINGS: The number of unique students booked into this club
+        const clubAllocs = (allocations || []).filter((a: any) => a.slot?.club_id === club.id);
+        const booked = new Set(clubAllocs.map((a: any) => a.student_id)).size;
         
         totalCapacity += capacity;
         totalBooked += booked;
@@ -53,7 +62,7 @@ export default function ClubsCoordinatorDashboard() {
           ...club,
           capacity,
           booked,
-          available: capacity - booked,
+          available: Math.max(0, capacity - booked),
           occupancyRate: capacity > 0 ? Math.round((booked / capacity) * 100) : 0,
           status: capacity === 0 ? 'INACTIVE' : (booked >= capacity ? 'FULL' : 'OPEN')
         };

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity } from 'lucide-react';
+import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity, UserCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function AdminSidebar() {
@@ -17,6 +17,7 @@ export default function AdminSidebar() {
   const navItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Capacity Analytics', href: '/admin/capacity', icon: Activity },
+    { name: 'Live Attendance', href: '/admin/attendance', icon: UserCheck },
     { name: 'Students', href: '/admin/students', icon: Users },
     { name: 'Clubs', href: '/admin/clubs', icon: Building2 },
     { name: 'Centres', href: '/admin/centres', icon: Layers },

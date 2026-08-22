@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, CheckCircle2, XCircle } from 'lucide-react';
+import { Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { QrCode } from 'lucide-react';
+import QRScannerModal from './QRScannerModal';
 
 interface CoordinatorDashboardProps {
   assignedClubs: any[];
@@ -32,6 +34,17 @@ export default function CoordinatorDashboard({
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
   const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  
+  const today = new Date().toISOString().split('T')[0];
+  
+  const activeSlot = currentSlots.find(s => s.id === selectedSlotId);
+  const selectedDateObj = new Date(selectedDate);
+  const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+  const dayOfWeek = days[selectedDateObj.getDay()];
+  
+  const isWrongDay = activeSlot && activeSlot.day !== dayOfWeek;
+  const isDateLocked = selectedDate !== today || isWrongDay;
 
   useEffect(() => {
     if (!selectedSlotId || !selectedDate) {
@@ -54,7 +67,7 @@ export default function CoordinatorDashboard({
   }, [selectedSlotId, selectedDate]);
 
   const markAttendance = async (studentId: string, status: 'PRESENT' | 'ABSENT') => {
-    if (!selectedSlotId) return;
+    if (!selectedSlotId || isDateLocked) return;
     
     // Optimistic UI Update
     setAttendanceData(prev => {
@@ -66,7 +79,7 @@ export default function CoordinatorDashboard({
     });
 
     try {
-      await fetch('/api/coordinator/attendance', {
+      const res = await fetch('/api/coordinator/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,9 +89,23 @@ export default function CoordinatorDashboard({
           status
         })
       });
+      if (!res.ok) throw new Error('API Error');
+      return true;
     } catch(e) {
       console.error('Failed to save attendance', e);
+      return false;
     }
+  };
+
+  const handleQRScanSuccess = async (studentId: string) => {
+    // Check if student is in roster
+    if (!selectedSlotId) return false;
+    const enrolledStudents = allocationsForSlot(selectedSlotId);
+    const exists = enrolledStudents.find(a => a.student?.id === studentId);
+    
+    if (!exists) return false;
+
+    return await markAttendance(studentId, 'PRESENT') ?? false;
   };
 
   // Group slots by entity ID
@@ -489,19 +516,40 @@ export default function CoordinatorDashboard({
                             <input 
                               type="date" 
                               value={selectedDate}
+                              max={today}
                               onChange={(e) => setSelectedDate(e.target.value)}
                               className="px-4 py-2 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors"
                             />
                             <button 
+                              onClick={() => setShowQRScanner(true)}
+                              disabled={isDateLocked}
+                              className={`flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors shadow-sm ${
+                                isDateLocked 
+                                  ? 'bg-slate-100 text-slate-400 border-2 border-slate-100 cursor-not-allowed'
+                                  : 'text-slate-700 bg-white border-2 border-slate-200 hover:border-blue-500 hover:text-blue-600'
+                              }`}
+                            >
+                              <QrCode className="w-4 h-4" /> Scan QR
+                            </button>
+                            <button 
                               onClick={() => downloadPDF(selectedSlot.id, entity.name, selectedSlot.day)}
                               className="flex items-center justify-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-xl transition-colors shadow-sm"
                             >
-                              <Download className="w-4 h-4" /> Download PDF
+                              <Download className="w-4 h-4" /> PDF
                             </button>
                           </div>
                         </div>
-                        
                         <div className="max-h-[600px] overflow-y-auto bg-white relative">
+                          {isDateLocked && (
+                            <div className="bg-amber-50 border-b-2 border-amber-100 p-3 flex items-center justify-center gap-2 text-amber-700 text-xs sm:text-sm font-bold">
+                              <AlertCircle className="w-4 h-4 shrink-0" />
+                              {isWrongDay 
+                                ? `You cannot mark attendance on a ${dayOfWeek} for a ${activeSlot.day} slot.` 
+                                : `Viewing past records. Attendance can only be marked for today (${today}).`
+                              }
+                            </div>
+                          )}
+
                           {isAttendanceLoading && (
                             <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-20 flex items-center justify-center">
                               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -551,20 +599,26 @@ export default function CoordinatorDashboard({
                                             <div className="flex items-center justify-end gap-2">
                                               <button 
                                                 onClick={() => m.student && markAttendance(m.student.id, 'PRESENT')}
+                                                disabled={isDateLocked}
                                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                                   isPresent 
-                                                    ? 'bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1' 
-                                                    : 'bg-slate-100 text-slate-400 hover:bg-green-50 hover:text-green-600'
+                                                    ? `bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1 ${isDateLocked ? 'opacity-60 cursor-not-allowed' : ''}`
+                                                    : isDateLocked
+                                                      ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                                      : 'bg-slate-100 text-slate-400 hover:bg-green-50 hover:text-green-600'
                                                 }`}
                                               >
                                                 <CheckCircle2 className="w-4 h-4" /> Present
                                               </button>
                                               <button 
                                                 onClick={() => m.student && markAttendance(m.student.id, 'ABSENT')}
+                                                disabled={isDateLocked}
                                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                                   isAbsent 
-                                                    ? 'bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1' 
-                                                    : 'bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600'
+                                                    ? `bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1 ${isDateLocked ? 'opacity-60 cursor-not-allowed' : ''}`
+                                                    : isDateLocked
+                                                      ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                                      : 'bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600'
                                                 }`}
                                               >
                                                 <XCircle className="w-4 h-4" /> Absent
@@ -611,20 +665,26 @@ export default function CoordinatorDashboard({
                                       <div className="grid grid-cols-2 gap-2 mt-2">
                                         <button 
                                           onClick={() => m.student && markAttendance(m.student.id, 'PRESENT')}
+                                          disabled={isDateLocked}
                                           className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
                                             isPresent 
-                                              ? 'bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1 shadow-sm' 
-                                              : 'bg-slate-100 text-slate-500 hover:bg-green-50'
+                                              ? `bg-green-100 text-green-700 ring-2 ring-green-500 ring-offset-1 shadow-sm ${isDateLocked ? 'opacity-60 cursor-not-allowed' : ''}`
+                                              : isDateLocked
+                                                ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                                : 'bg-slate-100 text-slate-500 hover:bg-green-50'
                                           }`}
                                         >
                                           <CheckCircle2 className="w-5 h-5" /> Present
                                         </button>
                                         <button 
                                           onClick={() => m.student && markAttendance(m.student.id, 'ABSENT')}
+                                          disabled={isDateLocked}
                                           className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
                                             isAbsent 
-                                              ? 'bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1 shadow-sm' 
-                                              : 'bg-slate-100 text-slate-500 hover:bg-red-50'
+                                              ? `bg-red-100 text-red-700 ring-2 ring-red-500 ring-offset-1 shadow-sm ${isDateLocked ? 'opacity-60 cursor-not-allowed' : ''}`
+                                              : isDateLocked
+                                                ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                                : 'bg-slate-100 text-slate-500 hover:bg-red-50'
                                           }`}
                                         >
                                           <XCircle className="w-5 h-5" /> Absent
@@ -648,6 +708,13 @@ export default function CoordinatorDashboard({
         })}
       </div>
 
+      {showQRScanner && selectedSlotId && (
+        <QRScannerModal 
+          onClose={() => setShowQRScanner(false)}
+          onScanSuccess={handleQRScanSuccess}
+          slotName={`Slot ID: ${selectedSlotId}`}
+        />
+      )}
     </div>
   );
 }
