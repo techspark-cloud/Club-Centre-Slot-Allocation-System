@@ -464,7 +464,7 @@ export default function BookingClient({
             {/* Watermark Overlay (Anti-Forgery) */}
             <div className="absolute inset-0 z-50 flex items-center justify-center opacity-[0.06] pointer-events-none overflow-hidden select-none mix-blend-multiply">
               <div className="transform -rotate-45 text-5xl md:text-7xl font-black whitespace-nowrap text-slate-900 flex flex-col items-center gap-4">
-                <span>RIT TECHSPARK</span>
+                <span>RIT CLUBS & CENTRES</span>
                 <span className="font-mono">{student.register_no}</span>
                 <span>SYSTEM GENERATED</span>
               </div>
@@ -472,12 +472,12 @@ export default function BookingClient({
 
             {/* Timetable Header */}
             <div className="p-6 sm:p-8 border-b-2 border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10 bg-white/80">
-              <img src="/rit-logo.png" alt="RIT Logo" className="h-12 w-auto object-contain" />
-              <div className="text-center">
+              <img src="/rit-logo.png" alt="RIT Logo" className="h-12 w-auto object-contain mx-auto sm:mx-0" />
+              <div className="text-center flex-1">
                 <h2 className="text-xl sm:text-2xl font-black uppercase tracking-widest text-slate-900">Official Timetable</h2>
                 <p className="text-sm font-bold text-slate-600 mt-1 uppercase tracking-wider">Activity Slot Allocation - 2026</p>
               </div>
-              <img src="/techspark-logo.png" alt="TechSpark Logo" className="h-12 w-auto object-contain" />
+              <div className="hidden sm:block w-[120px]"></div> {/* Spacer to balance logo */}
             </div>
 
             {/* Student Details */}
@@ -496,7 +496,7 @@ export default function BookingClient({
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Session</p>
-                <p className="text-sm sm:text-base font-extrabold">{student.activity_session} ({student.allowed_day?.replace(/,/g, ', ')})</p>
+                <p className="text-sm sm:text-base font-extrabold">{student.activity_session}</p>
               </div>
             </div>
 
