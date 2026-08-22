@@ -54,7 +54,9 @@ export default async function StudentDashboard() {
     const { data: slots } = await query;
       
     if (slots) {
-      const allowedDaysArray = (student.allowed_day && student.allowed_day !== 'ANY' && student.allowed_day !== 'INDEPENDENT') ? student.allowed_day.split(',') : [];
+      const allowedDaysArray = (student.allowed_day && student.allowed_day !== 'ANY' && student.allowed_day !== 'INDEPENDENT') 
+        ? student.allowed_day.split(',').map((d: string) => d.trim()).filter(Boolean) 
+        : [];
       
       const filteredSlots = slots.filter(s => {
         if (student.allowed_day === 'ANY' || student.allowed_day === 'INDEPENDENT') return true;

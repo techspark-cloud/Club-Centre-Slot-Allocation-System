@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Clock, MapPin, CheckCircle, AlertCircle, Loader2, Download, Check, CalendarClock, QrCode } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, AlertCircle, Loader2, Download, Check, CalendarClock, QrCode, Lock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import html2canvas from 'html2canvas';
@@ -99,8 +99,12 @@ export default function BookingClient({
       const hasCentre = Object.keys(selectedCentreIds).length > 0 || existingCentreBookings.length > 0;
       return hasClub && hasCentre;
     }
-    const hasClub = selectedClubIds[day] || existingClubBookings.some(b => b.slot.day === day);
-    const hasCentre = selectedCentreIds[day] || existingCentreBookings.some(b => b.slot.day === day);
+    
+    const dayHasClub = sortedClubSlots.some(s => s.day === day);
+    const dayHasCentre = sortedCentreSlots.some(s => s.day === day);
+    
+    const hasClub = !dayHasClub || selectedClubIds[day] || existingClubBookings.some(b => b.slot.day === day);
+    const hasCentre = !dayHasCentre || selectedCentreIds[day] || existingCentreBookings.some(b => b.slot.day === day);
     return hasClub && hasCentre;
   })) || (requiredDays.length === 0 && hasNewSelections);
 
@@ -111,6 +115,29 @@ export default function BookingClient({
     ...existingClubBookings.map(b => b.slot.day),
     ...existingCentreBookings.map(b => b.slot.day)
   ]));
+
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  const isDayLocked = (currentDay: string) => {
+    if (student.allowed_day === 'ANY') return false;
+    
+    const dayIndex = requiredDays.indexOf(currentDay);
+    if (dayIndex <= 0) return false; // First day (or not in requiredDays) is always unlocked
+  
+    for (let i = 0; i < dayIndex; i++) {
+      const prevDay = requiredDays[i];
+      const prevDayHasClub = sortedClubSlots.some(s => s.day === prevDay);
+      const prevDayHasCentre = sortedCentreSlots.some(s => s.day === prevDay);
+      
+      const prevClub = !prevDayHasClub || selectedClubIds[prevDay] || existingClubBookings.some(b => b.slot.day === prevDay);
+      const prevCentre = !prevDayHasCentre || selectedCentreIds[prevDay] || existingCentreBookings.some(b => b.slot.day === prevDay);
+      
+      if (!prevClub || !prevCentre) {
+        return true; // A previous day is incomplete, so this day is locked
+      }
+    }
+    return false;
+  };
 
   const handleSelectSlot = (slot: any, type: 'CLUB' | 'CENTRE') => {
     const isAny = student.allowed_day === 'ANY';
@@ -123,6 +150,8 @@ export default function BookingClient({
         else newObj[dayKey] = slot.id;
         return newObj;
       });
+      // Auto-collapse the section after selecting
+      setExpandedSections(prev => ({ ...prev, [`CLUB_${slot.day}`]: false }));
     } else {
       setSelectedCentreIds(prev => {
         const newObj = { ...prev };
@@ -130,6 +159,8 @@ export default function BookingClient({
         else newObj[dayKey] = slot.id;
         return newObj;
       });
+      // Auto-collapse the section after selecting
+      setExpandedSections(prev => ({ ...prev, [`CENTRE_${slot.day}`]: false }));
     }
   };
 
@@ -711,25 +742,58 @@ export default function BookingClient({
                   if (daySlots.length === 0) return null;
                   const bookedClub = student.allowed_day !== 'ANY' ? existingClubBookings.find(b => b.slot.day === day) : null;
                   
+                  const dayKey = student.allowed_day === 'ANY' ? 'ANY' : day;
+                  const selectedSlotId = selectedClubIds[dayKey];
+                  const selectedSlotForThisDay = daySlots.find(s => s.id === selectedSlotId);
+                  
+                  const locked = isDayLocked(day);
+                  const isExpanded = !locked && (expandedSections[`CLUB_${day}`] ?? (student.allowed_day !== 'ANY'));
+                  
                   return (
-                    <div key={day} className="mb-6 last:mb-0">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <span className="w-full border-t border-slate-200"></span>
-                        <span className="shrink-0">{day} SLOTS</span>
-                        <span className="w-full border-t border-slate-200"></span>
-                      </h3>
+                    <div key={day} className={`mb-6 last:mb-0 ${locked ? 'opacity-60' : ''}`}>
+                      <button 
+                        onClick={() => {
+                          if (locked) {
+                            alert('Please complete your Club and Centre selections for the previous day(s) first.');
+                            return;
+                          }
+                          setExpandedSections(prev => ({ ...prev, [`CLUB_${day}`]: !isExpanded }));
+                        }}
+                        className={`w-full flex items-center justify-between group py-2 mb-2 ${locked ? 'cursor-not-allowed' : ''}`}
+                      >
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex-1 flex items-center gap-2 text-left">
+                          <span className={`w-full border-t border-slate-200 transition-colors ${!locked && 'group-hover:border-blue-200'}`}></span>
+                          <span className={`shrink-0 transition-colors flex items-center gap-2 ${!locked && 'group-hover:text-blue-500'}`}>
+                            {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
+                            {day} SLOTS
+                            {selectedSlotForThisDay && !isExpanded && !locked && (
+                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1">
+                                <Check className="w-3 h-3" /> {selectedSlotForThisDay.club.name}
+                              </span>
+                            )}
+                          </span>
+                          <span className={`w-full border-t border-slate-200 transition-colors ${!locked && 'group-hover:border-blue-200'}`}></span>
+                        </h3>
+                        <span className={`ml-3 shrink-0 rounded-full p-1 transition-colors ${locked ? 'bg-slate-50 text-slate-300' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600'}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                      </button>
                       
-                      {bookedClub ? (
-                        <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div>
-                            <p className="text-slate-500 font-bold text-xs mb-1 uppercase tracking-widest">Already Booked for {day}</p>
-                            <h3 className="text-xl font-black text-slate-800">{bookedClub.slot.club.name}</h3>
-                          </div>
-                          <div className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold uppercase w-fit">Locked</div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                          {daySlots.map(slot => renderSlotCard(slot, 'CLUB', false))}
+                      {isExpanded && (
+                        <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+                          {bookedClub ? (
+                            <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              <div>
+                                <p className="text-slate-500 font-bold text-xs mb-1 uppercase tracking-widest">Already Booked for {day}</p>
+                                <h3 className="text-xl font-black text-slate-800">{bookedClub.slot.club.name}</h3>
+                              </div>
+                              <div className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold uppercase w-fit">Locked</div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                              {daySlots.map(slot => renderSlotCard(slot, 'CLUB', false))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -764,25 +828,58 @@ export default function BookingClient({
                   if (daySlots.length === 0) return null;
                   const bookedCentre = student.allowed_day !== 'ANY' ? existingCentreBookings.find(b => b.slot.day === day) : null;
                   
+                  const dayKey = student.allowed_day === 'ANY' ? 'ANY' : day;
+                  const selectedSlotId = selectedCentreIds[dayKey];
+                  const selectedSlotForThisDay = daySlots.find(s => s.id === selectedSlotId);
+                  
+                  const locked = isDayLocked(day);
+                  const isExpanded = !locked && (expandedSections[`CENTRE_${day}`] ?? (student.allowed_day !== 'ANY'));
+                  
                   return (
-                    <div key={day} className="mb-6 last:mb-0">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <span className="w-full border-t border-slate-200"></span>
-                        <span className="shrink-0">{day} SLOTS</span>
-                        <span className="w-full border-t border-slate-200"></span>
-                      </h3>
+                    <div key={day} className={`mb-6 last:mb-0 ${locked ? 'opacity-60' : ''}`}>
+                      <button 
+                        onClick={() => {
+                          if (locked) {
+                            alert('Please complete your Club and Centre selections for the previous day(s) first.');
+                            return;
+                          }
+                          setExpandedSections(prev => ({ ...prev, [`CENTRE_${day}`]: !isExpanded }));
+                        }}
+                        className={`w-full flex items-center justify-between group py-2 mb-2 ${locked ? 'cursor-not-allowed' : ''}`}
+                      >
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex-1 flex items-center gap-2 text-left">
+                          <span className={`w-full border-t border-slate-200 transition-colors ${!locked && 'group-hover:border-indigo-200'}`}></span>
+                          <span className={`shrink-0 transition-colors flex items-center gap-2 ${!locked && 'group-hover:text-indigo-500'}`}>
+                            {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
+                            {day} SLOTS
+                            {selectedSlotForThisDay && !isExpanded && !locked && (
+                              <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1">
+                                <Check className="w-3 h-3" /> {selectedSlotForThisDay.centre.name}
+                              </span>
+                            )}
+                          </span>
+                          <span className={`w-full border-t border-slate-200 transition-colors ${!locked && 'group-hover:border-indigo-200'}`}></span>
+                        </h3>
+                        <span className={`ml-3 shrink-0 rounded-full p-1 transition-colors ${locked ? 'bg-slate-50 text-slate-300' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                      </button>
                       
-                      {bookedCentre ? (
-                        <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div>
-                            <p className="text-slate-500 font-bold text-xs mb-1 uppercase tracking-widest">Already Booked for {day}</p>
-                            <h3 className="text-xl font-black text-slate-800">{bookedCentre.slot.centre.name}</h3>
-                          </div>
-                          <div className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold uppercase w-fit">Locked</div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                          {daySlots.map(slot => renderSlotCard(slot, 'CENTRE', false))}
+                      {isExpanded && (
+                        <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+                          {bookedCentre ? (
+                            <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-6 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              <div>
+                                <p className="text-slate-500 font-bold text-xs mb-1 uppercase tracking-widest">Already Booked for {day}</p>
+                                <h3 className="text-xl font-black text-slate-800">{bookedCentre.slot.centre.name}</h3>
+                              </div>
+                              <div className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold uppercase w-fit">Locked</div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                              {daySlots.map(slot => renderSlotCard(slot, 'CENTRE', false))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
