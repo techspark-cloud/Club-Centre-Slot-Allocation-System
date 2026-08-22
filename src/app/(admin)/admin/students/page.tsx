@@ -562,7 +562,7 @@ export default function StudentsPage() {
       try {
         const studentIds = booked.map(s => s.id);
         let allocationsMap: Record<string, { entity: string, day: string }> = {};
-        let timetableStats: Record<string, { venue: string, count: number }> = {};
+        let timetableStats: Record<string, { day: string, timing: string, assignment: string, venue: string, count: number }> = {};
 
         if (studentIds.length > 0) {
           const chunkSize = 20;
@@ -576,6 +576,8 @@ export default function StudentsPage() {
                 student_id,
                 slot:slots (
                   day,
+                  start_time,
+                  end_time,
                   venue,
                   club:clubs (name),
                   centre:centres (name)
@@ -607,10 +609,22 @@ export default function StudentsPage() {
               groupedAllocations[a.student_id].days.push(a.slot?.day || 'Unknown');
 
               // Aggregate for venue summary
-              if (!timetableStats[entityName]) {
-                timetableStats[entityName] = { venue: a.slot?.venue || 'TBD', count: 0 };
+              const day = a.slot?.day || 'Unknown';
+              const startTime = a.slot?.start_time ? a.slot.start_time.substring(0, 5) : 'TBD';
+              const endTime = a.slot?.end_time ? a.slot.end_time.substring(0, 5) : 'TBD';
+              const timing = `${startTime} - ${endTime}`;
+              const slotKey = `${day}_${timing}_${entityName}`;
+
+              if (!timetableStats[slotKey]) {
+                timetableStats[slotKey] = { 
+                  day: day,
+                  timing: timing,
+                  assignment: entityName,
+                  venue: a.slot?.venue || 'TBD', 
+                  count: 0 
+                };
               }
-              timetableStats[entityName].count++;
+              timetableStats[slotKey].count++;
             });
             
             Object.keys(groupedAllocations).forEach(studentId => {
@@ -690,35 +704,58 @@ export default function StudentsPage() {
 
         const sectionSession = finalStudents[0]?.activity_session || 'Not Assigned';
         const sectionDay = finalStudents[0]?.allowed_day || 'Not Assigned';
+        const sessionLabel = sectionSession === 'FORENOON' ? 'Morning' : sectionSession === 'AFTERNOON' ? 'Evening' : sectionSession;
+        let timetableText = `${sectionDay} (${sessionLabel})`;
+
+        const sectionRules = bookingRules.filter(r => r.course === selectedCourse && r.section === selectedSection);
+        if (sectionRules.length > 0) {
+          const ruleStrings = sectionRules.map(r => `${r.day} [${r.allowed_timings.join(', ')}]`);
+          timetableText += `   |   Custom Access: ${ruleStrings.join(', ')}`;
+        }
         
         doc.setFont("helvetica", "bold");
         doc.text("Timetable :", 14, 76);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(37, 99, 235); // blue-600
-        doc.text(`${sectionDay} (${sectionSession === 'FORENOON' ? 'Morning' : sectionSession === 'AFTERNOON' ? 'Evening' : sectionSession})`, 37, 76);
+        
+        const splitTimetable = doc.splitTextToSize(timetableText, pageWidth - 50);
+        doc.text(splitTimetable, 37, 76);
+        
+        let currentY = 76 + (splitTimetable.length * 5) + 4; // Adjust Y based on wrapped text lines
 
         // Stats Box equivalent
         doc.setTextColor(51, 65, 85);
         doc.setFont("helvetica", "bold");
-        doc.text(`Total: ${finalStudents.length}    Booked: ${booked.length}    Not Booked: ${notBooked.length}`, 115, 62);
-
-        let currentY = 85;
-
+        doc.text(`Total: ${finalStudents.length}    Booked: ${booked.length}    Not Booked: ${notBooked.length}`, pageWidth - 14, 62, { align: "right" });
         // Draw Timetable / Venue Summary
         const venueKeys = Object.keys(timetableStats || {});
         if (venueKeys.length > 0) {
           doc.setFontSize(12);
           doc.setFont("helvetica", "bold");
           doc.setTextColor(37, 99, 235); // blue-600
-          doc.text("Activity Venues & Student Distribution", 14, currentY);
+          doc.text("Section Timetable & Venue Summary", 14, currentY);
 
-          const venueColumn = ["S.No", "Club / Centre Name", "Venue", "Total Students"];
-          const venueRows = venueKeys.map((entity, idx) => [
-            idx + 1,
-            entity,
-            timetableStats[entity].venue,
-            timetableStats[entity].count
-          ]);
+          const venueColumn = ["Day", "Timing", "Assignment", "Venue", "Total Students"];
+          
+          const dayOrder: Record<string, number> = { 'MONDAY': 1, 'TUESDAY': 2, 'WEDNESDAY': 3, 'THURSDAY': 4, 'FRIDAY': 5, 'SATURDAY': 6, 'SUNDAY': 7 };
+          const sortedKeys = venueKeys.sort((a, b) => {
+             const statA = timetableStats[a];
+             const statB = timetableStats[b];
+             const dayDiff = (dayOrder[statA.day.toUpperCase()] || 99) - (dayOrder[statB.day.toUpperCase()] || 99);
+             if (dayDiff !== 0) return dayDiff;
+             return statA.timing.localeCompare(statB.timing);
+          });
+
+          const venueRows = sortedKeys.map((key) => {
+            const stat = timetableStats[key];
+            return [
+              stat.day,
+              stat.timing,
+              stat.assignment,
+              stat.venue,
+              stat.count
+            ];
+          });
 
           autoTable(doc, {
             head: [venueColumn],
