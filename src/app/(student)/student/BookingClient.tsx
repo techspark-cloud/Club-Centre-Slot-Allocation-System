@@ -82,7 +82,11 @@ export default function BookingClient({
 
   const standardDays = student.allowed_day === 'ANY' ? ['ANY'] : (student.allowed_day && student.allowed_day !== 'EXEMPT' && student.allowed_day !== 'INDEPENDENT' ? student.allowed_day.split(',').map((d: string) => d.trim()).filter(Boolean) : []);
   const customDays = (customRules || []).map((r: any) => r.day.trim());
-  const requiredDays = Array.from(new Set([...standardDays, ...customDays]));
+  const requiredDays = Array.from(new Set([...standardDays, ...customDays])).sort((a, b) => {
+    if (a === 'ANY') return -1;
+    if (b === 'ANY') return 1;
+    return (dayOrder[a] || 99) - (dayOrder[b] || 99);
+  });
   
   const isFullyBooked = requiredDays.length > 0 && requiredDays.every(day => {
     if (day === 'ANY') {
@@ -934,7 +938,7 @@ export default function BookingClient({
                 
                 const c = bookedClub || liveClubSlots.find(s => s.id === clubId);
                 const cen = bookedCentre || liveCentreSlots.find(s => s.id === centreId);
-                if (!c || !cen) return null;
+                if (!c && !cen) return null;
 
                 return (
                   <div key={dayKey}>
@@ -944,43 +948,47 @@ export default function BookingClient({
                       <span className="w-full border-t border-slate-200"></span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none"></div>
-                        <div className="flex items-center gap-2 mb-1.5 relative z-10">
-                          <span className="bg-blue-100 text-blue-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">CLUB</span>
-                          {bookedClub && <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Booked</span>}
-                        </div>
-                        <h4 className="text-lg font-extrabold text-slate-900 mb-3 relative z-10">{c.club.name}</h4>
-                        <div className="space-y-2 relative z-10">
-                          <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
-                            <span className="leading-tight">{c.venue}</span>
+                      {c && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none"></div>
+                          <div className="flex items-center gap-2 mb-1.5 relative z-10">
+                            <span className="bg-blue-100 text-blue-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">CLUB</span>
+                            {bookedClub && <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Booked</span>}
                           </div>
-                          <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
-                            <Clock className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
-                            <span className="leading-tight">{c.start_time.substring(0,5)} - {c.end_time.substring(0,5)}</span>
+                          <h4 className="text-lg font-extrabold text-slate-900 mb-3 relative z-10">{c.club.name}</h4>
+                          <div className="space-y-2 relative z-10">
+                            <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
+                              <span className="leading-tight">{c.venue}</span>
+                            </div>
+                            <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
+                              <span className="leading-tight">{c.start_time.substring(0,5)} - {c.end_time.substring(0,5)}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                       
-                      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/5 rounded-bl-full border-b border-l border-indigo-500/10 pointer-events-none"></div>
-                        <div className="flex items-center gap-2 mb-1.5 relative z-10">
-                          <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">CENTRE</span>
-                          {bookedCentre && <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Booked</span>}
-                        </div>
-                        <h4 className="text-lg font-extrabold text-slate-900 mb-3 relative z-10">{cen.centre.name}</h4>
-                        <div className="space-y-2 relative z-10">
-                          <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
-                            <span className="leading-tight">{cen.venue}</span>
+                      {cen && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/5 rounded-bl-full border-b border-l border-indigo-500/10 pointer-events-none"></div>
+                          <div className="flex items-center gap-2 mb-1.5 relative z-10">
+                            <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">CENTRE</span>
+                            {bookedCentre && <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Booked</span>}
                           </div>
-                          <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
-                            <Clock className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
-                            <span className="leading-tight">{cen.start_time.substring(0,5)} - {cen.end_time.substring(0,5)}</span>
+                          <h4 className="text-lg font-extrabold text-slate-900 mb-3 relative z-10">{cen.centre.name}</h4>
+                          <div className="space-y-2 relative z-10">
+                            <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
+                              <span className="leading-tight">{cen.venue}</span>
+                            </div>
+                            <div className="flex items-start gap-2.5 text-xs font-semibold text-slate-600">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> 
+                              <span className="leading-tight">{cen.start_time.substring(0,5)} - {cen.end_time.substring(0,5)}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 );
