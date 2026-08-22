@@ -500,132 +500,88 @@ export default function BookingClient({
               </div>
             </div>
 
-            {/* The Grid */}
-            <div className="p-6 sm:p-8 relative z-10 bg-white/50 space-y-8">
-              {allBookingDays.map(day => {
-                const dayBookings = [...existingClubBookings, ...existingCentreBookings]
-                  .filter(b => b.slot.day === day || day === 'ANY')
-                  .sort((a, b) => a.slot.start_time.localeCompare(b.slot.start_time));
-                
-                if (dayBookings.length === 0) return null;
+            {/* The Unified Grid */}
+            <div className="p-3 sm:p-8 relative z-10 bg-white/50">
+              <div className="overflow-hidden rounded-xl">
+                <table className="w-full border-collapse border-2 border-slate-900 text-center shadow-sm">
+                  <thead>
+                    <tr>
+                      <th className="border-2 border-slate-900 p-2 sm:p-3 bg-slate-100 font-black tracking-widest uppercase text-[9px] sm:text-xs w-[15%] sm:w-[20%]">Day</th>
+                      <th className="border-2 border-slate-900 p-2 sm:p-3 bg-slate-100 font-black tracking-widest uppercase text-[9px] sm:text-xs w-[42.5%] sm:w-[40%]">Club Allocation</th>
+                      <th className="border-2 border-slate-900 p-2 sm:p-3 bg-slate-100 font-black tracking-widest uppercase text-[9px] sm:text-xs w-[42.5%] sm:w-[40%]">Centre Allocation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {(student.allowed_day === 'ANY' ? Array.from(new Set([...existingClubBookings, ...existingCentreBookings].map(b => b.slot.day))) : allBookingDays).map(day => {
+                      const dayClubBookings = existingClubBookings.filter(b => b.slot.day === day || (student.allowed_day === 'ANY' && b.slot.day === day));
+                      const dayCentreBookings = existingCentreBookings.filter(b => b.slot.day === day || (student.allowed_day === 'ANY' && b.slot.day === day));
+                      
+                      if (dayClubBookings.length === 0 && dayCentreBookings.length === 0) return null;
 
-                return (
-                  <div key={day} className="overflow-hidden rounded-xl">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 mb-2 flex items-center gap-2">
-                      <CalendarClock className="w-4 h-4 text-blue-600" />
-                      {day === 'ANY' ? 'Your Schedule' : `${day} Schedule`}
-                    </h3>
-                    <table className="w-full border-collapse border-2 border-slate-900 text-center shadow-sm">
-                      <thead>
-                        <tr>
-                          <th className="border-2 border-slate-900 p-3 bg-slate-100 font-black tracking-widest uppercase text-xs w-[30%]">Time</th>
-                          <th className="border-2 border-slate-900 p-3 bg-slate-100 font-black tracking-widest uppercase text-xs w-[70%]">Activity & Venue</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white">
-                        {dayBookings.map((b, index) => {
-                          const slot = b.slot;
-                          const isClub = slot.club_id !== null;
-                          const name = isClub ? slot.club.name : slot.centre.name;
-                          const typeLabel = isClub ? 'CLUB' : 'CENTRE';
-                          
-                          return (
-                            <tr key={index}>
-                              <td className="border-2 border-slate-900 p-3 font-bold text-slate-700 bg-slate-50 text-sm whitespace-nowrap">
+                      const clubBooking = dayClubBookings[0];
+                      const centreBooking = dayCentreBookings[0];
+
+                      const renderCell = (booking: any, isClub: boolean) => {
+                        if (!booking) return (
+                          <td className="border-2 border-slate-900 p-2 sm:p-4 bg-slate-50/50 align-middle">
+                            <span className="text-slate-400 font-semibold text-xs tracking-wide">-</span>
+                          </td>
+                        );
+
+                        const slot = booking.slot;
+                        const name = isClub ? slot.club.name : slot.centre.name;
+                        const typeLabel = isClub ? 'CLUB' : 'CENTRE';
+
+                        return (
+                          <td className="border-2 border-slate-900 p-2 sm:p-4 relative overflow-hidden align-top text-left">
+                            {isClub ? (
+                              <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none"></div>
+                            ) : (
+                              <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-indigo-500/5 rounded-bl-full border-b border-l border-indigo-500/10 pointer-events-none"></div>
+                            )}
+                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-1 mb-1.5 relative z-10">
+                              <span className={`inline-block w-fit px-1.5 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest ${isClub ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                                {typeLabel}
+                              </span>
+                              <span className="text-[8px] sm:text-[10px] font-bold text-slate-700 bg-slate-100 px-1 sm:px-1.5 py-0.5 rounded w-fit whitespace-nowrap">
                                 {slot.start_time.substring(0,5)} - {slot.end_time.substring(0,5)}
-                              </td>
-                              <td className="border-2 border-slate-900 p-4 relative overflow-hidden">
-                                {isClub ? (
-                                  <div className="absolute top-0 right-0 w-12 h-12 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none"></div>
-                                ) : (
-                                  <div className="absolute top-0 right-0 w-12 h-12 bg-indigo-500/5 rounded-bl-full border-b border-l border-indigo-500/10 pointer-events-none"></div>
-                                )}
-                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest mb-1 relative z-10 ${isClub ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                                  {typeLabel}
-                                </span>
-                                <h4 className="text-base sm:text-lg font-extrabold mb-0.5 relative z-10">{name}</h4>
-                                <div className="text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap items-center justify-center gap-1.5 mt-2">
-                                  <span>Venue: {slot.venue}</span>
-                                  {slot.session && (
-                                    <>
-                                      <span className="w-1 h-1 bg-slate-400 rounded-full"></span>
-                                      <span className="text-slate-800 font-bold">{slot.session === 'FORENOON' || slot.session === 'MORNING' ? 'Morning' : 'Evening'}</span>
-                                    </>
-                                  )}
-                                </div>
-                                <div className="mt-3 flex justify-center relative z-10">
-                                  <button
-                                    onClick={() => handleNavigateClick(slot.venue)}
-                                    className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-extrabold px-3 py-1.5 rounded-lg border border-blue-200 transition-colors"
-                                  >
-                                    <MapPin className="w-3 h-3 text-blue-600" /> NAVIGATE TO VENUE
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })}
-              
-              {/* Faculty Coordinator Card */}
-              {existingClubBookings.length > 0 && existingClubBookings.map((booking, idx) => {
-                if (!booking.slot.club?.faculty_name) return null;
-                return (
-                <div key={idx} className="mt-5 border-2 border-blue-100 bg-blue-50/60 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-0.5">Club Faculty Coordinator ({booking.slot.day})</p>
-                    <p className="font-extrabold text-slate-900 text-base">{booking.slot.club.faculty_name}</p>
-                  </div>
-                  <a
-                    href={`tel:${booking.slot.club.faculty_mobile}`}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl transition-colors text-sm shrink-0"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
-                    </svg>
-                    {booking.slot.club.faculty_mobile}
-                  </a>
-                </div>
-                )
-              })}
-              {/* Centre Faculty Coordinator Card */}
-              {existingCentreBookings.length > 0 && existingCentreBookings.map((booking, idx) => {
-                if (!booking.slot.centre?.faculty_name) return null;
-                return (
-                <div key={`centre-${idx}`} className="mt-4 border-2 border-indigo-100 bg-indigo-50/60 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-100 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-0.5">Centre Faculty Coordinator ({booking.slot.day})</p>
-                    <p className="font-extrabold text-slate-900 text-base">{booking.slot.centre.faculty_name}</p>
-                  </div>
-                  <a
-                    href={`tel:${booking.slot.centre.faculty_mobile}`}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl transition-colors text-sm shrink-0"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
-                    </svg>
-                    {booking.slot.centre.faculty_mobile}
-                  </a>
-                </div>
-                )
-              })}
-            </div>
+                              </span>
+                            </div>
+                            <h4 className="text-xs sm:text-base font-extrabold mb-1 relative z-10 text-slate-900 leading-tight">{name}</h4>
+                            <div className="text-[10px] sm:text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
+                              <div className="flex items-start sm:items-center gap-1 min-w-0 mt-0.5 sm:mt-0">
+                                <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
+                                <span>{slot.venue}</span>
+                              </div>
+                              <button 
+                                data-html2canvas-ignore="true"
+                                onClick={(e) => { e.stopPropagation(); handleNavigateClick(slot.venue); }}
+                                className="flex items-center gap-1 bg-slate-900 text-white hover:bg-slate-800 text-[8px] sm:text-[9px] font-extrabold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md shadow-sm transition-all active:scale-95 shrink-0"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="hidden sm:block"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>
+                                MAP
+                              </button>
+                            </div>
+                          </td>
+                        );
+                      };
 
-            {/* Footer Signature & Verification */}
+                      return (
+                        <tr key={day}>
+                          <td className="border-2 border-slate-900 p-1.5 sm:p-3 font-black text-slate-800 bg-slate-50 text-[9px] sm:text-sm text-center align-middle">
+                            {day.substring(0, 3).toUpperCase()}
+                            <span className="hidden sm:inline">{day.substring(3).toUpperCase()}</span>
+                          </td>
+                          {renderCell(clubBooking, true)}
+                          {renderCell(centreBooking, false)}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+              {/* Footer Signature & Verification */}
             <div className="px-6 sm:px-8 pb-6 sm:pb-8 flex justify-between items-end mt-4 relative z-10">
               <div className="text-left flex items-end gap-4">
                 <a 
@@ -656,6 +612,60 @@ export default function BookingClient({
                   <CheckCircle className="w-3 h-3" /> System Generated Document
                 </p>
               </div>
+            </div>
+          </div>
+          
+          {/* Faculty Coordinators (Shown on screen, but not in downloaded image) */}
+          <div className="max-w-4xl mx-auto mt-6">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4 px-2">Your Faculty Coordinators</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {/* Club Coordinators */}
+              {existingClubBookings.length > 0 && Array.from(new Set(existingClubBookings.map(b => b.slot.club?.id))).map(clubId => {
+                const booking = existingClubBookings.find(b => b.slot.club?.id === clubId);
+                if (!booking || !booking.slot.club?.faculty_name) return null;
+                return (
+                  <div key={`club-${clubId}`} className="border-2 border-blue-100 bg-blue-50/60 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-0.5">Club Coordinator</p>
+                      <p className="font-extrabold text-slate-900 text-sm">{booking.slot.club.faculty_name}</p>
+                      <p className="text-xs font-bold text-slate-600 mt-0.5">{booking.slot.club.name}</p>
+                    </div>
+                    <a
+                      href={`tel:${booking.slot.club.faculty_mobile}`}
+                      className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-lg transition-colors text-xs"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
+                      </svg>
+                      {booking.slot.club.faculty_mobile}
+                    </a>
+                  </div>
+                );
+              })}
+
+              {/* Centre Coordinators */}
+              {existingCentreBookings.length > 0 && Array.from(new Set(existingCentreBookings.map(b => b.slot.centre?.id))).map(centreId => {
+                const booking = existingCentreBookings.find(b => b.slot.centre?.id === centreId);
+                if (!booking || !booking.slot.centre?.faculty_name) return null;
+                return (
+                  <div key={`centre-${centreId}`} className="border-2 border-indigo-100 bg-indigo-50/60 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-0.5">Centre Coordinator</p>
+                      <p className="font-extrabold text-slate-900 text-sm">{booking.slot.centre.faculty_name}</p>
+                      <p className="text-xs font-bold text-slate-600 mt-0.5">{booking.slot.centre.name}</p>
+                    </div>
+                    <a
+                      href={`tel:${booking.slot.centre.faculty_mobile}`}
+                      className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-lg transition-colors text-xs"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
+                      </svg>
+                      {booking.slot.centre.faculty_mobile}
+                    </a>
+                  </div>
+                );
+              })}
             </div>
           </div>
           
