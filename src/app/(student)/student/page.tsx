@@ -63,24 +63,22 @@ export default async function StudentDashboard() {
       const filteredSlots = slots.filter(s => {
         if (student.allowed_day === 'ANY' || student.allowed_day === 'INDEPENDENT') return true;
         
-        // Match standard day assignment (MUST match student's session)
-        if (allowedDaysArray.includes(s.day) && s.session === student.activity_session) return true;
-        
-        // Custom Rule filter: if slot is on a custom day, it MUST match the allowed timings
-        if (customDays.includes(s.day) && !allowedDaysArray.includes(s.day)) {
+        // Custom Rule filter: if a custom rule exists for this day, it ALWAYS overrides standard session matching
+        if (customDays.includes(s.day)) {
           const ruleForDay = customRules.find(r => r.day.trim() === s.day);
           if (ruleForDay) {
             // Check against both formats: '09:40 - 10:30' and '09:40:00-10:30:00'
             const formattedSlotTiming = `${s.start_time.substring(0,5)} - ${s.end_time.substring(0,5)}`;
             const dbSlotTiming = `${s.start_time}-${s.end_time}`;
             
-            const isMatch = ruleForDay.allowed_timings.some((t: string) => {
+            return ruleForDay.allowed_timings.some((t: string) => {
               return t === formattedSlotTiming || t === dbSlotTiming || t.replace(/\s+/g, '') === dbSlotTiming.replace(/\s+/g, '');
             });
-            
-            return isMatch;
           }
         }
+
+        // Match standard day assignment (MUST match student's session)
+        if (allowedDaysArray.includes(s.day) && s.session === student.activity_session) return true;
         
         return false;
       });
