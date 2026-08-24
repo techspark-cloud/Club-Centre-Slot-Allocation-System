@@ -46,7 +46,8 @@ export default function CoordinatorDashboard({
   const dayOfWeek = days[selectedDateObj.getDay()];
   
   const isWrongDay = activeSlot && activeSlot.day !== dayOfWeek;
-  const isDateLocked = selectedDate !== today || isWrongDay;
+  const isFutureDate = selectedDate > today;
+  const isDateLocked = isFutureDate || isWrongDay;
 
   useEffect(() => {
     if (!selectedSlotId || !selectedDate) {
@@ -553,7 +554,7 @@ export default function CoordinatorDashboard({
                               <AlertCircle className="w-4 h-4 shrink-0" />
                               {isWrongDay 
                                 ? `You cannot mark attendance on a ${dayOfWeek} for a ${activeSlot.day} slot.` 
-                                : `Viewing past records. Attendance can only be marked for today (${today}).`
+                                : `You cannot mark attendance for future dates.`
                               }
                             </div>
                           )}
