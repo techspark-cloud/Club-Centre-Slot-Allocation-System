@@ -2,34 +2,33 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Search, UserX, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Search, UserX, AlertTriangle, ShieldAlert, Zap } from 'lucide-react';
+import AdminAllocationModal from '@/app/components/AdminAllocationModal';
 
 export default function AdminAllocationsPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalStudent, setModalStudent] = useState<{id: string, name: string, day: string, session: string} | null>(null);
+  
   const supabase = createClient();
 
   const fetchStudents = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('students')
-      .select(`
-        id, name, register_no, course, section, allowed_day, activity_session,
-        allocations(
-          id,
-          slot:slots(
-            id, type, start_time, end_time, venue, day,
-            club:clubs(name),
-            centre:centres(name)
-          )
-        )
-      `)
-      .order('register_no');
-
-    if (!error && data) {
-      setStudents(data);
+    try {
+      const res = await fetch('/api/admin/allocations');
+      const data = await res.json();
+      
+      if (res.ok && data.students) {
+        setStudents(data.students);
+      } else {
+        console.error('Failed to fetch students:', data.error);
+      }
+    } catch (err) {
+      console.error('Error fetching students:', err);
     }
     setLoading(false);
   };
@@ -98,17 +97,18 @@ export default function AdminAllocationsPage() {
                 <th className="px-6 py-4">Day & Session</th>
                 <th className="px-6 py-4">Club Allocation</th>
                 <th className="px-6 py-4">Centre Allocation</th>
+                <th className="px-6 py-4">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">Loading students...</td></tr>
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Loading students...</td></tr>
               ) : filteredStudents.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">No students found.</td></tr>
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No students found.</td></tr>
               ) : (
                 filteredStudents.map(student => {
-                  const clubAlloc = student.allocations.find((a: any) => a.slot.type === 'CLUB');
-                  const centreAlloc = student.allocations.find((a: any) => a.slot.type === 'CENTRE');
+                  const clubAlloc = student.allocations.find((a: any) => a.slot.club_id !== null);
+                  const centreAlloc = student.allocations.find((a: any) => a.slot.centre_id !== null);
 
                   return (
                     <tr key={student.id} className="hover:bg-slate-50">
@@ -152,6 +152,21 @@ export default function AdminAllocationsPage() {
                           <span className="text-slate-400 italic text-xs">No Centre Assigned</span>
                         )}
                       </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => {
+                              setModalStudent({ id: student.id, name: student.name, day: student.allowed_day, session: student.activity_session });
+                              setIsModalOpen(true);
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-600 font-medium rounded-lg transition-colors border border-orange-200"
+                            title="Force Allocate a slot (bypasses capacity limits)"
+                          >
+                            <Zap className="w-4 h-4" />
+                            Force Allocate
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -160,6 +175,22 @@ export default function AdminAllocationsPage() {
           </table>
         </div>
       </div>
+
+      {modalStudent && (
+        <AdminAllocationModal 
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          studentId={modalStudent.id}
+          studentName={modalStudent.name}
+          allowedDay={modalStudent.day}
+          allowedSession={modalStudent.session}
+          onSuccess={() => {
+            alert('Slot forcefully allocated successfully!');
+            fetchStudents();
+            setIsModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, UserCheck, UserX, AlertCircle, RefreshCw, Download, MapPin, Clock } from 'lucide-react';
+import { Users, UserCheck, UserX, AlertCircle, RefreshCw, Download, MapPin, Clock, Send } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getPDFReportData } from '@/app/actions/attendance';
@@ -17,6 +17,7 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [activeSession, setActiveSession] = useState<'FORENOON' | 'AFTERNOON'>('FORENOON');
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
 
   const fetchStats = async () => {
     setIsLoading(true);
@@ -313,6 +314,28 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
     }
   };
 
+  const sendHODReports = async () => {
+    setIsSendingEmails(true);
+    try {
+      const res = await fetch('/api/admin/send-hod-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate, session: activeSession })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`Successfully sent ${data.emailsSent} emails across ${data.totalDepartments} departments!`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to send emails.'}`);
+      }
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+    } finally {
+      setIsSendingEmails(false);
+    }
+  };
+
   const renderStatCard = (stat: any) => {
     const percentage = stat.totalExpected > 0 ? Math.round((stat.present / stat.totalExpected) * 100) : 0;
     const entityName = stat.slot.club_id !== null ? stat.slot.clubs?.name : stat.slot.centres?.name;
@@ -427,7 +450,17 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
             title="Download Overall Summary PDF"
           >
             <Download className="w-4 h-4" />
-            Overall Report
+            PDF
+          </button>
+          
+          <button 
+            onClick={sendHODReports}
+            disabled={isSendingEmails}
+            className={`px-4 py-2 ${activeSession === 'FORENOON' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
+            title={`Send ${activeSession} Report to HODs`}
+          >
+            {isSendingEmails ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Email HODs
           </button>
         </div>
       </div>

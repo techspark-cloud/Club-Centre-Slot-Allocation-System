@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { QrCode } from 'lucide-react';
+import { QrCode, FileText } from 'lucide-react';
 import QRScannerModal from './QRScannerModal';
+import ActivityReportModal from './ActivityReportModal';
 
 interface CoordinatorDashboardProps {
   assignedClubs: any[];
@@ -35,6 +36,7 @@ export default function CoordinatorDashboard({
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
   const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   
   const today = new Date().toISOString().split('T')[0];
   
@@ -512,28 +514,34 @@ export default function CoordinatorDashboard({
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             <input 
                               type="date" 
                               value={selectedDate}
                               max={today}
                               onChange={(e) => setSelectedDate(e.target.value)}
-                              className="px-4 py-2 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors"
+                              className="w-full sm:w-auto flex-1 px-4 py-2 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-colors"
                             />
                             <button 
                               onClick={() => setShowQRScanner(true)}
                               disabled={isDateLocked}
-                              className={`flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors shadow-sm ${
+                              className={`flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors shadow-sm ${
                                 isDateLocked 
                                   ? 'bg-slate-100 text-slate-400 border-2 border-slate-100 cursor-not-allowed'
                                   : 'text-slate-700 bg-white border-2 border-slate-200 hover:border-blue-500 hover:text-blue-600'
                               }`}
                             >
-                              <QrCode className="w-4 h-4" /> Scan QR
+                              <QrCode className="w-4 h-4" /> Scan
+                            </button>
+                            <button 
+                              onClick={() => setShowReportModal(true)}
+                              className="flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 px-4 py-2.5 rounded-xl transition-colors shadow-sm"
+                            >
+                              <FileText className="w-4 h-4" /> Report
                             </button>
                             <button 
                               onClick={() => downloadPDF(selectedSlot.id, entity.name, selectedSlot.day)}
-                              className="flex items-center justify-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+                              className="flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2.5 rounded-xl transition-colors shadow-sm"
                             >
                               <Download className="w-4 h-4" /> PDF
                             </button>
@@ -707,6 +715,19 @@ export default function CoordinatorDashboard({
           );
         })}
       </div>
+
+      {showReportModal && activeSlot && (
+        <ActivityReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          slot={activeSlot}
+          entityName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.name || 'Unknown'}
+          date={selectedDate}
+          expected={currentAllocations.filter(a => a.slot_id === activeSlot.id).length}
+          present={attendanceData.filter(a => a.status === 'PRESENT').length}
+          gasUrl="https://script.google.com/macros/s/AKfycbzCt4gzTXrlASBm-fV26GSMPLHprdA5hvNwTH4Ko6NugcxnyB1dX_GSbaz-zLk80zq6/exec"
+        />
+      )}
 
       {showQRScanner && selectedSlotId && (
         <QRScannerModal 

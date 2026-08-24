@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity, UserCheck } from 'lucide-react';
+import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity, UserCheck, FileText, Mail } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function AdminSidebar() {
@@ -16,6 +16,7 @@ export default function AdminSidebar() {
 
   const navItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+    { name: 'Audit Reports', href: '/admin/audit-reports', icon: FileText },
     { name: 'Capacity Analytics', href: '/admin/capacity', icon: Activity },
     { name: 'Live Attendance', href: '/admin/attendance', icon: UserCheck },
     { name: 'Students', href: '/admin/students', icon: Users },
@@ -23,6 +24,7 @@ export default function AdminSidebar() {
     { name: 'Centres', href: '/admin/centres', icon: Layers },
     { name: 'Activity Slots', href: '/admin/slots', icon: Calendar },
     { name: 'Allocations Manager', href: '/admin/allocations', icon: CheckSquare },
+    { name: 'Email Config', href: '/admin/emails', icon: Mail },
     { name: 'Campus 3D Map', href: '/admin/map', icon: Map },
     { name: 'Import Master Data', href: '/admin/import', icon: Upload },
   ];
