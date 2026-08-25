@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -23,7 +23,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data, error } = await supabase
+    const url = new URL(request.url);
+    const search = url.searchParams.get('search');
+    const course = url.searchParams.get('course');
+    const section = url.searchParams.get('section');
+
+    if ((!search || search.trim() === '') && !course && !section) {
+      return NextResponse.json({ students: [] });
+    }
+
+    let query = supabase
       .from('students')
       .select(`
         id, name, register_no, course, section, allowed_day, activity_session,
@@ -37,6 +46,15 @@ export async function GET() {
         )
       `)
       .order('register_no');
+
+    if (search) {
+      query = query.or(`register_no.ilike.%${search}%,name.ilike.%${search}%`);
+    } else {
+      if (course) query = query.eq('course', course);
+      if (section) query = query.eq('section', section);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

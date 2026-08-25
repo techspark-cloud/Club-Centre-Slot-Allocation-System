@@ -25,10 +25,12 @@ interface AdminAllocationModalProps {
   studentName: string;
   allowedDay: string;
   allowedSession: string;
+  course: string;
+  section: string;
   onSuccess: () => void;
 }
 
-export default function AdminAllocationModal({ isOpen, onClose, studentId, studentName, allowedDay, allowedSession, onSuccess }: AdminAllocationModalProps) {
+export default function AdminAllocationModal({ isOpen, onClose, studentId, studentName, allowedDay, allowedSession, course, section, onSuccess }: AdminAllocationModalProps) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSlotId, setSelectedSlotId] = useState('');
@@ -38,32 +40,78 @@ export default function AdminAllocationModal({ isOpen, onClose, studentId, stude
   const supabase = createClient();
 
   useEffect(() => {
-    if (isOpen && allowedDay && allowedSession) {
+    if (isOpen) {
       fetchSlots();
     }
-  }, [isOpen, allowedDay, allowedSession]);
+  }, [isOpen]);
 
   const fetchSlots = async () => {
     setLoading(true);
     setError('');
     
-    const days = allowedDay.split(',').map(d => d.trim());
-    
-    // Fetch ALL slots for this student's allowed days and matching their session
-    const { data, error } = await supabase
-      .from('slots')
-      .select(`
-        id, club_id, centre_id, start_time, end_time, venue, day, allocated_count, capacity,
-        club:clubs(name),
-        centre:centres(name)
-      `)
-      .in('day', days)
-      .eq('session', allowedSession);
+    try {
+      // 1. Fetch custom section rules
+      let customRules: any[] = [];
+      if (course && section) {
+        const { data: rulesData } = await supabase
+          .from('section_booking_rules')
+          .select('*')
+          .eq('course', course)
+          .eq('section', section);
+        if (rulesData) {
+          customRules = rulesData;
+        }
+      }
 
-    if (error) {
-      setError(`Failed to fetch slots: ${error.message}`);
-    } else if (data) {
-      setSlots(data);
+      // 2. Fetch all ACTIVE slots
+      const { data: slotsData, error: slotsError } = await supabase
+        .from('slots')
+        .select(`
+          id, club_id, centre_id, start_time, end_time, venue, day, session, allocated_count, capacity,
+          club:clubs(name),
+          centre:centres(name)
+        `)
+        .eq('status', 'ACTIVE');
+
+      if (slotsError) throw slotsError;
+
+      // 3. Filter using the exact same logic as the student dashboard
+      if (slotsData) {
+        const allowedDaysArray = (allowedDay && allowedDay !== 'ANY' && allowedDay !== 'INDEPENDENT') 
+          ? allowedDay.split(',').map((d: string) => d.trim()).filter(Boolean) 
+          : [];
+        
+        const customDays = customRules.map(r => r.day.trim());
+        
+        const filteredSlots = slotsData.filter((s: any) => {
+          if (allowedDay === 'ANY' || allowedDay === 'INDEPENDENT') return true;
+          
+          // Custom Rule Match
+          if (customDays.includes(s.day)) {
+            const ruleForDay = customRules.find(r => r.day.trim() === s.day);
+            if (ruleForDay) {
+              const formattedSlotTiming = `${s.start_time.substring(0,5)} - ${s.end_time.substring(0,5)}`;
+              const dbSlotTiming = `${s.start_time}-${s.end_time}`;
+              return ruleForDay.allowed_timings.some((t: string) => {
+                return t === formattedSlotTiming || t === dbSlotTiming || t.replace(/\s+/g, '') === dbSlotTiming.replace(/\s+/g, '');
+              });
+            }
+          }
+
+          // Standard Match
+          if (allowedDaysArray.includes(s.day) && s.session === allowedSession) return true;
+          
+          return false;
+        });
+
+        // Grouping logic handled in render, just sort them by Day
+        const dayOrder: Record<string, number> = { 'MONDAY': 1, 'TUESDAY': 2, 'WEDNESDAY': 3, 'THURSDAY': 4, 'FRIDAY': 5, 'SATURDAY': 6, 'SUNDAY': 7 };
+        filteredSlots.sort((a, b) => (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99));
+
+        setSlots(filteredSlots);
+      }
+    } catch (err: any) {
+      setError(`Failed to fetch slots: ${err.message}`);
     }
     setLoading(false);
   };
@@ -118,11 +166,16 @@ export default function AdminAllocationModal({ isOpen, onClose, studentId, stude
         
         <div className="p-6">
           <div className="mb-6">
-            <p className="text-sm text-slate-600 mb-1">You are forcing an allocation for:</p>
+            <p className="text-sm text-slate-600 mb-1">You are changing/forcing an allocation for:</p>
             <p className="font-bold text-lg text-slate-900">{studentName}</p>
-            <p className="text-xs text-orange-600 font-medium mt-1">
-              Warning: If you select a slot that is full, this action will exceed its maximum capacity (e.g. 101/100).
-            </p>
+            <div className="flex flex-col gap-1 mt-2">
+              <p className="text-xs text-orange-600 font-medium bg-orange-50 p-2 rounded">
+                <strong>Change Override:</strong> If this student is currently in a club/centre, allocating them here will instantly remove them from their old one.
+              </p>
+              <p className="text-xs text-red-600 font-medium bg-red-50 p-2 rounded">
+                <strong>Capacity Override:</strong> If you select a slot that is full, this action will force them in and exceed the maximum capacity.
+              </p>
+            </div>
           </div>
 
           {error && (
@@ -139,23 +192,28 @@ export default function AdminAllocationModal({ isOpen, onClose, studentId, stude
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Select a Slot ({allowedDay} - {allowedSession})
+                  Select a Slot (Grouped by Eligible Days)
                 </label>
                 <select 
-                  className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-slate-700"
+                  className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 bg-white"
                   value={selectedSlotId}
                   onChange={(e) => setSelectedSlotId(e.target.value)}
                 >
                   <option value="">-- Choose a slot --</option>
-                  {slots.map(slot => {
-                    const isFull = slot.allocated_count >= slot.capacity;
-                    const name = slot.club_id ? slot.club?.name : slot.centre?.name;
-                    return (
-                      <option key={slot.id} value={slot.id}>
-                        {isFull ? '⚠️ [FULL] ' : ''}{name} - {slot.start_time} to {slot.end_time} ({slot.allocated_count}/{slot.capacity})
-                      </option>
-                    );
-                  })}
+                  {Array.from(new Set(slots.map(s => s.day))).map(day => (
+                    <optgroup key={day} label={`${day} SLOTS`} className="bg-slate-50 font-bold text-slate-800">
+                      {slots.filter(s => s.day === day).map(slot => {
+                        const isFull = slot.allocated_count >= slot.capacity;
+                        const name = slot.club_id ? slot.club?.name : slot.centre?.name;
+                        const type = slot.club_id ? '[CLUB]' : '[CENTRE]';
+                        return (
+                          <option key={slot.id} value={slot.id} className="font-normal bg-white text-slate-700">
+                            {isFull ? '⚠️ [FULL] ' : ''}{type} {name} - {slot.start_time.substring(0,5)} to {slot.end_time.substring(0,5)} ({slot.allocated_count}/{slot.capacity})
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
 

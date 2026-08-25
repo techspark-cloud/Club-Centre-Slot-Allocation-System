@@ -496,7 +496,7 @@ export default function CoordinatorDashboard({
 
                     {/* Selected Slot Roster Section */}
                     {selectedSlot && (
-                      <div className="border-2 border-slate-200 rounded-2xl overflow-hidden shadow-sm animate-in slide-in-from-bottom-4 duration-300">
+                      <div className="border-2 border-slate-200 rounded-2xl overflow-hidden shadow-sm animate-in slide-in-from-bottom-4 duration-300 relative pb-20">
                         <div className="p-5 sm:p-6 bg-slate-50 border-b-2 border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div>
                             <h4 className="text-lg font-black text-slate-900 tracking-tight">Student Roster & Attendance</h4>
@@ -536,7 +536,11 @@ export default function CoordinatorDashboard({
                             </button>
                             <button 
                               onClick={() => setShowReportModal(true)}
-                              className="flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 px-4 py-2.5 rounded-xl transition-colors shadow-sm"
+                              className={`flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm ${
+                                enrolledStudents.length > 0 && attendanceData.length === enrolledStudents.length 
+                                  ? 'bg-green-600 hover:bg-green-700 text-white animate-pulse ring-4 ring-green-600/30' 
+                                  : 'text-white bg-slate-800 hover:bg-slate-900'
+                              }`}
                             >
                               <FileText className="w-4 h-4" /> Report
                             </button>
@@ -706,6 +710,27 @@ export default function CoordinatorDashboard({
                             </>
                           )}
                         </div>
+
+                        {/* Floating Next Step CTA when Attendance is Complete */}
+                        {enrolledStudents.length > 0 && attendanceData.length === enrolledStudents.length && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-green-50 border-t-2 border-green-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-bottom-full duration-500 z-10">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 rounded-full">
+                                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-green-800">Attendance 100% Marked!</p>
+                                <p className="text-xs font-semibold text-green-600">The next step is to submit today's activity report.</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => setShowReportModal(true)}
+                              className="w-full sm:w-auto px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2"
+                            >
+                              Submit Activity Report <FileText className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
