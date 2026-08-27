@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Calendar, MapPin, Users, Image as ImageIcon, ExternalLink, RefreshCw, Loader2, User, AlertCircle, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function AuditReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
@@ -12,6 +14,14 @@ export default function AuditReportsPage() {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
+
+  const [filterDate, setFilterDate] = useState<string>('');
+  const [filterSession, setFilterSession] = useState<string>('ALL');
+  const [filterEntity, setFilterEntity] = useState<string>('ALL');
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [sendingClubsEmail, setSendingClubsEmail] = useState(false);
+  const [sendingCentresEmail, setSendingCentresEmail] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const GAS_URL = "https://script.google.com/macros/s/AKfycbzCt4gzTXrlASBm-fV26GSMPLHprdA5hvNwTH4Ko6NugcxnyB1dX_GSbaz-zLk80zq6/exec";
   const supabase = createClient();
@@ -38,8 +48,16 @@ export default function AuditReportsPage() {
   };
 
   useEffect(() => {
+    setIsMounted(true);
+    // Set to local date on client side to avoid SSR hydration mismatch
+    const today = new Date();
+    const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    setFilterDate(localDate);
+    
     fetchReports();
   }, []);
+
+  if (!isMounted) return null;
 
   const openReportDetails = async (report: any) => {
     setSelectedReport(report);
@@ -89,6 +107,268 @@ export default function AuditReportsPage() {
     }
   };
 
+  const uniqueEntities = Array.from(new Set(reports.map(r => r.entityName))).sort();
+
+  const exportPDF = () => {
+    if (filterEntity === 'ALL') return;
+    
+    setIsGeneratingPDF(true);
+    try {
+      const entityReports = reports
+        .filter(r => r.entityName === filterEntity)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      if (entityReports.length === 0) {
+        alert("No reports found for this entity.");
+        setIsGeneratingPDF(false);
+        return;
+      }
+
+      const doc = new jsPDF('landscape');
+      
+      doc.setFontSize(18);
+      doc.text(`Overall Audit Report: ${filterEntity}`, 14, 22);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+      
+      const tableColumn = ["Date", "Session", "Venue", "Coordinator", "Expected", "Present", "Description", "Evidence Link"];
+      const tableRows = entityReports.map(r => [
+        new Date(r.date).toLocaleDateString('en-GB'),
+        r.session || 'N/A',
+        r.venue || 'N/A',
+        r.coordinatorName || 'N/A',
+        r.expected,
+        r.present,
+        r.description,
+        r.imageUrl ? 'View Photo (Click Here)' : 'No Evidence'
+      ]);
+
+      autoTable(doc, {
+        startY: 35,
+        head: [tableColumn],
+        body: tableRows,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [30, 41, 59] },
+        columnStyles: {
+          6: { cellWidth: 80 },
+          7: { cellWidth: 40, textColor: [37, 99, 235] }
+        },
+        didDrawCell: function (data) {
+          if (data.section === 'body' && data.column.index === 7) {
+            const url = entityReports[data.row.index].imageUrl;
+            if (url) {
+              doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: url });
+            }
+          }
+        }
+      });
+
+      doc.save(`${filterEntity.replace(/ /g, '_')}_Overall_Report.pdf`);
+    } catch (err) {
+      console.error("PDF Error:", err);
+      alert("Failed to generate PDF");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  const sendOverallEmail = async (type: 'CLUB' | 'CENTRE') => {
+    try {
+      if (!filterDate) {
+        alert("Please select a specific Date to send the Overall Report (needed to identify defaulters).");
+        return;
+      }
+
+      if (type === 'CLUB') setSendingClubsEmail(true);
+      if (type === 'CENTRE') setSendingCentresEmail(true);
+
+      const displayDate = new Date(filterDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      // 1. Fetch Clubs/Centres valid for this type
+      const { data: dbData } = await supabase.from(type === 'CLUB' ? 'clubs' : 'centres').select('name');
+      if (!dbData) throw new Error(`Failed to fetch ${type} list`);
+      const validNames = new Set(dbData.map(d => d.name));
+
+      // 2. Filter visible (submitted) reports
+      const visibleReports = reports.filter(r => {
+        const rDate = new Date(r.date).toISOString().split('T')[0];
+        if (rDate !== filterDate) return false;
+        if (filterSession !== 'ALL' && r.session !== filterSession) return false;
+        return validNames.has(r.entityName);
+      });
+
+      const submittedEntityNames = new Set(visibleReports.map(r => r.entityName));
+
+      // 3. Identify Defaulters (Expected but not submitted)
+      const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+      const targetDay = days[new Date(filterDate).getDay()];
+
+      let query = supabase.from('slots').select(`
+        session, venue, club_id, centre_id,
+        clubs(name, faculty_name),
+        centres(name, faculty_name)
+      `).eq('day', targetDay);
+
+      if (filterSession !== 'ALL') {
+        query = query.eq('session', filterSession);
+      }
+
+      const { data: expectedSlots, error: slotsError } = await query;
+      if (slotsError) throw slotsError;
+
+      const defaulters: any[] = [];
+      if (expectedSlots) {
+        expectedSlots.forEach(slot => {
+          // Check if this slot belongs to the requested type
+          const isClubSlot = !!slot.club_id;
+          const isCentreSlot = !!slot.centre_id;
+          
+          if (type === 'CLUB' && !isClubSlot) return;
+          if (type === 'CENTRE' && !isCentreSlot) return;
+
+          const entityName = isClubSlot ? slot.clubs?.name : slot.centres?.name;
+          const facultyName = isClubSlot ? slot.clubs?.faculty_name : slot.centres?.faculty_name;
+
+          if (entityName && !submittedEntityNames.has(entityName)) {
+            defaulters.push({
+              entityName,
+              facultyName: facultyName || 'Coordinator',
+              session: slot.session,
+              venue: slot.venue || 'N/A'
+            });
+          }
+        });
+      }
+
+      if (visibleReports.length === 0 && defaulters.length === 0) {
+        alert(`No ${type} activities scheduled or submitted for the selected filters.`);
+        return;
+      }
+
+      // 4. Build Submitted Reports HTML Table
+      let submittedRows = '';
+      if (visibleReports.length === 0) {
+        submittedRows = '<tr><td colspan="10" style="padding: 15px; text-align: center; color: #64748b; font-style: italic;">No reports submitted yet.</td></tr>';
+      } else {
+        visibleReports.forEach(r => {
+          const absentCount = (r.expected || 0) - (r.present || 0);
+          submittedRows += `
+            <tr>
+              <td style="padding: 10px; border: 1px solid #ddd; white-space: nowrap;">${displayDate}</td>
+              <td style="padding: 10px; border: 1px solid #ddd;">${r.session || 'N/A'}</td>
+              <td style="padding: 10px; border: 1px solid #ddd;">${r.venue || 'N/A'}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${r.entityName}</td>
+              <td style="padding: 10px; border: 1px solid #ddd;">${r.coordinatorName}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${r.expected}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #22c55e; font-weight: bold;">${r.present}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #ef4444; font-weight: bold;">${absentCount > 0 ? absentCount : 0}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; font-style: italic;">${r.description}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${r.imageUrl ? `<a href="${r.imageUrl}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">View</a>` : '-'}</td>
+            </tr>
+          `;
+        });
+      }
+
+      // 5. Build Defaulters HTML Table
+      let defaulterRows = '';
+      if (defaulters.length === 0) {
+        defaulterRows = '<tr><td colspan="4" style="padding: 15px; text-align: center; color: #22c55e; font-weight: bold;">🎉 Amazing! All scheduled activities have submitted their reports!</td></tr>';
+      } else {
+        defaulters.forEach(d => {
+          defaulterRows += `
+            <tr style="background-color: #fef2f2;">
+              <td style="padding: 10px; border: 1px solid #fecaca; font-weight: bold; color: #991b1b;">${d.entityName}</td>
+              <td style="padding: 10px; border: 1px solid #fecaca; color: #991b1b;">${d.facultyName}</td>
+              <td style="padding: 10px; border: 1px solid #fecaca; color: #991b1b;">${d.session}</td>
+              <td style="padding: 10px; border: 1px solid #fecaca; color: #991b1b;">${d.venue}</td>
+            </tr>
+          `;
+        });
+      }
+
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; color: #333; max-width: 1200px; margin: 0 auto;">
+          <h2 style="color: #1e293b;">Overall ${type === 'CLUB' ? 'Clubs' : 'Centres'} Activity Audit Report</h2>
+          <p><strong>Date Filter:</strong> ${displayDate} | <strong>Session Filter:</strong> ${filterSession}</p>
+          
+          <h3 style="margin-top: 30px; color: #166534;">✅ Submitted Activity Reports</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;">
+            <thead>
+              <tr style="background-color: #f0fdf4; color: #166534;">
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: left;">Date</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: left;">Session</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: left;">Venue</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: left;">Name</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: left;">Faculty</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: center;">Expected</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: center;">Present</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: center;">Absent</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: left; width: 30%;">Activity Description</th>
+                <th style="padding: 10px; border: 1px solid #bbf7d0; text-align: center;">Evidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${submittedRows}
+            </tbody>
+          </table>
+
+          <h3 style="margin-top: 40px; color: #991b1b;">❌ Pending Submissions (Defaulters)</h3>
+          <p style="font-size: 13px; color: #64748b;">The following ${type === 'CLUB' ? 'clubs' : 'centres'} were scheduled for an activity but have not submitted a report yet.</p>
+          <table style="width: 100%; max-width: 800px; border-collapse: collapse; margin-top: 10px; font-size: 14px;">
+            <thead>
+              <tr style="background-color: #fee2e2; color: #991b1b;">
+                <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">Name</th>
+                <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">Faculty Coordinator</th>
+                <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">Scheduled Session</th>
+                <th style="padding: 10px; border: 1px solid #fecaca; text-align: left;">Scheduled Venue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${defaulterRows}
+            </tbody>
+          </table>
+
+          <p style="margin-top: 40px; font-size: 12px; color: #64748b;">This is an automated message from the RIT Activity Allocation Portal.</p>
+        </div>
+      `;
+
+      const targetEmail = type === 'CLUB' ? 'Porchelvi.n@ritchennai.edu.in' : 'ashok.m@ritchennai.edu.in';
+      const payload = [{
+        to: targetEmail,
+        subject: `[RIT Portal] ${displayDate} ${filterSession !== 'ALL' ? filterSession : ''} - Overall ${type === 'CLUB' ? 'Clubs' : 'Centres'} Activity Report`,
+        htmlBody
+      }];
+
+      const EMAIL_GAS_URL = "https://script.google.com/macros/s/AKfycbxvoRfmASBoYbevaOn5TfIwgxTxLs4BnOMaOPgSwsYFv8ID73by6uiuYIfZi9Y-fSAH/exec";
+      const gasRes = await fetch(EMAIL_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: "send_hod_emails",
+          emails: payload
+        }),
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        }
+      });
+
+      const gasResult = await gasRes.json();
+      if (gasResult.success) {
+        alert(`Success! Email sent to ${targetEmail}.`);
+      } else {
+        throw new Error(gasResult.error || "Failed to send email");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to send email: ${err.message}`);
+    } finally {
+      if (type === 'CLUB') setSendingClubsEmail(false);
+      if (type === 'CENTRE') setSendingCentresEmail(false);
+    }
+  };
+
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-300">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -101,14 +381,78 @@ export default function AuditReportsPage() {
             Live reports fetched directly from Google Sheets & Drive
           </p>
         </div>
-        <button 
-          onClick={fetchReports}
-          disabled={isLoading}
-          className="flex items-center gap-2 bg-white border-2 border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:border-blue-500 hover:text-blue-600 transition-colors disabled:opacity-50 shadow-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        
+        <div className="flex flex-col sm:flex-row flex-wrap items-center gap-3 w-full md:w-auto md:justify-end">
+          {filterEntity !== 'ALL' && (
+            <button 
+              onClick={exportPDF}
+              disabled={isGeneratingPDF}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-sm"
+            >
+              {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              Download PDF
+            </button>
+          )}
+          
+          <select
+            value={filterEntity}
+            onChange={(e) => setFilterEntity(e.target.value)}
+            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+          >
+            <option value="ALL">All Clubs & Centres</option>
+            {uniqueEntities.map((entity, i) => (
+              <option key={i} value={entity as string}>{entity as string}</option>
+            ))}
+          </select>
+          
+          <input 
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+          />
+          <select
+            value={filterSession}
+            onChange={(e) => setFilterSession(e.target.value)}
+            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+          >
+            <option value="ALL">All Sessions</option>
+            <option value="FORENOON">Forenoon</option>
+            <option value="AFTERNOON">Afternoon</option>
+          </select>
+          <button 
+            onClick={fetchReports}
+            disabled={isLoading}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:border-blue-500 hover:text-blue-600 transition-colors disabled:opacity-50 shadow-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-blue-50 border border-blue-100 p-4 rounded-2xl">
+        <div className="text-sm font-bold text-blue-800">
+          Ready to send reports to the Overall Coordinators?
+        </div>
+        <div className="flex gap-3 w-full sm:w-auto">
+          <button 
+            onClick={() => sendOverallEmail('CLUB')}
+            disabled={sendingClubsEmail || isLoading}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm"
+          >
+            {sendingClubsEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+            Email Clubs Report
+          </button>
+          <button 
+            onClick={() => sendOverallEmail('CENTRE')}
+            disabled={sendingCentresEmail || isLoading}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-sm"
+          >
+            {sendingCentresEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+            Email Centres Report
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -131,7 +475,18 @@ export default function AuditReportsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {reports.map((report, idx) => (
+          {reports
+            .filter(r => {
+              if (filterEntity !== 'ALL' && r.entityName !== filterEntity) return false;
+              if (filterDate) {
+                // The date from GAS might be a full ISO string or YYYY-MM-DD
+                const rDate = new Date(r.date).toISOString().split('T')[0];
+                if (rDate !== filterDate) return false;
+              }
+              if (filterSession !== 'ALL' && r.session !== filterSession) return false;
+              return true;
+            })
+            .map((report, idx) => (
             <div key={idx} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform"></div>
               

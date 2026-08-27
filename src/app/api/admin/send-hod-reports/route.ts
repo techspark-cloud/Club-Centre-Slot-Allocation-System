@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
-import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, VICE_PRINCIPAL_EMAIL } from '@/config/hod-emails';
+import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, VICE_PRINCIPAL_EMAIL, OVERALL_CLUBS_COORDINATOR_EMAIL, OVERALL_CENTRES_COORDINATOR_EMAIL } from '@/config/hod-emails';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -244,7 +244,8 @@ export async function POST(request: Request) {
       });
     }
 
-    // 6. Send to Google Apps Script
+
+    // 7. Send to Google Apps Script
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxvoRfmASBoYbevaOn5TfIwgxTxLs4BnOMaOPgSwsYFv8ID73by6uiuYIfZi9Y-fSAH/exec";
     
     if (emailPayloads.length === 0) {

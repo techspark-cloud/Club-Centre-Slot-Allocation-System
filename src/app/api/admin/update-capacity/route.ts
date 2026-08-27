@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     const { error } = await supabase
-      .from('activity_pairs')
+      .from('slots')
       .update({ capacity })
       .eq('id', id);
 

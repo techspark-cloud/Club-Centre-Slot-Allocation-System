@@ -17,6 +17,7 @@
     "@supabase/supabase-js": "^2.112.3",
     "@types/three": "^0.185.4",
     "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",

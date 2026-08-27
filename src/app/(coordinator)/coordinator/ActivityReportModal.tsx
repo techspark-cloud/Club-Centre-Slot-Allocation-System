@@ -6,13 +6,14 @@ interface ActivityReportModalProps {
   onClose: () => void;
   slot: any;
   entityName: string;
+  coordinatorName: string;
   date: string;
   expected: number;
   present: number;
   gasUrl: string;
 }
 
-export default function ActivityReportModal({ isOpen, onClose, slot, entityName, date, expected, present, gasUrl }: ActivityReportModalProps) {
+export default function ActivityReportModal({ isOpen, onClose, slot, entityName, coordinatorName, date, expected, present, gasUrl }: ActivityReportModalProps) {
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,7 +66,8 @@ export default function ActivityReportModal({ isOpen, onClose, slot, entityName,
         session: slot.session,
         venue: slot.venue,
         entityName: entityName,
-        coordinatorName: slot.faculty_name || 'Coordinator',
+        entityType: slot.club_id ? 'CLUB' : 'CENTRE',
+        coordinatorName: coordinatorName,
         expected: expected,
         present: present,
         description: description,

@@ -1,4 +1,10 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: Request) {
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxvoRfmASBoYbevaOn5TfIwgxTxLs4BnOMaOPgSwsYFv8ID73by6uiuYIfZi9Y-fSAH/exec";
@@ -13,6 +19,27 @@ export async function POST(request: Request) {
         'Content-Type': 'text/plain;charset=utf-8',
       }
     });
+
+    // Also store it locally in Supabase for the delayed Admin Email trigger
+    const { error: dbError } = await supabaseAdmin
+      .from('activity_reports')
+      .upsert({
+        slot_id: payload.slotId,
+        date: payload.date,
+        session: payload.session,
+        venue: payload.venue,
+        entity_name: payload.entityName,
+        entity_type: payload.entityType || 'UNKNOWN',
+        coordinator_name: payload.coordinatorName,
+        expected: payload.expected,
+        present: payload.present,
+        description: payload.description
+      }, { onConflict: 'slot_id, date, session' });
+      
+    if (dbError) {
+      console.error("Failed to store activity report in Supabase:", dbError);
+      // We don't throw, we let it succeed if GAS succeeds so they don't lose data
+    }
 
     if (!res.ok) {
       throw new Error(`Google Apps Script returned status ${res.status}`);

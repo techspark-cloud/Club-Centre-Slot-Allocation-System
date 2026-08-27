@@ -16,3 +16,7 @@ export const FIRST_YEAR_HOD_EMAIL = "hod.hs@ritchennai.edu.in";
 
 // Vice Principal gets CC'd on all automated attendance emails
 export const VICE_PRINCIPAL_EMAIL = "viceprincipal@ritchennai.edu.in";
+
+// Overall Coordinators for Activity Reports
+export const OVERALL_CLUBS_COORDINATOR_EMAIL = "porchelvi.n@ritchennai.edu.in";
+export const OVERALL_CENTRES_COORDINATOR_EMAIL = "ashok.m@ritchennai.edu.in";

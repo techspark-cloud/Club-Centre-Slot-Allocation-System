@@ -748,6 +748,7 @@ export default function CoordinatorDashboard({
           onClose={() => setShowReportModal(false)}
           slot={activeSlot}
           entityName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.name || 'Unknown'}
+          coordinatorName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.faculty_name || 'Coordinator'}
           date={selectedDate}
           expected={currentAllocations.filter(a => a.slot_id === activeSlot.id).length}
           present={attendanceData.filter(a => a.status === 'PRESENT').length}
