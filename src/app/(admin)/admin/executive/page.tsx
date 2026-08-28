@@ -362,29 +362,35 @@ export default function ExecutiveDashboard() {
           </div>
           
           <div className="flex-1 w-full min-h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#94a3b8' }} dy={8} interval={Math.max(0, Math.floor(stats.trendData.length / 10))} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }} domain={[0, 100]} />
-                <RechartsTooltip
-                  contentStyle={{ borderRadius: '14px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)', padding: '10px 14px', fontSize: '13px' }}
-                  itemStyle={{ fontWeight: 'bold' }}
-                  labelStyle={{ color: '#64748b', fontWeight: 600, marginBottom: '2px' }}
-                  formatter={(value: number, name: string) => {
-                    if (name === 'rate') return [`${value}%`, 'Attendance'];
-                    return [value, name];
-                  }}
-                />
-                <Area type="monotone" dataKey="rate" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorRate)" activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }} />
-              </AreaChart>
-            </ResponsiveContainer>
+            {stats.trendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats.trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#94a3b8' }} dy={8} interval={Math.max(0, Math.floor(stats.trendData.length / 10))} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }} domain={[0, 100]} />
+                  <RechartsTooltip
+                    contentStyle={{ borderRadius: '14px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)', padding: '10px 14px', fontSize: '13px' }}
+                    itemStyle={{ fontWeight: 'bold' }}
+                    labelStyle={{ color: '#64748b', fontWeight: 600, marginBottom: '2px' }}
+                    formatter={(value: number, name: string) => {
+                      if (name === 'rate') return [`${value}%`, 'Attendance'];
+                      return [value, name];
+                    }}
+                  />
+                  <Area type="monotone" dataKey="rate" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorRate)" activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-slate-400 font-medium bg-slate-50 rounded-xl border border-slate-100">
+                No active slots in the selected date range.
+              </div>
+            )}
           </div>
         </div>
 

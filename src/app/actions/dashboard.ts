@@ -2,13 +2,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Use service role key to bypass RLS for public dashboard aggregate queries
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function getClubAllocations() {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   const { data, error } = await supabaseAdmin
     .from('allocations')
     .select('student_id, slot:slots!inner(club_id)')
@@ -22,6 +22,11 @@ export async function getClubAllocations() {
 }
 
 export async function getCentreAllocations() {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   const { data, error } = await supabaseAdmin
     .from('allocations')
     .select('student_id, slot:slots!inner(centre_id)')
@@ -35,6 +40,11 @@ export async function getCentreAllocations() {
 }
 
 export async function getSlotGroupedDetails(slotId: string) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   const { data, error } = await supabaseAdmin
     .from('allocations')
     .select(`
@@ -62,4 +72,43 @@ export async function getSlotGroupedDetails(slotId: string) {
   });
   
   return Object.entries(groups).sort((a, b) => b[1].count - a[1].count);
+}
+
+export async function getClubOrCentreDetails(slotIds: string[]) {
+  if (!slotIds || slotIds.length === 0) return { allocations: [], attendance: [] };
+  
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Fetch allocations
+  const { data: allocs, error: allocsError } = await supabaseAdmin
+    .from('allocations')
+    .select(`
+      id,
+      student_id,
+      students (
+        id, name, register_no, course, section
+      )
+    `)
+    .in('slot_id', slotIds);
+    
+  if (allocsError) console.error('Error fetching allocations:', allocsError);
+  
+  // Fetch attendance for today
+  const { data: attData, error: attError } = await supabaseAdmin
+    .from('attendance')
+    .select('*')
+    .in('slot_id', slotIds)
+    .eq('date', today);
+    
+  if (attError) console.error('Error fetching attendance:', attError);
+  
+  return {
+    allocations: allocs || [],
+    attendance: attData || []
+  };
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CalendarClock, Users, UserCheck } from 'lucide-react';
+import { LayoutDashboard, CalendarClock, Users, UserCheck, Building2 } from 'lucide-react';
 
 export default function OverallClubsNavigation() {
   const pathname = usePathname();
@@ -10,6 +10,7 @@ export default function OverallClubsNavigation() {
   const navItems = [
     { name: 'Dashboard', href: '/overall-clubs', icon: LayoutDashboard },
     { name: 'Timetable', href: '/overall-clubs/timetable', icon: CalendarClock },
+    { name: 'Clubs', href: '/overall-clubs/clubs', icon: Building2 },
     { name: 'Students', href: '/overall-clubs/students', icon: Users },
     { name: 'Attendance', href: '/overall-clubs/attendance', icon: UserCheck },
   ];

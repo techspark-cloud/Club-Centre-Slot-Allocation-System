@@ -193,10 +193,11 @@ export async function GET(request: Request) {
       });
     }
 
-    // 7. Build trend data
+    // 7. Build trend data (only include days that actually had slots/attendance)
     const trendData = allDatesInRange.map(date => {
       const stats = attendanceByDate[date];
-      const rate = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
+      if (stats.total === 0) return null;
+      const rate = Math.round((stats.present / stats.total) * 100);
       return {
         date: new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
         rawDate: date,
@@ -205,7 +206,7 @@ export async function GET(request: Request) {
         total: stats.total,
         rate
       };
-    });
+    }).filter(Boolean);
 
     // 8. Entity leaderboard
     const entityLeaderboard = Object.values(entityAttendance)
