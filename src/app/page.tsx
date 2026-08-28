@@ -15,11 +15,7 @@ export default async function Home() {
     .eq('id', user.id)
     .single();
 
-  if (user.email === 'clubs@rit.edu') {
-    redirect('/overall-clubs');
-  } else if (user.email === 'centres@rit.edu') {
-    redirect('/overall-centres');
-  } else if (profile?.role === 'SUPER_ADMIN' || profile?.role === 'ALLOCATION_ADMIN') {
+  if (profile?.role === 'SUPER_ADMIN' || profile?.role === 'ALLOCATION_ADMIN') {
     redirect('/admin');
   } else if (profile?.role === 'CLUB_COORDINATOR' || profile?.role === 'CENTRE_COORDINATOR') {
     redirect('/coordinator');
