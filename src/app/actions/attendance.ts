@@ -3,10 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Use service role key to bypass RLS for administrative updates
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+
 
 export async function markAttendance(
   slotId: string, 
@@ -14,6 +11,11 @@ export async function markAttendance(
   records: { student_id: string; status: 'PRESENT' | 'ABSENT' }[],
   coordinatorId: string
 ) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   if (!records || records.length === 0) return { success: true };
 
   const upsertData = records.map(record => ({
@@ -51,6 +53,11 @@ export async function markAttendanceByQR(
   studentId: string,
   coordinatorId: string
 ) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   const { data: allocation, error: allocError } = await supabaseAdmin
     .from('allocations')
     .select('id')
@@ -88,6 +95,11 @@ export async function markAttendanceByQR(
 }
 
 export async function getLiveAttendanceStats(date: string) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   const { data: allocations, error: allocError } = await supabaseAdmin
     .from('allocations')
     .select(`
@@ -150,6 +162,11 @@ export async function getLiveAttendanceStats(date: string) {
 }
 
 export async function getSlotAttendanceForDate(slotId: string, date: string) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   const { data, error } = await supabaseAdmin
     .from('attendance')
     .select('student_id, status')
@@ -161,6 +178,11 @@ export async function getSlotAttendanceForDate(slotId: string, date: string) {
 }
 
 export async function getPDFReportData(slotId: string, date: string) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   // 1. Fetch allocated students
   const { data: allocations, error: allocError } = await supabaseAdmin
     .from('allocations')

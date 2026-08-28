@@ -3,12 +3,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Requires service role key to manage Auth users
-const supabaseAdmin = createClient(
+
+
+export async function syncFacultyAuthUser(name: string, mobileRaw: string, type: 'CLUB' | 'CENTRE' = 'CLUB', entityId?: string) {
+  const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function syncFacultyAuthUser(name: string, mobileRaw: string, type: 'CLUB' | 'CENTRE' = 'CLUB', entityId?: string) {
   try {
     const mobile = mobileRaw?.trim();
     if (!mobile || !name) return { success: false, error: 'Missing faculty details' };

@@ -32,10 +32,37 @@ export default function ActivityReportModal({ isOpen, onClose, slot, entityName,
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Remove the data:image/jpeg;base64, part
-        resolve(result.split(',')[1]);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Compress to JPEG with 0.6 quality
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          resolve(dataUrl.split(',')[1]);
+        };
+        img.onerror = (err) => reject(err);
       };
       reader.onerror = error => reject(error);
     });
@@ -81,6 +108,17 @@ export default function ActivityReportModal({ isOpen, onClose, slot, entityName,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      
+      if (!res.ok) {
+        const text = await res.text();
+        try {
+          const result = JSON.parse(text);
+          setError(result.error || 'Failed to submit report.');
+        } catch {
+          setError(text || `HTTP Error ${res.status}`);
+        }
+        return;
+      }
       
       const result = await res.json();
       if (result.success) {

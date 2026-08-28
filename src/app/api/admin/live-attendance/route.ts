@@ -2,15 +2,17 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+
 
 const allocationsCache = new Map<string, { data: any[], timestamp: number }>();
 const CACHE_TTL = 1 * 60 * 1000; // 1 minute cache
 
 export async function GET(request: Request) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date');

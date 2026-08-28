@@ -4,12 +4,14 @@ import { createClient } from '@supabase/supabase-js';
 
 // We use the admin client because the standard client's RLS is complex for batch upserts
 // and we already rigorously verify permissions before taking action.
-const supabaseAdmin = createClient(
+
+
+export async function GET(request: Request) {
+  const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const slot_id = searchParams.get('slot_id');
@@ -37,6 +39,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();

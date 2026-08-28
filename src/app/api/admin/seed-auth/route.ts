@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 
 // Create a Supabase admin client to bypass RLS and create Auth users
-const supabaseAdmin = createClient(
+
+
+export async function POST(request: Request) {
+  const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
@@ -14,7 +17,6 @@ const supabaseAdmin = createClient(
   }
 );
 
-export async function POST(request: Request) {
   // 1. Verify caller is an admin
   const supabase = await createServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();

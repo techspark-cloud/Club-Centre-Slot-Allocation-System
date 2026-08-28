@@ -3,12 +3,14 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, VICE_PRINCIPAL_EMAIL, OVERALL_CLUBS_COORDINATOR_EMAIL, OVERALL_CENTRES_COORDINATOR_EMAIL } from '@/config/hod-emails';
 
-const supabaseAdmin = createClient(
+
+
+export async function POST(request: Request) {
+  const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function POST(request: Request) {
   try {
     const { date, session } = await request.json();
 
