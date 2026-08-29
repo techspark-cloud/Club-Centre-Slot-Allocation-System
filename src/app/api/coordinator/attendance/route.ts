@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 
-// We use the admin client because the standard client's RLS is complex for batch upserts
-// and we already rigorously verify permissions before taking action.
+export const dynamic = 'force-dynamic';
 
 
 export async function GET(request: Request) {
@@ -22,8 +21,11 @@ export async function GET(request: Request) {
     }
 
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('Supabase Auth Error:', authError);
+      return NextResponse.json({ error: authError ? authError.message : 'Unauthorized - User is null' }, { status: 401 });
+    }
 
     const { data: attendance, error } = await supabaseAdmin
       .from('attendance')

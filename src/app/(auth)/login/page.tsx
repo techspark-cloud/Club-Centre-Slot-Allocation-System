@@ -20,39 +20,55 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const formattedEmail = identifier.includes('@') ? identifier : `${identifier}@rit.internal`;
+    try {
+      const formattedEmail = identifier.includes('@') ? identifier : `${identifier}@rit.internal`;
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email: formattedEmail,
-      password: password,
-    });
+      // Failsafe timeout for Supabase Auth Hanging
+      const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out. The server took too long to respond.')), 10000)
+      );
 
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
+      const { data, error: authError } = await Promise.race([
+        supabase.auth.signInWithPassword({
+          email: formattedEmail,
+          password: password,
+        }),
+        timeoutPromise
+      ]);
 
-    if (data.user) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role, must_change_password')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError || !profile) {
-        setError('Account profile not configured. Please contact the administrator.');
+      if (authError) {
+        setError(authError.message);
         setLoading(false);
         return;
       }
 
-      if (profile.role === 'SUPER_ADMIN' || profile.role === 'ALLOCATION_ADMIN') {
-        router.push('/admin');
-      } else if (profile.role === 'CLUB_COORDINATOR' || profile.role === 'CENTRE_COORDINATOR') {
-        router.push('/coordinator');
+      if (data?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role, must_change_password')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          setError('Account profile not configured. Please contact the administrator.');
+          setLoading(false);
+          return;
+        }
+
+        if (profile.role === 'SUPER_ADMIN' || profile.role === 'ALLOCATION_ADMIN') {
+          router.push('/admin');
+        } else if (profile.role === 'CLUB_COORDINATOR' || profile.role === 'CENTRE_COORDINATOR') {
+          router.push('/coordinator');
+        } else {
+          router.push('/student');
+        }
       } else {
-        router.push('/student');
+        setError('Login failed. Please try again.');
+        setLoading(false);
       }
+    } catch (err: any) {
+      setError(err?.message || 'An unexpected error occurred during login.');
+      setLoading(false);
     }
   };
 

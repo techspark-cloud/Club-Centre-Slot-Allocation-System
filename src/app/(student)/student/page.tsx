@@ -97,8 +97,44 @@ export default async function StudentDashboard() {
   const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
   const existingCentreBookings = allocations?.filter(a => a.slot.centre_id !== null) || [];
 
+  // Check if today is a holiday
+  const nowIST = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000);
+  const todayIST = nowIST.toISOString().split('T')[0];
+  const isSunday = nowIST.getDay() === 0;
+
+  let isHoliday = false;
+  let holidayReason = '';
+
+  if (isSunday) {
+    isHoliday = true;
+    holidayReason = 'Sunday (Weekly Off)';
+  } else {
+    const { data: holidayData } = await supabase
+      .from('holidays')
+      .select('*')
+      .eq('date', todayIST)
+      .single();
+      
+    isHoliday = !!holidayData;
+    holidayReason = holidayData?.description || '';
+  }
+
   return (
     <div className="flex flex-col flex-1 gap-4 w-full">
+      {isHoliday && (
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-[2rem] p-6 shadow-md border-2 border-indigo-400/50 flex flex-col sm:flex-row items-center gap-4 justify-between animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm shrink-0">
+              <span className="text-2xl">🎉</span>
+            </div>
+            <div>
+              <h2 className="text-white font-black text-xl">Today is a Holiday!</h2>
+              <p className="text-indigo-100 font-medium">{holidayReason} • No club or centre activities are scheduled for today.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* INSTITUTIONAL HEADER */}
       <div className="bg-white rounded-[2rem] p-5 sm:p-6 border border-slate-200 shadow-sm relative overflow-hidden shrink-0">
         {/* Subtle decorative background for institutional feel */}

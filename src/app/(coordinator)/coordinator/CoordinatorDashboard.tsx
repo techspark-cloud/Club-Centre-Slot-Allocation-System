@@ -15,6 +15,7 @@ interface CoordinatorDashboardProps {
   centreSlots: any[];
   clubAllocations: any[];
   centreAllocations: any[];
+  holidaysList: any[];
 }
 
 export default function CoordinatorDashboard({
@@ -24,6 +25,7 @@ export default function CoordinatorDashboard({
   centreSlots,
   clubAllocations,
   centreAllocations,
+  holidaysList,
 }: CoordinatorDashboardProps) {
   const [activeTab, setActiveTab] = useState<'clubs' | 'centres'>(assignedClubs.length > 0 ? 'clubs' : 'centres');
   
@@ -49,6 +51,13 @@ export default function CoordinatorDashboard({
   const isFutureDate = selectedDate > today;
   const isDateLocked = isFutureDate || isWrongDay;
 
+  // Compute holiday status based on selectedDate
+  const isSunday = selectedDateObj.getDay() === 0;
+  const dbHoliday = holidaysList.find(h => h.date === selectedDate);
+  
+  const isHoliday = isSunday || !!dbHoliday;
+  const holidayReason = isSunday ? 'Sunday (Weekly Off)' : (dbHoliday?.description || '');
+
   useEffect(() => {
     if (!selectedSlotId || !selectedDate) {
       setAttendanceData([]);
@@ -57,9 +66,17 @@ export default function CoordinatorDashboard({
     const fetchAttendance = async () => {
       setIsAttendanceLoading(true);
       try {
-        const res = await fetch(`/api/coordinator/attendance?slot_id=${selectedSlotId}&date=${selectedDate}`);
-        const { data } = await res.json();
-        setAttendanceData(data || []);
+        const res = await fetch(`/api/coordinator/attendance?slot_id=${selectedSlotId}&date=${selectedDate}&t=${Date.now()}`, {
+          credentials: 'include'
+        });
+        const { data, error } = await res.json();
+        
+        if (error) {
+          console.error("API Error fetching attendance:", error);
+          setAttendanceData([]);
+        } else {
+          setAttendanceData(data || []);
+        }
       } catch(e) {
         console.error(e);
       } finally {
@@ -97,6 +114,58 @@ export default function CoordinatorDashboard({
     } catch(e) {
       console.error('Failed to save attendance', e);
       return false;
+    }
+  };
+
+  const handleOpenReportModal = async () => {
+    if (!selectedSlotId || isDateLocked || isHoliday) return;
+    
+    const enrolledStudents = allocationsForSlot(selectedSlotId);
+    const unmarkedStudents = enrolledStudents.filter(m => {
+      if (!m.student) return false;
+      const att = attendanceData.find(a => a.student_id === m.student?.id);
+      return !att;
+    });
+
+    if (unmarkedStudents.length === 0) {
+      setShowReportModal(true);
+      return;
+    }
+
+    if (!confirm(`You have ${unmarkedStudents.length} unmarked students. Do you want to automatically mark them as ABSENT and proceed to the report?`)) {
+      return;
+    }
+
+    setIsAttendanceLoading(true);
+
+    try {
+      const promises = unmarkedStudents.map(m => {
+        if (!m.student) return Promise.resolve(false);
+        // Optimistic UI Update for this student
+        setAttendanceData(prev => [
+          ...prev.filter(a => a.student_id !== m.student!.id),
+          { student_id: m.student!.id, status: 'ABSENT', date: selectedDate }
+        ]);
+
+        return fetch('/api/coordinator/attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slot_id: selectedSlotId,
+            date: selectedDate,
+            student_id: m.student.id,
+            status: 'ABSENT'
+          })
+        });
+      });
+
+      await Promise.all(promises);
+      setShowReportModal(true);
+    } catch (e) {
+      console.error('Failed to mark all as absent', e);
+      alert("Some students failed to be marked. Please check your connection.");
+    } finally {
+      setIsAttendanceLoading(false);
     }
   };
 
@@ -296,6 +365,20 @@ export default function CoordinatorDashboard({
           </p>
         </div>
       </div>
+
+      {isHoliday && (
+        <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-[2rem] p-6 shadow-md flex items-center gap-4 justify-between animate-in fade-in slide-in-from-top-4 mb-6 mt-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm shrink-0">
+              <span className="text-2xl">🚨</span>
+            </div>
+            <div>
+              <h2 className="text-white font-black text-xl">Holiday Selected!</h2>
+              <p className="text-orange-100 font-medium">Reason: {holidayReason}. Attendance taking is disabled for this date.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       {(assignedClubs.length > 0 && assignedCentres.length > 0) && (
@@ -525,9 +608,9 @@ export default function CoordinatorDashboard({
                             />
                             <button 
                               onClick={() => setShowQRScanner(true)}
-                              disabled={isDateLocked}
+                              disabled={isDateLocked || isHoliday}
                               className={`flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors shadow-sm ${
-                                isDateLocked 
+                                isDateLocked || isHoliday
                                   ? 'bg-slate-100 text-slate-400 border-2 border-slate-100 cursor-not-allowed'
                                   : 'text-slate-700 bg-white border-2 border-slate-200 hover:border-blue-500 hover:text-blue-600'
                               }`}
@@ -535,7 +618,7 @@ export default function CoordinatorDashboard({
                               <QrCode className="w-4 h-4" /> Scan
                             </button>
                             <button 
-                              onClick={() => setShowReportModal(true)}
+                              onClick={handleOpenReportModal}
                               className={`flex-1 sm:flex-auto flex items-center justify-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm ${
                                 enrolledStudents.length > 0 && attendanceData.length === enrolledStudents.length 
                                   ? 'bg-green-600 hover:bg-green-700 text-white animate-pulse ring-4 ring-green-600/30' 
@@ -553,12 +636,14 @@ export default function CoordinatorDashboard({
                           </div>
                         </div>
                         <div className="max-h-[600px] overflow-y-auto bg-white relative">
-                          {isDateLocked && (
+                          {(isDateLocked || isHoliday) && (
                             <div className="bg-amber-50 border-b-2 border-amber-100 p-3 flex items-center justify-center gap-2 text-amber-700 text-xs sm:text-sm font-bold">
                               <AlertCircle className="w-4 h-4 shrink-0" />
-                              {isWrongDay 
-                                ? `You cannot mark attendance on a ${dayOfWeek} for a ${activeSlot.day} slot.` 
-                                : `You cannot mark attendance for future dates.`
+                              {isHoliday 
+                                ? `Attendance taking is disabled because ${holidayReason} is a declared holiday.`
+                                : isWrongDay 
+                                  ? `You cannot mark attendance on a ${dayOfWeek} for a ${activeSlot.day} slot.` 
+                                  : `You cannot mark attendance for future dates.`
                               }
                             </div>
                           )}

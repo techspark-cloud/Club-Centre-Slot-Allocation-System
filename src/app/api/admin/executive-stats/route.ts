@@ -33,23 +33,36 @@ export async function GET(request: Request) {
       allSlots = allSlots.filter(s => s.session === session);
     }
 
-    // 2. Fetch students with allocations (paginated for large datasets)
+    // 2. Fetch students with allocations (Parallelized for extreme speed)
     let allStudents: any[] = [];
-    let from = 0;
-    const limit = 1000;
-    let keepFetching = true;
-    while (keepFetching) {
-      const { data: batch } = await supabase
-        .from('students')
-        .select('id, course, section, semester, allocations(id, slot_id)')
-        .range(from, from + limit - 1);
-      if (batch && batch.length > 0) {
-        allStudents = allStudents.concat(batch);
-        from += limit;
-        if (batch.length < limit) keepFetching = false;
-      } else {
-        keepFetching = false;
-      }
+    
+    // First get the total count to know how many batches we need
+    const { count } = await supabase
+      .from('students')
+      .select('*', { count: 'exact', head: true });
+      
+    if (count && count > 0) {
+      const limit = 1000;
+      const totalBatches = Math.ceil(count / limit);
+      
+      // Create an array of parallel fetch promises
+      const batchPromises = Array.from({ length: totalBatches }).map((_, i) => {
+        const from = i * limit;
+        return supabase
+          .from('students')
+          .select('id, course, section, semester, allocations(id, slot_id)')
+          .range(from, from + limit - 1);
+      });
+      
+      // Execute all fetches at the exact same time
+      const results = await Promise.all(batchPromises);
+      
+      // Combine results
+      results.forEach(res => {
+        if (res.data) {
+          allStudents = allStudents.concat(res.data);
+        }
+      });
     }
 
     // 3. Fetch attendance data within date range

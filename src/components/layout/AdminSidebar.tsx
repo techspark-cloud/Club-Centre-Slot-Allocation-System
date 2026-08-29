@@ -25,6 +25,7 @@ export default function AdminSidebar() {
     { name: 'Centres', href: '/admin/centres', icon: Layers },
     { name: 'Activity Slots', href: '/admin/slots', icon: Calendar },
     { name: 'Allocations Manager', href: '/admin/allocations', icon: CheckSquare },
+    { name: 'Holidays', href: '/admin/holidays', icon: Calendar },
     { name: 'Email Config', href: '/admin/emails', icon: Mail },
     { name: 'Campus 3D Map', href: '/admin/map', icon: Map },
     { name: 'Import Master Data', href: '/admin/import', icon: Upload },

@@ -202,7 +202,28 @@ export default function AuditReportsPage() {
 
       const submittedEntityNames = new Set(visibleReports.map(r => r.entityName));
 
-      // 3. Identify Defaulters (Expected but not submitted)
+      // 3. Check if the filterDate is a declared holiday or a Sunday
+      const filterDateObj = new Date(filterDate);
+      const isSunday = filterDateObj.getDay() === 0;
+
+      let isHoliday = false;
+      let holidayReason = '';
+
+      if (isSunday) {
+        isHoliday = true;
+        holidayReason = 'Sunday (Weekly Off)';
+      } else {
+        const { data: holidayData } = await supabase
+          .from('holidays')
+          .select('description')
+          .eq('date', filterDate)
+          .single();
+          
+        isHoliday = !!holidayData;
+        holidayReason = holidayData?.description || '';
+      }
+
+      // 4. Identify Defaulters (Expected but not submitted) ONLY IF NOT A HOLIDAY
       const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
       const targetDay = days[new Date(filterDate).getDay()];
 
@@ -232,7 +253,7 @@ export default function AuditReportsPage() {
           const entityName = isClubSlot ? slot.clubs?.name : slot.centres?.name;
           const facultyName = isClubSlot ? slot.clubs?.faculty_name : slot.centres?.faculty_name;
 
-          if (entityName && !submittedEntityNames.has(entityName)) {
+          if (!isHoliday && entityName && !submittedEntityNames.has(entityName)) {
             defaulters.push({
               entityName,
               facultyName: facultyName || 'Coordinator',
@@ -272,9 +293,11 @@ export default function AuditReportsPage() {
         });
       }
 
-      // 5. Build Defaulters HTML Table
+      // 6. Build Defaulters HTML Table
       let defaulterRows = '';
-      if (defaulters.length === 0) {
+      if (isHoliday) {
+        defaulterRows = `<tr><td colspan="4" style="padding: 15px; text-align: center; color: #d97706; font-weight: bold; background-color: #fef3c7;">🚨 Holiday Declared (${holidayReason}). No activities were expected to run.</td></tr>`;
+      } else if (defaulters.length === 0) {
         defaulterRows = '<tr><td colspan="4" style="padding: 15px; text-align: center; color: #22c55e; font-weight: bold;">🎉 Amazing! All scheduled activities have submitted their reports!</td></tr>';
       } else {
         defaulters.forEach(d => {
@@ -601,24 +624,43 @@ export default function AuditReportsPage() {
                 <div>
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Photo Evidence</h3>
                   {selectedReport.imageUrl ? (
-                    <a href={selectedReport.imageUrl} target="_blank" rel="noopener noreferrer" className="block relative group rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 aspect-video flex items-center justify-center">
-                      <img 
-                        src={selectedReport.imageUrl.includes('/d/') ? `https://drive.google.com/thumbnail?id=${selectedReport.imageUrl.match(/\/d\/(.*?)\//)?.[1]}&sz=w1000` : selectedReport.imageUrl} 
-                        alt="Activity Evidence" 
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback to icon if thumbnail fails (e.g. strict sharing permissions)
-                          (e.target as HTMLElement).style.display = 'none';
-                          e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
-                        }}
-                      />
-                      <ImageIcon className="fallback-icon hidden w-12 h-12 text-slate-300 group-hover:scale-110 transition-transform" />
-                      <div className="absolute inset-0 bg-blue-900/0 group-hover:bg-blue-900/60 transition-colors flex items-center justify-center">
-                        <span className="text-white font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                          <ExternalLink className="w-5 h-5" /> Open in Google Drive
-                        </span>
+                    <div className="relative group rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 aspect-video flex items-center justify-center">
+                      {(() => {
+                        const url = selectedReport.imageUrl;
+                        // Foolproof regex to extract Google Drive IDs (which are typically 33 chars of letters, numbers, hyphens, underscores)
+                        const match = url.match(/[-\w]{25,}/);
+                        const driveId = match ? match[0] : null;
+                        
+                        if (driveId) {
+                          return (
+                            <iframe 
+                              src={`https://drive.google.com/file/d/${driveId}/preview`}
+                              className="w-full h-full border-0 bg-slate-100"
+                              allow="autoplay"
+                            />
+                          );
+                        } else {
+                           return (
+                             <a href={url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-blue-600 transition-colors">
+                               <ImageIcon className="w-12 h-12 mb-2" />
+                               <span className="text-sm font-bold">Open Evidence Link</span>
+                             </a>
+                           );
+                        }
+                      })()}
+                      
+                      {/* External Link Overlay Button */}
+                      <div className="absolute top-3 right-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                        <a 
+                          href={selectedReport.imageUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="pointer-events-auto flex items-center gap-2 bg-slate-900/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-600 transition-colors shadow-lg"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> Open Full
+                        </a>
                       </div>
-                    </a>
+                    </div>
                   ) : (
                     <div className="h-full min-h-[120px] rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 bg-slate-50">
                       <p className="text-sm font-bold">No photo attached</p>

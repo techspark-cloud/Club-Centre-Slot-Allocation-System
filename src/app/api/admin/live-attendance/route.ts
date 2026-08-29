@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 
-
+export const dynamic = 'force-dynamic';
 
 const allocationsCache = new Map<string, { data: any[], timestamp: number }>();
 const CACHE_TTL = 1 * 60 * 1000; // 1 minute cache

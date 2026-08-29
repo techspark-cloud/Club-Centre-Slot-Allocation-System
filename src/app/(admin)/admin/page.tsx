@@ -43,49 +43,39 @@ export default function AdminDashboard() {
     if (isManualRefresh) setIsRefreshing(true);
 
     try {
-      // 1. Fetch Students (Bypass 1000 limit)
+      // 1. Fetch Students in Parallel
       let allStudents: any[] = [];
-      let keepFetchingStudents = true;
-      let fromS = 0;
-      const limitS = 1000;
-      while (keepFetchingStudents) {
-        const { data, error } = await supabase.from('students').select('id, course, gender, hosteler, status, activity_session').range(fromS, fromS + limitS - 1);
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allStudents = [...allStudents, ...data];
-          fromS += limitS;
-          if (data.length < limitS) keepFetchingStudents = false;
-        } else {
-          keepFetchingStudents = false;
-        }
+      const { count: studentCount } = await supabase.from('students').select('*', { count: 'exact', head: true });
+      if (studentCount && studentCount > 0) {
+        const limitS = 1000;
+        const totalBatches = Math.ceil(studentCount / limitS);
+        const batchPromises = Array.from({ length: totalBatches }).map((_, i) => {
+          const from = i * limitS;
+          return supabase.from('students').select('id, course, gender, hosteler, status, activity_session').range(from, from + limitS - 1);
+        });
+        const results = await Promise.all(batchPromises);
+        results.forEach(res => { if (res.data) allStudents = allStudents.concat(res.data); });
       }
 
-      // Fetch all allocations bypassing 1000 limit to determine exact completion and true demand
+      // 2. Fetch Allocations in Parallel
       let allAllocations: any[] = [];
-      let keepFetchingAllocations = true;
-      let fromA = 0;
-      const limitA = 1000;
-      while (keepFetchingAllocations) {
-        const { data, error } = await supabase.from('allocations').select(`
-          student_id,
-          slots(
-            day,
-            club:clubs(name),
-            centre:centres(name)
-          )
-        `).range(fromA, fromA + limitA - 1);
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allAllocations = [...allAllocations, ...data];
-          fromA += limitA;
-          if (data.length < limitA) keepFetchingAllocations = false;
-        } else {
-          keepFetchingAllocations = false;
-        }
+      const { count: allocCount } = await supabase.from('allocations').select('*', { count: 'exact', head: true });
+      if (allocCount && allocCount > 0) {
+        const limitA = 1000;
+        const totalBatches = Math.ceil(allocCount / limitA);
+        const batchPromises = Array.from({ length: totalBatches }).map((_, i) => {
+          const from = i * limitA;
+          return supabase.from('allocations').select(`
+            student_id,
+            slots(
+              day,
+              club:clubs(name),
+              centre:centres(name)
+            )
+          `).range(from, from + limitA - 1);
+        });
+        const results = await Promise.all(batchPromises);
+        results.forEach(res => { if (res.data) allAllocations = allAllocations.concat(res.data); });
       }
       
       const totalAllocated = allAllocations.length;
@@ -133,7 +123,21 @@ export default function AdminDashboard() {
       let studentsCompletedCount = 0;
 
       allStudents.forEach(s => {
-        const c = s.course || 'Unknown';
+        let c = s.course || 'Unknown';
+        
+        // Convert long names to short acronyms
+        if (c.includes('Computer Science and Business Systems')) c = 'CSBS';
+        else if (c.includes('Artificial Intelligence and Data Science')) c = 'AIDS';
+        else if (c.includes('Artificial Intelligence and Machine Learning')) c = 'AIML';
+        else if (c.includes('Mechanical Engineering')) c = 'MECH';
+        else if (c.includes('Biotechnology')) c = 'BT';
+        else if (c.includes('VLSI Design and Technology')) c = 'ECE (VLSI)';
+        else if (c.includes('Electronics and Communication Engineering')) c = 'ECE';
+        else if (c.includes('Computer Science and Engineering')) c = 'CSE';
+        else if (c.includes('Information Technology')) c = 'IT';
+        else if (c.includes('Electrical and Electronics Engineering')) c = 'EEE';
+        else if (c.includes('Civil Engineering')) c = 'CIVIL';
+        
         if (!deptMap[c]) deptMap[c] = { name: c, booked: 0, pending: 0 };
         
         const isMorning = s.activity_session === 'FORENOON';
@@ -187,7 +191,14 @@ export default function AdminDashboard() {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
         
-      const dayStats = Object.entries(dayMap).map(([day, counts]) => ({ day, club: counts.club, centre: counts.centre }));
+      const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+      const dayStats = Object.entries(dayMap)
+        .map(([day, counts]) => ({ day, club: counts.club, centre: counts.centre }))
+        .sort((a, b) => {
+          const indexA = dayOrder.indexOf(a.day.toUpperCase().trim());
+          const indexB = dayOrder.indexOf(b.day.toUpperCase().trim());
+          return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+        });
 
       // 3. Fetch Recent Activity
       const { data: recentActivity, error: recentError } = await supabase
@@ -387,16 +398,21 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Department Bar Chart */}
-        <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm lg:col-span-2">
+        <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm lg:col-span-2 flex flex-col">
           <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
             <Target className="w-5 h-5 text-indigo-500" />
             Department Booking Breakdown
           </h3>
-          <div className="h-72 w-full">
+          <div className="flex-1 w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.departmentStats} margin={{ top: 5, right: 30, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 12, fontWeight: 700, fill: '#64748b' }} 
+                />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
                 <Tooltip 
                   cursor={{ fill: '#f8fafc' }}
@@ -509,14 +525,14 @@ export default function AdminDashboard() {
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Top 5 Clubs</h4>
               <div className="space-y-3">
                 {stats.topClubs.map((club, i) => (
-                  <div key={club.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-blue-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-full bg-white font-bold text-xs flex items-center justify-center text-slate-500 shadow-sm border border-slate-200">
+                  <div key={club.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-blue-50 transition-colors gap-3">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="w-6 h-6 rounded-full bg-white font-bold text-xs flex items-center justify-center text-slate-500 shadow-sm border border-slate-200 shrink-0 mt-0.5">
                         {i + 1}
                       </div>
-                      <span className="font-bold text-sm text-slate-700 truncate max-w-[150px]">{club.name}</span>
+                      <span className="font-bold text-sm text-slate-700 leading-tight">{club.name}</span>
                     </div>
-                    <span className="font-black text-blue-600 text-sm bg-blue-100 px-2 py-0.5 rounded-lg">{club.count}</span>
+                    <span className="font-black text-blue-600 text-sm bg-blue-100 px-2 py-0.5 rounded-lg shrink-0">{club.count}</span>
                   </div>
                 ))}
               </div>
@@ -526,14 +542,14 @@ export default function AdminDashboard() {
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Top 5 Centres</h4>
               <div className="space-y-3">
                 {stats.topCentres.map((centre, i) => (
-                  <div key={centre.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-emerald-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-full bg-white font-bold text-xs flex items-center justify-center text-slate-500 shadow-sm border border-slate-200">
+                  <div key={centre.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-emerald-50 transition-colors gap-3">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="w-6 h-6 rounded-full bg-white font-bold text-xs flex items-center justify-center text-slate-500 shadow-sm border border-slate-200 shrink-0 mt-0.5">
                         {i + 1}
                       </div>
-                      <span className="font-bold text-sm text-slate-700 truncate max-w-[150px]">{centre.name}</span>
+                      <span className="font-bold text-sm text-slate-700 leading-tight">{centre.name}</span>
                     </div>
-                    <span className="font-black text-emerald-600 text-sm bg-emerald-100 px-2 py-0.5 rounded-lg">{centre.count}</span>
+                    <span className="font-black text-emerald-600 text-sm bg-emerald-100 px-2 py-0.5 rounded-lg shrink-0">{centre.count}</span>
                   </div>
                 ))}
               </div>
@@ -550,19 +566,19 @@ export default function AdminDashboard() {
             </h3>
           </div>
           
-          <div className="flex-1 w-full h-full min-h-[300px]">
+          <div className="flex-1 w-full min-h-[350px] mt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.dayStats} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
+              <BarChart data={stats.dayStats} margin={{ top: 20, right: 30, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
                 <Tooltip 
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
-                <Bar dataKey="club" name="Club Seats" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
-                <Bar dataKey="centre" name="Centre Seats" stackId="a" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="club" name="Club Seats" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="centre" name="Centre Seats" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

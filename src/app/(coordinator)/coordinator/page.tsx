@@ -95,6 +95,13 @@ export default async function CoordinatorPage() {
     centreAllocations = ceData || [];
   }
 
+  // Fetch all holidays to pass to the client
+  const { data: holidaysData } = await supabaseAdmin
+    .from('holidays')
+    .select('*');
+
+  const holidaysList = holidaysData || [];
+
   return (
     <CoordinatorDashboard
       assignedClubs={assignedClubs}
@@ -103,6 +110,7 @@ export default async function CoordinatorPage() {
       centreSlots={centreSlots || []}
       clubAllocations={clubAllocations}
       centreAllocations={centreAllocations}
+      holidaysList={holidaysList}
     />
   );
 }
