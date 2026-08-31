@@ -206,3 +206,224 @@ export async function getPDFReportData(slotId: string, date: string) {
 
   return { students, attendance: attendance || [] };
 }
+
+export async function getMonthlyDepartmentReportData(monthPrefix: string, department: string) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  // 1. Fetch students in the department
+  const { data: students, error: studentError } = await supabaseAdmin
+    .from('students')
+    .select('id, name, register_no, course, section')
+    .eq('course', department)
+    .order('section')
+    .order('register_no');
+
+  if (studentError || !students) {
+    console.error('Error fetching students:', studentError);
+    return [];
+  }
+
+  const studentIds = students.map((s: any) => s.id);
+
+  // 2. Fetch attendance for this month
+  const { data: attendanceData, error: attError } = await supabaseAdmin
+    .from('attendance')
+    .select('student_id, status, slots(club_id, centre_id)')
+    .gte('date', `${monthPrefix}-01`)
+    .lte('date', `${monthPrefix}-31`);
+
+  if (attError) {
+    console.error('Error fetching attendance:', attError);
+    return [];
+  }
+
+  // Filter attendance for the students in this department
+  const relevantAttendance = (attendanceData || []).filter((r: any) => studentIds.includes(r.student_id));
+
+  // 3. Process stats per student
+  const studentStatsMap = new Map();
+  students.forEach((s: any) => {
+    studentStatsMap.set(s.id, {
+      ...s,
+      clubTotal: 0,
+      clubPresent: 0,
+      centreTotal: 0,
+      centrePresent: 0,
+      overallTotal: 0,
+      overallPresent: 0
+    });
+  });
+
+  relevantAttendance.forEach((record: any) => {
+    const stat = studentStatsMap.get(record.student_id);
+    if (!stat) return;
+
+    const isPresent = record.status === 'PRESENT';
+    const type = record.slots?.club_id ? 'CLUB' : (record.slots?.centre_id ? 'CENTRE' : null);
+
+    if (type === 'CLUB') {
+      stat.clubTotal++;
+      if (isPresent) stat.clubPresent++;
+    } else if (type === 'CENTRE') {
+      stat.centreTotal++;
+      if (isPresent) stat.centrePresent++;
+    }
+
+    stat.overallTotal++;
+    if (isPresent) stat.overallPresent++;
+  });
+
+  return Array.from(studentStatsMap.values());
+}
+
+export async function getUniqueDepartments() {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data, error } = await supabaseAdmin
+    .from('students')
+    .select('course');
+    
+  if (error || !data) {
+    console.error('Error fetching departments:', error);
+    return [];
+  }
+  
+  // Extract unique sorted courses
+  const uniqueCourses = [...new Set(data.map((s: any) => s.course))].filter(Boolean).sort();
+  return uniqueCourses as string[];
+}
+
+export async function getUniqueSections(department: string) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data, error } = await supabaseAdmin
+    .from('students')
+    .select('section')
+    .eq('course', department);
+    
+  if (error || !data) return [];
+  
+  return [...new Set(data.map((s: any) => s.section))].filter(Boolean).sort() as string[];
+}
+
+export async function getAllActivities() {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const [clubsRes, centresRes] = await Promise.all([
+    supabaseAdmin.from('clubs').select('id, name'),
+    supabaseAdmin.from('centres').select('id, name')
+  ]);
+
+  const clubs = (clubsRes.data || []).map(c => ({ id: c.id, name: c.name, type: 'CLUB' }));
+  const centres = (centresRes.data || []).map(c => ({ id: c.id, name: c.name, type: 'CENTRE' }));
+
+  return [...clubs, ...centres].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getAdvancedReportData(filters: {
+  startDate: string;
+  endDate: string;
+  department: string;
+  section: string;
+  activityId: string; // 'ALL' or specific club/centre ID
+  deficitOnly: boolean;
+  searchQuery?: string;
+}) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  // 1. Build Student Query
+  let studentQuery = supabaseAdmin.from('students').select('id, name, register_no, course, section');
+  if (filters.department !== 'ALL') {
+    studentQuery = studentQuery.eq('course', filters.department);
+  }
+  if (filters.section !== 'ALL') {
+    studentQuery = studentQuery.eq('section', filters.section);
+  }
+  if (filters.searchQuery && filters.searchQuery.trim() !== '') {
+    studentQuery = studentQuery.ilike('register_no', `%${filters.searchQuery.trim()}%`);
+  }
+  studentQuery = studentQuery.order('section').order('register_no');
+
+  const { data: students, error: studentError } = await studentQuery;
+  if (studentError || !students) return [];
+
+  const studentIds = students.map((s: any) => s.id);
+  if (studentIds.length === 0) return [];
+
+  // 2. Fetch Attendance within Date Range
+  // We fetch slots data directly inside the attendance query
+  let attQuery = supabaseAdmin
+    .from('attendance')
+    .select('student_id, status, slots!inner(club_id, centre_id)')
+    .gte('date', filters.startDate)
+    .lte('date', filters.endDate);
+
+  // If a specific activity is selected, we filter by it via the slots table
+  if (filters.activityId !== 'ALL') {
+    attQuery = attQuery.or(`club_id.eq.${filters.activityId},centre_id.eq.${filters.activityId}`, { foreignTable: 'slots' });
+  }
+
+  const { data: attendanceData, error: attError } = await attQuery;
+  if (attError) return [];
+
+  // 3. Process Stats
+  const relevantAttendance = (attendanceData || []).filter((r: any) => studentIds.includes(r.student_id));
+  const studentStatsMap = new Map();
+  
+  students.forEach((s: any) => {
+    studentStatsMap.set(s.id, {
+      ...s,
+      clubTotal: 0, clubPresent: 0,
+      centreTotal: 0, centrePresent: 0,
+      overallTotal: 0, overallPresent: 0
+    });
+  });
+
+  relevantAttendance.forEach((record: any) => {
+    const stat = studentStatsMap.get(record.student_id);
+    if (!stat) return;
+
+    const isPresent = record.status === 'PRESENT';
+    const type = record.slots?.club_id ? 'CLUB' : (record.slots?.centre_id ? 'CENTRE' : null);
+
+    if (type === 'CLUB') {
+      stat.clubTotal++;
+      if (isPresent) stat.clubPresent++;
+    } else if (type === 'CENTRE') {
+      stat.centreTotal++;
+      if (isPresent) stat.centrePresent++;
+    }
+
+    stat.overallTotal++;
+    if (isPresent) stat.overallPresent++;
+  });
+
+  let results = Array.from(studentStatsMap.values());
+
+  // 4. Apply Deficit Filter (< 75% overall attendance)
+  if (filters.deficitOnly) {
+    results = results.filter(stat => {
+      if (stat.overallTotal === 0) return false; 
+      const pct = (stat.overallPresent / stat.overallTotal) * 100;
+      return pct < 75;
+    });
+  }
+
+  return results;
+}
+

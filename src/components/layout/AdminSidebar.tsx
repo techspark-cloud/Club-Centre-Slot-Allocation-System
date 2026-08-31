@@ -18,6 +18,7 @@ export default function AdminSidebar() {
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Executive View', href: '/admin/executive', icon: Activity },
     { name: 'Audit Reports', href: '/admin/audit-reports', icon: FileText },
+    { name: 'Reports Hub', href: '/admin/reports', icon: FileText },
     { name: 'Capacity Analytics', href: '/admin/capacity', icon: PieChart },
     { name: 'Live Attendance', href: '/admin/attendance', icon: UserCheck },
     { name: 'Students', href: '/admin/students', icon: Users },
