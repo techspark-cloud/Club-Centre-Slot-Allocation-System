@@ -37,6 +37,9 @@ export const metadata: Metadata = {
     icon: "/favicon.webp",
     apple: "/rit-logo.png",
   },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION, // Pulled dynamically from .env
+  },
 };
 
 export const viewport = {
