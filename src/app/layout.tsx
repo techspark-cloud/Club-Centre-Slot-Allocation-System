@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     apple: "/rit-logo.png",
   },
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION, // Pulled dynamically from .env
+    google: "8Prycx3aovbBh1OL81tB-qqIR00hHFPUOBiiRU2FWno",
   },
 };
 
