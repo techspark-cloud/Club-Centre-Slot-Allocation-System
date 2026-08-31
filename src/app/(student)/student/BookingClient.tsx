@@ -700,15 +700,54 @@ export default function BookingClient({
           
           {/* Attendance History */}
           <div className="max-w-4xl mx-auto mt-12 pt-8 border-t border-slate-200/60">
-            <div className="flex items-center justify-between mb-5 px-2">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Your Attendance History</h3>
-              <div className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200 shadow-sm flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
-                Total Present: {attendanceRecords.filter(r => r.status === 'PRESENT').length}
-              </div>
-            </div>
-            
-            {attendanceRecords.length > 0 ? (
+            {(() => {
+              const clubRecords = attendanceRecords.filter(r => existingClubBookings.some(b => b.slot_id === r.slot_id));
+              const centreRecords = attendanceRecords.filter(r => existingCentreBookings.some(b => b.slot_id === r.slot_id));
+              
+              const clubPresent = clubRecords.filter(r => r.status === 'PRESENT').length;
+              const clubTotal = clubRecords.length;
+              const clubPercentage = clubTotal > 0 ? Math.round((clubPresent / clubTotal) * 100) : 0;
+              
+              const centrePresent = centreRecords.filter(r => r.status === 'PRESENT').length;
+              const centreTotal = centreRecords.length;
+              const centrePercentage = centreTotal > 0 ? Math.round((centrePresent / centreTotal) * 100) : 0;
+              
+              const totalPresent = attendanceRecords.filter(r => r.status === 'PRESENT').length;
+
+              return (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 px-2">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Your Attendance History</h3>
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
+                      {/* Club Stats */}
+                      <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg shadow-sm">
+                        <div className="flex flex-col items-start">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-blue-500 leading-none">Club</span>
+                          <span className="text-xs font-bold text-blue-800">{clubTotal > 0 ? `${clubPercentage}%` : 'N/A'}</span>
+                        </div>
+                        <div className="h-6 w-px bg-blue-200 mx-1"></div>
+                        <span className="text-[10px] font-semibold text-blue-600">{clubPresent}/{clubTotal} present</span>
+                      </div>
+                      
+                      {/* Centre Stats */}
+                      <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg shadow-sm">
+                        <div className="flex flex-col items-start">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-indigo-500 leading-none">Centre</span>
+                          <span className="text-xs font-bold text-indigo-800">{centreTotal > 0 ? `${centrePercentage}%` : 'N/A'}</span>
+                        </div>
+                        <div className="h-6 w-px bg-indigo-200 mx-1"></div>
+                        <span className="text-[10px] font-semibold text-indigo-600">{centrePresent}/{centreTotal} present</span>
+                      </div>
+                      
+                      {/* Total Overall */}
+                      <div className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 shadow-sm flex items-center gap-1.5 shrink-0">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Total: {totalPresent}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {attendanceRecords.length > 0 ? (
               <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm overflow-hidden">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 border-b-2 border-slate-200">
@@ -776,6 +815,9 @@ export default function BookingClient({
                 <p className="text-slate-500 font-medium text-sm">Your attendance will appear here once marked by your coordinator.</p>
               </div>
             )}
+            </>
+              );
+            })()}
           </div>
         </div>
       )}
