@@ -16,7 +16,8 @@ export default function BookingClient({
   centreSlots, 
   existingClubBookings, 
   existingCentreBookings,
-  customRules = []
+  customRules = [],
+  attendanceRecords = []
 }: { 
   student: any,
   studentId: string, 
@@ -24,7 +25,8 @@ export default function BookingClient({
   centreSlots: any[],
   existingClubBookings: any[],
   existingCentreBookings: any[],
-  customRules?: any[]
+  customRules?: any[],
+  attendanceRecords?: any[]
 }) {
   const [selectedClubIds, setSelectedClubIds] = useState<Record<string, string>>({});
   const [selectedCentreIds, setSelectedCentreIds] = useState<Record<string, string>>({});
@@ -694,6 +696,86 @@ export default function BookingClient({
               <Download className="w-5 h-5" />
               Download Official Timetable
             </button>
+          </div>
+          
+          {/* Attendance History */}
+          <div className="max-w-4xl mx-auto mt-12 pt-8 border-t border-slate-200/60">
+            <div className="flex items-center justify-between mb-5 px-2">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Your Attendance History</h3>
+              <div className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200 shadow-sm flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Total Present: {attendanceRecords.filter(r => r.status === 'PRESENT').length}
+              </div>
+            </div>
+            
+            {attendanceRecords.length > 0 ? (
+              <div className="bg-white rounded-xl border-2 border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b-2 border-slate-200">
+                    <tr>
+                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Date</th>
+                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/2">Activity</th>
+                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 w-1/4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {attendanceRecords.map((record, idx) => {
+                      const clubBooking = existingClubBookings.find(b => b.slot_id === record.slot_id);
+                      const centreBooking = existingCentreBookings.find(b => b.slot_id === record.slot_id);
+                      
+                      let activityName = 'Unknown Activity';
+                      let typeLabel = '';
+                      if (clubBooking) {
+                        activityName = clubBooking.slot.club.name;
+                        typeLabel = 'CLUB';
+                      } else if (centreBooking) {
+                        activityName = centreBooking.slot.centre.name;
+                        typeLabel = 'CENTRE';
+                      }
+
+                      return (
+                        <tr key={`${record.slot_id}-${record.date}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-4 align-middle">
+                            <span className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                              <CalendarClock className="w-4 h-4 text-slate-400" />
+                              {new Date(record.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          </td>
+                          <td className="p-4 align-middle">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-extrabold text-slate-900 leading-tight mb-1">{activityName}</span>
+                              {typeLabel && (
+                                <span className={`w-fit px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${typeLabel === 'CLUB' ? 'bg-blue-100 text-blue-800 border border-blue-200/50' : 'bg-indigo-100 text-indigo-800 border border-indigo-200/50'}`}>
+                                  {typeLabel}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-4 align-middle">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-black uppercase tracking-wide border shadow-sm ${
+                              record.status === 'PRESENT' 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                : 'bg-red-50 text-red-700 border-red-200'
+                            }`}>
+                              {record.status === 'PRESENT' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                              {record.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border-2 border-slate-200 border-dashed rounded-xl p-8 sm:p-12 text-center flex flex-col items-center justify-center">
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 mb-4">
+                  <CalendarClock className="w-8 h-8 text-slate-400" />
+                </div>
+                <h4 className="text-slate-800 text-lg font-black tracking-tight mb-1">No Attendance Records Yet</h4>
+                <p className="text-slate-500 font-medium text-sm">Your attendance will appear here once marked by your coordinator.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

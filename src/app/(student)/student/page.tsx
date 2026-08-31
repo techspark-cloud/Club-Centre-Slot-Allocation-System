@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseAdmin } from '@supabase/supabase-js';
 import { Clock, AlertCircle, CalendarClock, ShieldCheck } from 'lucide-react';
 import BookingClient from './BookingClient';
 import IDVerificationClient from './IDVerificationClient';
@@ -96,6 +97,18 @@ export default async function StudentDashboard() {
 
   const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
   const existingCentreBookings = allocations?.filter(a => a.slot.centre_id !== null) || [];
+
+  // Fetch student's attendance records using admin client to bypass RLS
+  const supabaseAdmin = createSupabaseAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: attendance } = await supabaseAdmin
+    .from('attendance')
+    .select('*')
+    .eq('student_id', student.id)
+    .order('date', { ascending: false });
 
   // Check if today is a holiday
   const nowIST = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000);
@@ -278,6 +291,7 @@ export default async function StudentDashboard() {
               existingClubBookings={existingClubBookings}
               existingCentreBookings={existingCentreBookings}
               customRules={customRules}
+              attendanceRecords={attendance || []}
             />
           )}
         </div>
