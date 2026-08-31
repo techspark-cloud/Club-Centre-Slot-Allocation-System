@@ -1,5 +1,4 @@
 import LiveAttendanceGrid from '@/app/components/LiveAttendanceGrid';
-import MonthlyReportGenerator from '@/app/components/MonthlyReportGenerator';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
@@ -21,7 +20,6 @@ export default async function MasterAdminAttendancePage() {
 
   return (
     <div className="p-6 sm:p-8 space-y-8 animate-in fade-in duration-500">
-      <MonthlyReportGenerator />
       <LiveAttendanceGrid type="ALL" />
     </div>
   );

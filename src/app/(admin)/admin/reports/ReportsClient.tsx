@@ -6,6 +6,7 @@ import { getUniqueDepartments, getUniqueSections, getAllActivities, getAdvancedR
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import MonthlyReportGenerator from '@/app/components/MonthlyReportGenerator';
 
 export default function ReportsClient() {
   const [loading, setLoading] = useState(false);
@@ -172,6 +173,10 @@ export default function ReportsClient() {
       <div className="mb-8">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Reports Hub</h1>
         <p className="text-slate-500 font-medium">Generate highly customized attendance reports in PDF or Excel.</p>
+      </div>
+
+      <div className="mb-8">
+        <MonthlyReportGenerator />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
