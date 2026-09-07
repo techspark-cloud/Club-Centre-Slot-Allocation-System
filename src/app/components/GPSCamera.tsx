@@ -17,7 +17,8 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
   const [location, setLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
 
   const stopStream = useCallback(() => {
     if (stream) {
@@ -30,7 +31,6 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
     setIsLoading(true);
     setError(null);
     
-    // Check for Secure Context (HTTPS or localhost)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setError("Camera access is blocked by your browser. This usually happens when the site is not accessed over HTTPS or localhost.");
       setIsLoading(false);
@@ -38,33 +38,46 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
     }
 
     try {
+      // First get available devices if we haven't already
+      let videoDevices = devices;
+      if (videoDevices.length === 0) {
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+        setDevices(videoDevices);
+      }
+
+      let constraints: MediaStreamConstraints = { video: { facingMode: 'environment' } }; // Default mobile preferred
+
+      // If we have specific devices and have cycled, use deviceId
+      if (videoDevices.length > 0) {
+        const selectedDevice = videoDevices[currentDeviceIndex % videoDevices.length];
+        if (selectedDevice && selectedDevice.deviceId) {
+           constraints = { video: { deviceId: { exact: selectedDevice.deviceId } } };
+        }
+      }
+
       let mediaStream;
       try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode }
-        });
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (fallbackErr) {
-        // Fallback if the specific facing mode is not supported (common on some laptops)
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: true
-        });
+        // Ultimate fallback
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
       
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Explicitly play the video to prevent black screens
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play().catch(e => console.error("Video play error:", e));
         };
       }
     } catch (err: any) {
       console.error("Camera error:", err);
-      setError("Could not access camera. Please check permissions.");
+      setError("Could not access camera. Please check permissions or hardware switch.");
     } finally {
       setIsLoading(false);
     }
-  }, [facingMode, stopStream]);
+  }, [devices, currentDeviceIndex, stopStream]);
 
   const getLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -112,7 +125,9 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
   }, [startCamera, getLocation, stopStream]);
 
   const switchCamera = () => {
-    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+    if (devices.length > 1) {
+      setCurrentDeviceIndex(prev => prev + 1);
+    }
   };
 
   const handleCapture = () => {
@@ -230,7 +245,7 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
               autoPlay 
               playsInline 
               muted 
-              className={`w-full h-full object-contain ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+              className="w-full h-full object-contain"
             />
             {/* Hidden canvas for processing */}
             <canvas ref={canvasRef} className="hidden" />
