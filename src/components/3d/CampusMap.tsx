@@ -233,6 +233,46 @@ const BLOCKS = [
       }))
     ]
   },
+  {
+    id: 'ROAD_NETWORK',
+    name: 'Campus Road Network',
+    color: '#94a3b8',
+    position: [0, 0, 0] as [number, number, number],
+    parts: [
+      // Main vertical road spanning parallel to B block (Road is the thick black line)
+      { size: [6, 0.1, 150], position: [0, 0.05, -90], color: '#1e293b' }, // Dark asphalt
+      
+      // Left branch into B block (Near the bottom of B block)
+      { size: [20, 0.1, 6], position: [-10, 0.05, -50], color: '#1e293b' },
+      
+      // Right branch S-curve towards C Block
+      // 1. Horizontal right (starting near the top/middle of B block)
+      { size: [25, 0.1, 6], position: [12.5, 0.05, -100], color: '#1e293b' },
+      // 2. Vertical UP (Parallel to main road)
+      { size: [6, 0.1, 40], position: [22, 0.05, -117], color: '#1e293b' },
+      // 3. Horizontal right into C block (hits the joint of C block)
+      { size: [15, 0.1, 6], position: [32.5, 0.05, -134], color: '#1e293b' }
+    ]
+  },
+  {
+    id: 'C_BLOCK',
+    name: 'C Block',
+    color: '#8b5cf6', // Purple
+    position: [50, 0, -115] as [number, number, number], 
+    parts: [
+      // Base/Courtyard
+      { size: [20, 0.2, 90], position: [0, 0.1, 0], color: '#e2e8f0' },
+      
+      // Bottom half of C Block (tilted left, matching the drawing's bottom angle \)
+      { size: [12, 12, 45], position: [-3, 6, 20], rotation: [0, 0.15, 0], color: '#8b5cf6' },
+      
+      // Top half of C Block (tilted right, matching the drawing's top angle /)
+      { size: [12, 12, 45], position: [-3, 6, -20], rotation: [0, -0.15, 0], color: '#7c3aed' },
+      
+      // Joint connector where the road hits
+      { size: [12, 12, 10], position: [-6, 6, 0], color: '#6d28d9' }
+    ]
+  }
 ];
 
 // --- PATHFINDING GRAPH ---

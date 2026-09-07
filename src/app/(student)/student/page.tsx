@@ -62,6 +62,13 @@ export default async function StudentDashboard() {
       const customDays = customRules.map(r => r.day.trim());
       
       const filteredSlots = slots.filter(s => {
+        // Restrict Semiconductor Centre to ECE and VLSI only
+        if (s.centre_id && s.centre?.name === 'Centre for Semiconductor Design') {
+          const isAllowed = student.course === 'B.E. Electronics and Communication Engineering' || 
+                            student.course === 'B.E. Electronics Engineering (VLSI Design and Technology)';
+          if (!isAllowed) return false;
+        }
+
         if (student.allowed_day === 'ANY' || student.allowed_day === 'INDEPENDENT') return true;
         
         // Custom Rule filter: if a custom rule exists for this day, it ALWAYS overrides standard session matching

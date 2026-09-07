@@ -13,6 +13,8 @@ export default function MonthlyReportGenerator() {
   const [department, setDepartment] = useState('');
   const [departments, setDepartments] = useState<string[]>([]);
   const [sendingAll, setSendingAll] = useState(false);
+  const [sendingVC, setSendingVC] = useState(false);
+  const [sendingVP, setSendingVP] = useState(false);
   const [sendProgress, setSendProgress] = useState(0);
 
   // Hardcoded for simplicity based on the current academic year
@@ -248,6 +250,239 @@ export default function MonthlyReportGenerator() {
     }
   };
 
+  const sendToVC = async () => {
+    const selectedMonthLabel = availableMonths.find(m => m.value === month)?.label || month;
+    if (!confirm(`Are you sure you want to generate and email a CONSOLIDATED report for ALL departments to the VC for ${selectedMonthLabel}? This may take a few minutes.`)) return;
+    
+    setSendingVC(true);
+    setSendProgress(0);
+
+    try {
+      const doc = new jsPDF('p', 'pt', 'a4');
+      let currentY = 145;
+
+      try {
+        const img = new Image();
+        img.src = '/rit-logo.png';
+        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width; canvas.height = img.height;
+        canvas.getContext('2d')?.drawImage(img, 0, 0);
+        
+        const logoHeight = 45;
+        const logoWidth = logoHeight * (img.width / img.height);
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const logoX = (pageWidth - logoWidth) / 2;
+        
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', logoX, 25, logoWidth, logoHeight);
+      } catch (e) { console.warn(e); }
+
+      doc.setFontSize(18);
+      doc.setTextColor(15, 23, 42); 
+      doc.text(`Consolidated Monthly Attendance Report`, 40, 95);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(100, 116, 139); 
+      doc.text(`All Departments  |  Month: ${selectedMonthLabel}`, 40, 115);
+
+      let isFirstPage = true;
+
+      for (let i = 0; i < departments.length; i++) {
+        const dept = departments[i];
+        
+        // Fetch Data
+        const data = await getMonthlyDepartmentReportData(month, dept);
+        if (!data || data.length === 0) {
+          setSendProgress(Math.round(((i + 1) / departments.length) * 100));
+          continue;
+        }
+
+        const sections = [...new Set(data.map((s: any) => s.section))].sort();
+
+        // Add a page break before a new department if not the very first one
+        if (!isFirstPage) {
+          doc.addPage();
+          currentY = 40;
+        } else {
+          isFirstPage = false;
+        }
+
+        doc.setFontSize(16);
+        doc.setTextColor(15, 23, 42); 
+        doc.text(`Department: ${dept}`, 40, currentY);
+        currentY += 25;
+
+        sections.forEach((section: string) => {
+          const sectionStudents = data.filter((s: any) => s.section === section);
+          if (sectionStudents.length > 0) {
+            doc.setFontSize(14);
+            doc.setTextColor(30, 64, 175); 
+            doc.text(`Section: ${section}`, 40, currentY);
+            currentY += 15;
+
+            const tableData = sectionStudents.map((s: any, index: number) => {
+              const clubPct = s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) + '%' : 'N/A';
+              const centrePct = s.centreTotal > 0 ? Math.round((s.centrePresent / s.centreTotal) * 100) + '%' : 'N/A';
+              const overallPct = s.overallTotal > 0 ? Math.round((s.overallPresent / s.overallTotal) * 100) + '%' : 'N/A';
+              return [index + 1, s.register_no, s.name, clubPct, centrePct, overallPct];
+            });
+
+            autoTable(doc, {
+              startY: currentY,
+              head: [['S.No', 'Register No', 'Name', 'Club (%)', 'Centre (%)', 'Overall (%)']],
+              body: tableData,
+              theme: 'grid',
+              headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, 
+              styles: { fontSize: 9, cellPadding: 4 },
+              didDrawPage: function (data: any) {
+                let str = "Page " + doc.internal.getNumberOfPages();
+                doc.setFontSize(8);
+                doc.setTextColor(148, 163, 184); 
+                doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 20);
+              }
+            });
+
+            currentY = (doc as any).lastAutoTable.finalY + 30;
+            if (currentY > doc.internal.pageSize.height - 100) {
+              doc.addPage();
+              currentY = 40;
+            }
+          }
+        });
+
+        setSendProgress(Math.round(((i + 1) / departments.length) * 100));
+      }
+
+      // Get Base64 and send
+      const pdfBase64 = doc.output('datauristring');
+      
+      const res = await fetch('/api/admin/send-vc-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: selectedMonthLabel, pdfBase64 })
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to send email to VC');
+      }
+
+      alert("Consolidated report successfully generated and sent to the VC!");
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while sending the consolidated report.");
+    } finally {
+      setSendingVC(false);
+      setSendProgress(0);
+    }
+  };
+
+  const sendToVP = async () => {
+    const selectedMonthLabel = availableMonths.find(m => m.value === month)?.label || month;
+    if (!confirm(`Are you sure you want to generate and email the DEPARTMENT-WISE SUMMARY report to the VP for ${selectedMonthLabel}?`)) return;
+    
+    setSendingVP(true);
+    setSendProgress(0);
+
+    try {
+      const doc = new jsPDF('p', 'pt', 'a4');
+      
+      try {
+        const img = new Image();
+        img.src = '/rit-logo.png';
+        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width; canvas.height = img.height;
+        canvas.getContext('2d')?.drawImage(img, 0, 0);
+        
+        const logoHeight = 45;
+        const logoWidth = logoHeight * (img.width / img.height);
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const logoX = (pageWidth - logoWidth) / 2;
+        
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', logoX, 25, logoWidth, logoHeight);
+      } catch (e) { console.warn(e); }
+
+      doc.setFontSize(18);
+      doc.setTextColor(15, 23, 42); 
+      doc.text(`Department-wise Attendance Summary`, 40, 95);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(100, 116, 139); 
+      doc.text(`Month: ${selectedMonthLabel}`, 40, 115);
+
+      const tableData = [];
+
+      for (let i = 0; i < departments.length; i++) {
+        const dept = departments[i];
+        
+        // Fetch Data
+        const data = await getMonthlyDepartmentReportData(month, dept);
+        
+        let deptClubTotal = 0;
+        let deptClubPresent = 0;
+        let deptCentreTotal = 0;
+        let deptCentrePresent = 0;
+        let deptOverallTotal = 0;
+        let deptOverallPresent = 0;
+
+        if (data && data.length > 0) {
+          data.forEach((s: any) => {
+            deptClubTotal += s.clubTotal || 0;
+            deptClubPresent += s.clubPresent || 0;
+            deptCentreTotal += s.centreTotal || 0;
+            deptCentrePresent += s.centrePresent || 0;
+            deptOverallTotal += s.overallTotal || 0;
+            deptOverallPresent += s.overallPresent || 0;
+          });
+        }
+
+        const clubPct = deptClubTotal > 0 ? Math.round((deptClubPresent / deptClubTotal) * 100) + '%' : 'N/A';
+        const centrePct = deptCentreTotal > 0 ? Math.round((deptCentrePresent / deptCentreTotal) * 100) + '%' : 'N/A';
+        const overallPct = deptOverallTotal > 0 ? Math.round((deptOverallPresent / deptOverallTotal) * 100) + '%' : 'N/A';
+
+        tableData.push([i + 1, dept, clubPct, centrePct, overallPct]);
+        
+        setSendProgress(Math.round(((i + 1) / departments.length) * 100));
+      }
+
+      autoTable(doc, {
+        startY: 135,
+        head: [['S.No', 'Department', 'Club (%)', 'Centre (%)', 'Overall (%)']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, 
+        styles: { fontSize: 10, cellPadding: 6 },
+        didDrawPage: function (data: any) {
+          let str = "Page " + doc.internal.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.setTextColor(148, 163, 184); 
+          doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 20);
+        }
+      });
+
+      // Get Base64 and send
+      const pdfBase64 = doc.output('datauristring');
+      
+      const res = await fetch('/api/admin/send-vp-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: selectedMonthLabel, pdfBase64 })
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to send email to VP');
+      }
+
+      alert("Department-wise summary successfully generated and sent to the VP!");
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while sending the summary report.");
+    } finally {
+      setSendingVP(false);
+      setSendProgress(0);
+    }
+  };
+
   return (
     <div className="bg-white border-2 border-slate-900 rounded-xl shadow-sm p-6 mb-8 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
@@ -316,7 +551,7 @@ export default function MonthlyReportGenerator() {
 
         <button 
           onClick={sendAllReports}
-          disabled={loading || sendingAll}
+          disabled={loading || sendingAll || sendingVC || sendingVP}
           className="flex-1 flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 rounded-lg transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100"
         >
           {sendingAll ? (
@@ -326,6 +561,38 @@ export default function MonthlyReportGenerator() {
           ) : (
             <>
               Email All HODs
+            </>
+          )}
+        </button>
+        
+        <button 
+          onClick={sendToVC}
+          disabled={loading || sendingAll || sendingVC || sendingVP}
+          className="flex-1 flex justify-center items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-3.5 rounded-lg transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100"
+        >
+          {sendingVC ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" /> Consolidating... {sendProgress}%
+            </>
+          ) : (
+            <>
+              Email VC
+            </>
+          )}
+        </button>
+
+        <button 
+          onClick={sendToVP}
+          disabled={loading || sendingAll || sendingVC || sendingVP}
+          className="flex-1 flex justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-lg transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100"
+        >
+          {sendingVP ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" /> Generating... {sendProgress}%
+            </>
+          ) : (
+            <>
+              Email VP (Summary)
             </>
           )}
         </button>
