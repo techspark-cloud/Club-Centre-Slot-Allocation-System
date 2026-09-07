@@ -38,12 +38,25 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
     }
 
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingMode }
-      });
+      let mediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode }
+        });
+      } catch (fallbackErr) {
+        // Fallback if the specific facing mode is not supported (common on some laptops)
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+      }
+      
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Explicitly play the video to prevent black screens
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(e => console.error("Video play error:", e));
+        };
       }
     } catch (err: any) {
       console.error("Camera error:", err);
@@ -67,10 +80,25 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
         });
       },
       (err) => {
-        console.error("Geolocation error:", err);
-        setError("Could not get location. Please enable GPS permissions.");
+        console.warn("High accuracy failed, trying low accuracy...", err);
+        // Fallback: Try without high accuracy (helps on desktops without GPS)
+        navigator.geolocation.getCurrentPosition(
+          (fallbackPos) => {
+            setLocation({
+              lat: fallbackPos.coords.latitude,
+              lng: fallbackPos.coords.longitude,
+              accuracy: fallbackPos.coords.accuracy,
+            });
+          },
+          (fallbackErr) => {
+            console.error("Geolocation error:", fallbackErr);
+            // Allow testing the camera even if the PC has no GPS
+            setLocation({ lat: 0, lng: 0, accuracy: -1 });
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
   }, []);
 
@@ -106,14 +134,21 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
 
     // Prepare Watermark Data
     const dateStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-    const latStr = location.lat.toFixed(6);
-    const lngStr = location.lng.toFixed(6);
+    let latStr = "Unavailable";
+    let lngStr = "Unavailable";
+    let accuracyStr = "Unknown";
+    
+    if (location.accuracy !== -1) {
+      latStr = location.lat.toFixed(6);
+      lngStr = location.lng.toFixed(6);
+      accuracyStr = `±${Math.round(location.accuracy)}m`;
+    }
     
     const watermarkText = [
       `RIT Club & Centre Activity`,
       `Date & Time: ${dateStr}`,
       `Lat: ${latStr}, Long: ${lngStr}`,
-      `Accuracy: ±${Math.round(location.accuracy)}m`
+      `Accuracy: ${accuracyStr}`
     ];
 
     // Add Watermark overlay block at the bottom
@@ -157,9 +192,15 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
         <div className="text-center">
           <h3 className="font-bold text-sm">Live GPS Camera</h3>
           {location ? (
-            <p className="text-[10px] text-green-400 flex items-center justify-center gap-1">
-              <MapPin className="w-3 h-3" /> Location Acquired
-            </p>
+            location.accuracy === -1 ? (
+              <p className="text-[10px] text-red-400 flex items-center justify-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Location Unavailable
+              </p>
+            ) : (
+              <p className="text-[10px] text-green-400 flex items-center justify-center gap-1">
+                <MapPin className="w-3 h-3" /> Location Acquired
+              </p>
+            )
           ) : (
             <p className="text-[10px] text-yellow-400 flex items-center justify-center gap-1 animate-pulse">
               <MapPin className="w-3 h-3" /> Acquiring Location...
