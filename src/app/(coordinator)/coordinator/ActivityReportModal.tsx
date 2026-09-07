@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, FileText, CheckCircle2, AlertCircle, Loader2, Camera as CameraIcon } from 'lucide-react';
-import GPSCamera from '@/app/components/GPSCamera';
+import { X, Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 interface ActivityReportModalProps {
   isOpen: boolean;
@@ -20,7 +19,6 @@ export default function ActivityReportModal({ isOpen, onClose, slot, entityName,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [showCamera, setShowCamera] = useState(false);
 
   if (!isOpen) return null;
 
@@ -235,32 +233,21 @@ export default function ActivityReportModal({ isOpen, onClose, slot, entityName,
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCamera(true)}
-                    className="flex flex-col items-center justify-center h-24 bg-blue-50 border-2 border-blue-200 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition-colors group"
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="evidence-upload"
+                  />
+                  <label 
+                    htmlFor="evidence-upload"
+                    className="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-100 hover:border-slate-400 transition-colors group"
                   >
-                    <CameraIcon className="w-6 h-6 text-blue-600 mb-2 group-hover:scale-110 transition-transform" />
-                    <span className="text-xs font-bold text-blue-800">Take GPS Photo</span>
-                  </button>
-
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="evidence-upload"
-                    />
-                    <label 
-                      htmlFor="evidence-upload"
-                      className="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-100 hover:border-slate-400 transition-colors group"
-                    >
-                      <Upload className="w-6 h-6 text-slate-400 mb-2 group-hover:scale-110 transition-transform" />
-                      <span className="text-xs font-bold text-slate-600">Upload File</span>
-                    </label>
-                  </div>
+                    <Upload className="w-6 h-6 text-slate-400 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold text-slate-600">Upload File</span>
+                  </label>
                 </div>
               )}
             </div>
@@ -282,16 +269,6 @@ export default function ActivityReportModal({ isOpen, onClose, slot, entityName,
           </form>
         )}
       </div>
-
-      {showCamera && (
-        <GPSCamera 
-          onCapture={(capturedFile) => {
-            setFile(capturedFile);
-            setShowCamera(false);
-          }}
-          onCancel={() => setShowCamera(false)}
-        />
-      )}
     </div>
   );
 }
