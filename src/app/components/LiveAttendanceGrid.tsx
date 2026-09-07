@@ -18,6 +18,8 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [activeSession, setActiveSession] = useState<'FORENOON' | 'AFTERNOON'>('FORENOON');
   const [isSendingEmails, setIsSendingEmails] = useState(false);
+  const [isHoliday, setIsHoliday] = useState(false);
+  const [holidayDesc, setHolidayDesc] = useState('');
 
   const fetchStats = async () => {
     setIsLoading(true);
@@ -28,10 +30,15 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
       if (json.error) {
         console.error("API Error:", json.error);
         setStats([]);
+        setIsHoliday(false);
+        setHolidayDesc('');
         return;
       }
       
-      const { data } = json;
+      const { data, isHoliday, holidayDescription } = json;
+      
+      setIsHoliday(isHoliday || false);
+      setHolidayDesc(holidayDescription || '');
       
       // Filter by type
       const filtered = data.filter((stat: any) => {
@@ -464,6 +471,19 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
           </button>
         </div>
       </div>
+
+      {isHoliday && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-start gap-4">
+          <div className="bg-amber-100 p-2.5 rounded-xl text-amber-600 shrink-0">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-amber-800 font-black text-sm uppercase tracking-wider">Holiday Declared for {selectedDate}</h3>
+            <p className="text-amber-700 text-sm mt-1 font-bold">{holidayDesc}</p>
+            <p className="text-amber-600/80 text-xs mt-1">Attendance logs for today may be empty or irrelevant.</p>
+          </div>
+        </div>
+      )}
 
       {/* Aggregate Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -136,7 +136,31 @@ export async function GET(request: Request) {
       }
     });
 
-    return NextResponse.json({ data: Array.from(slotStats.values()) });
+    let isHoliday = false;
+    let holidayDescription = null;
+
+    if (!validDays.includes(dayOfWeek)) {
+      // It's a weekend
+      isHoliday = true;
+      holidayDescription = "Weekend - No activities scheduled.";
+    } else {
+      const { data: holidayData } = await supabaseAdmin
+        .from('holidays')
+        .select('description')
+        .eq('date', date)
+        .maybeSingle();
+      
+      if (holidayData) {
+        isHoliday = true;
+        holidayDescription = holidayData.description;
+      }
+    }
+
+    return NextResponse.json({ 
+      data: Array.from(slotStats.values()),
+      isHoliday,
+      holidayDescription
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
