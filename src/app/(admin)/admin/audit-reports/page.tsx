@@ -442,12 +442,23 @@ export default function AuditReportsPage() {
             ))}
           </select>
           
-          <input 
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
-          />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <input 
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+            />
+            {filterDate && (
+              <button 
+                onClick={() => setFilterDate('')}
+                className="px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold text-xs shrink-0 transition-colors"
+                title="Show All Semester Dates"
+              >
+                All Dates
+              </button>
+            )}
+          </div>
           <select
             value={filterSession}
             onChange={(e) => setFilterSession(e.target.value)}
@@ -516,58 +527,69 @@ export default function AuditReportsPage() {
             .filter(r => {
               if (filterEntity !== 'ALL' && r.entityName !== filterEntity) return false;
               if (filterDate) {
-                // The date from GAS might be a full ISO string or YYYY-MM-DD
                 const rDate = new Date(r.date).toISOString().split('T')[0];
                 if (rDate !== filterDate) return false;
               }
               if (filterSession !== 'ALL' && r.session !== filterSession) return false;
               return true;
             })
-            .map((report, idx) => (
-            <div key={idx} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform"></div>
-              
-              <div className="flex items-start justify-between relative">
-                <div>
-                  <h3 className="text-lg font-black text-slate-800">{report.entityName}</h3>
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                    <User className="w-3.5 h-3.5" /> {report.coordinatorName}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg inline-block">
-                    {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-              </div>
+            .map((report, idx) => {
+              const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
 
-              <div className="grid grid-cols-2 gap-4 mt-6 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                    <Calendar className="w-5 h-5" />
+              return (
+                <div key={idx} className={`border rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${isMissing ? 'bg-red-50/30 border-red-200' : 'bg-white border-slate-200'}`}>
+                  <div className={`absolute top-0 right-0 w-32 h-32 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform ${isMissing ? 'bg-red-100' : 'bg-blue-50'}`}></div>
+                  
+                  <div className="flex items-start justify-between relative">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800">{report.entityName}</h3>
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                        <User className="w-3.5 h-3.5" /> <span className={isMissing ? 'text-red-600 font-bold' : ''}>{report.coordinatorName}</span>
+                      </div>
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-1.5">
+                      <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-lg inline-block border border-slate-200 shadow-xs">
+                        📅 {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ({report.day || ''})
+                      </span>
+                      {isMissing ? (
+                        <span className="text-xs font-black text-red-700 bg-red-100 border border-red-200 px-2.5 py-0.5 rounded-md inline-block">
+                          ❌ ATTENDANCE NOT MARKED
+                        </span>
+                      ) : (
+                        <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md inline-block">
+                          ✅ SUBMITTED
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Session</p>
-                    <p className="text-sm font-bold text-slate-700">{report.session || 'N/A'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Venue</p>
-                    <p className="text-sm font-bold text-slate-700 truncate pr-2">{report.venue || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100 relative">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Activity Description</p>
-                <p className="text-sm font-medium text-slate-700 leading-relaxed italic relative z-10">
-                  "{report.description}"
-                </p>
-              </div>
+                  <div className="grid grid-cols-2 gap-4 mt-6 mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Session & Timing</p>
+                        <p className="text-sm font-bold text-slate-700">{report.session || 'N/A'} {report.timing ? `(${report.timing})` : ''}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Venue</p>
+                        <p className="text-sm font-bold text-slate-700 truncate pr-2">{report.venue || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`rounded-xl p-4 mb-6 border relative ${isMissing ? 'bg-red-50/80 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
+                    <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${isMissing ? 'text-red-500' : 'text-slate-400'}`}>Activity Description</p>
+                    <p className={`text-sm font-medium leading-relaxed relative z-10 ${isMissing ? 'text-red-800 font-bold' : 'text-slate-700 italic'}`}>
+                      "{report.description}"
+                    </p>
+                  </div>
 
               <div className="flex items-center justify-between border-t border-slate-100 pt-5 mt-auto relative z-10">
                 <div className="flex gap-2">
@@ -602,7 +624,8 @@ export default function AuditReportsPage() {
                 </div>
               </div>
             </div>
-          ))}
+          );
+        })}
         </div>
       )}
 

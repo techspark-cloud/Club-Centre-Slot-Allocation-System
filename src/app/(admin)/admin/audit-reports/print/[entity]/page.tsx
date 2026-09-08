@@ -168,38 +168,59 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           y = 15;
         }
 
+        const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
+
         // Section header
-        doc.setFillColor(30, 58, 138);
+        if (isMissing) {
+          doc.setFillColor(220, 38, 38); // Red for missing
+        } else {
+          doc.setFillColor(30, 58, 138); // Blue for submitted
+        }
         doc.roundedRect(margin, y, pageWidth - margin * 2, 8, 2, 2, 'F');
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(255, 255, 255);
-        const dateStr = new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-        doc.text(`${idx + 1}.  Activity on ${dateStr}   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
+        
+        if (isMissing) {
+          doc.text(`${idx + 1}.  Scheduled Slot (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Status: ❌ NOT MARKED`, margin + 3, y + 5.5);
+        } else {
+          const dateStr = new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+          doc.text(`${idx + 1}.  Date: ${dateStr} [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
+        }
         y += 11;
 
         // Details row
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(51, 65, 85);
-        doc.text('Session:', margin, y + 5);
+        doc.text('Timing:', margin, y + 5);
         doc.setFont('helvetica', 'normal');
-        doc.text(report.session || 'N/A', margin + 18, y + 5);
+        doc.text(`${report.session || ''} (${report.timing || 'N/A'})`, margin + 15, y + 5);
         doc.setFont('helvetica', 'bold');
-        doc.text('Venue:', margin + 55, y + 5);
+        doc.text('Venue:', margin + 75, y + 5);
         doc.setFont('helvetica', 'normal');
-        doc.text(report.venue || 'N/A', margin + 67, y + 5);
+        doc.text(report.venue || 'N/A', margin + 87, y + 5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(22, 163, 74);
-        doc.text(`Expected: ${report.expected}`, margin + 110, y + 5);
-        doc.setTextColor(21, 128, 61);
-        doc.text(`Present: ${report.present}`, margin + 135, y + 5);
+        doc.text(`Expected: ${report.expected}`, margin + 120, y + 5);
+        
+        if (!isMissing) {
+          doc.setTextColor(21, 128, 61);
+          doc.text(`Present: ${report.present}`, margin + 145, y + 5);
+        } else {
+          doc.setTextColor(220, 38, 38);
+          doc.text(`Present: 0`, margin + 145, y + 5);
+        }
         y += 9;
 
         // Description
         doc.setFont('helvetica', 'italic');
         doc.setFontSize(8.5);
-        doc.setTextColor(71, 85, 105);
+        if (isMissing) {
+          doc.setTextColor(220, 38, 38);
+        } else {
+          doc.setTextColor(71, 85, 105);
+        }
         const descLines = doc.splitTextToSize(`"${report.description}"`, pageWidth - margin * 2 - 65);
         doc.text(descLines, margin, y + 5);
 
@@ -272,7 +293,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       <div className="print:hidden p-4 bg-slate-900 text-white flex justify-between items-center sticky top-0 z-50">
         <div>
           <h1 className="font-bold">Visual Report: {entityName}</h1>
-          <p className="text-xs text-slate-400">{reports.length} activity report(s) found</p>
+          <p className="text-xs text-slate-400">{reports.length} timetable slot(s) & activity report(s)</p>
         </div>
         <button 
           onClick={downloadPDF}
@@ -304,108 +325,121 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         {/* Entity Title */}
         <div className="bg-slate-100 p-6 rounded-xl border border-slate-200 mb-10 text-center">
           <h2 className="text-3xl font-black text-slate-800">{entityName}</h2>
-          <p className="text-slate-500 font-medium mt-2">Comprehensive Summary of All Conducted Activities</p>
+          <p className="text-slate-500 font-medium mt-2">Comprehensive Summary of All Scheduled Sessions & Conducted Activities</p>
         </div>
 
         {/* Events Loop */}
         <div className="space-y-16">
-          {reports.map((report, idx) => (
-            <div key={idx} className="page-break-inside-avoid">
-              <div className="flex items-center gap-4 mb-4 border-b-2 border-slate-100 pb-2">
-                <div className="bg-blue-900 text-white w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0">
-                  {idx + 1}
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">
-                    Activity on {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </h3>
-                  <p className="text-sm font-medium text-slate-500">Coordinator: <span className="font-bold text-slate-700">{report.coordinatorName}</span></p>
-                </div>
-              </div>
+          {reports.map((report, idx) => {
+            const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
-                {/* Details Column */}
-                <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Session</span>
-                      <span className="block text-sm font-bold text-slate-700">{report.session || 'N/A'}</span>
+            return (
+              <div key={idx} className="page-break-inside-avoid">
+                <div className="flex items-center justify-between border-b-2 border-slate-100 pb-2 mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0 ${isMissing ? 'bg-red-600 text-white' : 'bg-blue-900 text-white'}`}>
+                      {idx + 1}
                     </div>
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Venue</span>
-                      <span className="block text-sm font-bold text-slate-700">{report.venue || 'N/A'}</span>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-800">
+                        Date: {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ({report.day || 'N/A'})
+                      </h3>
+                      <p className="text-sm font-medium text-slate-500">Coordinator: <span className={`font-bold ${isMissing ? 'text-red-600' : 'text-slate-700'}`}>{report.coordinatorName}</span></p>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
-                      <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Expected</span>
-                      <span className="block text-lg font-black text-slate-800">{report.expected}</span>
-                    </div>
-                    <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                      <span className="block text-[10px] font-black text-green-600 uppercase tracking-wider">Present</span>
-                      <span className="block text-lg font-black text-green-700">{report.present}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-                    <span className="block text-[10px] font-black text-blue-500 uppercase tracking-wider mb-2">Description</span>
-                    <p className="text-sm font-medium text-slate-700 leading-relaxed italic">
-                      "{report.description}"
-                    </p>
-                  </div>
-                </div>
-
-                {/* Photo Column */}
-                <div>
-                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Photographic Evidence</span>
-                  {report.imageUrl ? (
-                    <div className="rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50 flex items-center justify-center relative w-full h-64 shadow-inner">
-                      {(() => {
-                        const url = report.imageUrl;
-                        const match = url.match(/[-\w]{25,}/);
-                        const driveId = match ? match[0] : null;
-                        
-                        if (driveId) {
-                          // Try thumbnail URL - works without authentication for public files
-                          const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`;
-                          return (
-                            <div className="relative w-full h-full">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img 
-                                src={thumbUrl}
-                                alt="Activity Evidence"
-                                className="object-cover w-full h-full"
-                                onError={(e) => {
-                                  // Fallback to export=view URL
-                                  (e.target as HTMLImageElement).src = `https://drive.google.com/uc?export=view&id=${driveId}`;
-                                }}
-                              />
-                              <a href={url} target="_blank" rel="noopener noreferrer"
-                                className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-xs px-2 py-1 rounded font-bold">
-                                Open Full ↗
-                              </a>
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <div className="p-4 text-center">
-                              <p className="text-sm font-bold text-slate-500">External Image URL</p>
-                              <a href={url} className="text-xs text-blue-600 break-all">{url}</a>
-                            </div>
-                          );
-                        }
-                      })()}
-                    </div>
+                  {isMissing ? (
+                    <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
+                      ❌ ATTENDANCE NOT MARKED
+                    </span>
                   ) : (
-                    <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center w-full h-64">
-                      <p className="text-sm font-bold text-slate-400">No Photo Uploaded</p>
-                    </div>
+                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
+                      ✅ SUBMITTED
+                    </span>
                   )}
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                  {/* Details Column */}
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Session & Timing</span>
+                        <span className="block text-sm font-bold text-slate-700">{report.session || 'N/A'} {report.timing ? `(${report.timing})` : ''}</span>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Venue</span>
+                        <span className="block text-sm font-bold text-slate-700">{report.venue || 'N/A'}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
+                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Expected</span>
+                        <span className="block text-lg font-black text-slate-800">{report.expected}</span>
+                      </div>
+                      <div className={`p-3 rounded-lg border ${isMissing ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                        <span className={`block text-[10px] font-black uppercase tracking-wider ${isMissing ? 'text-red-500' : 'text-green-600'}`}>Present</span>
+                        <span className={`block text-lg font-black ${isMissing ? 'text-red-700' : 'text-green-700'}`}>{isMissing ? '0 (Unmarked)' : report.present}</span>
+                      </div>
+                    </div>
+
+                    <div className={`p-4 rounded-lg border ${isMissing ? 'bg-red-50/70 border-red-200' : 'bg-blue-50/50 border-blue-100'}`}>
+                      <span className={`block text-[10px] font-black uppercase tracking-wider mb-2 ${isMissing ? 'text-red-600' : 'text-blue-500'}`}>Description</span>
+                      <p className={`text-sm font-medium leading-relaxed ${isMissing ? 'text-red-800 font-bold' : 'text-slate-700 italic'}`}>
+                        "{report.description}"
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Photo Column */}
+                  <div>
+                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Photographic Evidence</span>
+                    {report.imageUrl ? (
+                      <div className="rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50 flex items-center justify-center relative w-full h-64 shadow-inner">
+                        {(() => {
+                          const url = report.imageUrl;
+                          const match = url.match(/[-\w]{25,}/);
+                          const driveId = match ? match[0] : null;
+                          
+                          if (driveId) {
+                            const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`;
+                            return (
+                              <div className="relative w-full h-full">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img 
+                                  src={thumbUrl}
+                                  alt="Activity Evidence"
+                                  className="object-cover w-full h-full"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = `https://drive.google.com/uc?export=view&id=${driveId}`;
+                                  }}
+                                />
+                                <a href={url} target="_blank" rel="noopener noreferrer"
+                                  className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-xs px-2 py-1 rounded font-bold">
+                                  Open Full ↗
+                                </a>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="p-4 text-center">
+                                <p className="text-sm font-bold text-slate-500">External Image URL</p>
+                                <a href={url} className="text-xs text-blue-600 break-all">{url}</a>
+                              </div>
+                            );
+                          }
+                        })()}
+                      </div>
+                    ) : (
+                      <div className={`rounded-xl border-2 border-dashed flex items-center justify-center w-full h-64 ${isMissing ? 'border-red-200 bg-red-50/40 text-red-400' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                        <p className="text-sm font-bold">{isMissing ? '❌ Report Not Uploaded' : 'No Photo Uploaded'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer with Techspark Logo - Printed at the bottom of the document */}
