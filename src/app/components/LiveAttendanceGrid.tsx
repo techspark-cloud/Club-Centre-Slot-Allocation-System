@@ -5,6 +5,7 @@ import { Users, UserCheck, UserX, AlertCircle, RefreshCw, Download, MapPin, Cloc
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getPDFReportData } from '@/app/actions/attendance';
+import { addTechsparkFooter } from '@/lib/pdfFooter';
 
 interface LiveAttendanceGridProps {
   type: 'CLUB' | 'CENTRE' | 'ALL';
@@ -213,27 +214,7 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
         }
       });
 
-      try {
-        const tsLogoRes = await fetch('/techspark-logo.png');
-        const tsLogoBlob = await tsLogoRes.blob();
-        const tsDataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(tsLogoBlob);
-        });
-
-        const pageHeight = doc.internal.pageSize.height;
-        const tsWidth = 35;
-        const tsHeight = 10;
-        
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(148, 163, 184);
-        doc.text("Managed by", pageWidth - tsWidth - 22, pageHeight - 10);
-        doc.addImage(tsDataUrl, 'PNG', pageWidth - tsWidth - 4, pageHeight - 16, tsWidth, tsHeight);
-      } catch (e) {
-        console.error("Could not load Techspark logo", e);
-      }
+      await addTechsparkFooter(doc);
 
       doc.save(`${entityName.replace(/\s+/g, '_')}_Attendance_${selectedDate}.pdf`);
     } catch (e) {
@@ -336,27 +317,7 @@ export default function LiveAttendanceGrid({ type }: LiveAttendanceGridProps) {
         }
       });
 
-      try {
-        const tsLogoRes = await fetch('/techspark-logo.png');
-        const tsLogoBlob = await tsLogoRes.blob();
-        const tsDataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(tsLogoBlob);
-        });
-
-        const pageHeight = doc.internal.pageSize.height;
-        const tsWidth = 35;
-        const tsHeight = 10;
-        
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(148, 163, 184);
-        doc.text("Managed by", pageWidth - tsWidth - 22, pageHeight - 10);
-        doc.addImage(tsDataUrl, 'PNG', pageWidth - tsWidth - 4, pageHeight - 16, tsWidth, tsHeight);
-      } catch (e) {
-        console.error("Could not load Techspark logo", e);
-      }
+      await addTechsparkFooter(doc);
 
       doc.save(`Overall_Attendance_Summary_${selectedDate}.pdf`);
     } catch (e) {

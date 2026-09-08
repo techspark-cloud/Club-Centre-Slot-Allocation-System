@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import Link from 'next/link';
+import { addTechsparkFooter } from '@/lib/pdfFooter';
 
 export default function AuditReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
@@ -167,28 +168,7 @@ export default function AuditReportsPage() {
         }
       });
 
-      try {
-        const tsLogoRes = await fetch('/techspark-logo.png');
-        const tsLogoBlob = await tsLogoRes.blob();
-        const tsDataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(tsLogoBlob);
-        });
-
-        const pageWidth = doc.internal.pageSize.width;
-        const pageHeight = doc.internal.pageSize.height;
-        const tsWidth = 35;
-        const tsHeight = 10;
-        
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(148, 163, 184);
-        doc.text("Managed by", pageWidth - tsWidth - 22, pageHeight - 10);
-        doc.addImage(tsDataUrl, 'PNG', pageWidth - tsWidth - 4, pageHeight - 16, tsWidth, tsHeight);
-      } catch (e) {
-        console.error("Could not load Techspark logo", e);
-      }
+      await addTechsparkFooter(doc);
 
       doc.save(`${filterEntity.replace(/ /g, '_')}_Overall_Report.pdf`);
     } catch (err) {

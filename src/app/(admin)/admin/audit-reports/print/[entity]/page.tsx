@@ -237,11 +237,23 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       try {
         const tsData = await toBase64('/techspark-logo.png', true);
         if (tsData) {
-          doc.setFontSize(7);
+          doc.setFontSize(8);
           doc.setFont('helvetica', 'italic');
           doc.setTextColor(148, 163, 184);
-          doc.text('Managed by', pageWidth - 50, pageHeight - 10);
-          doc.addImage(tsData, 'PNG', pageWidth - 40, pageHeight - 17, 28, 8);
+
+          const tsWidth = 28;
+          const tsHeight = 8;
+          const rightMargin = 15;
+          const textStr = 'Managed by';
+          const textWidth = doc.getTextWidth(textStr);
+
+          const logoX = pageWidth - rightMargin - tsWidth;
+          const logoY = pageHeight - 16;
+          const textX = logoX - textWidth - 3;
+          const textY = logoY + 5.5;
+
+          doc.text(textStr, textX, textY);
+          doc.addImage(tsData, 'PNG', logoX, logoY, tsWidth, tsHeight);
         }
       } catch {}
 
