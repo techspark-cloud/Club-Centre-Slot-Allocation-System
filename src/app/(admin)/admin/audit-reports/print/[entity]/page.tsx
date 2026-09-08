@@ -1,17 +1,26 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, use } from 'react';
 import Image from 'next/image';
-import { use } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function PrintReportPage({ params }: { params: Promise<{ entity: string }> }) {
   const { entity } = use(params);
+  const searchParams = useSearchParams();
+
+  const initialStart = searchParams.get('startDate') || '2026-08-03';
+  const initialEnd = searchParams.get('endDate') || new Date().toISOString().split('T')[0];
+
+  const [startDate, setStartDate] = useState<string>(initialStart);
+  const [endDate, setEndDate] = useState<string>(initialEnd);
+  
   const [reports, setReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [allEntities, setAllEntities] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [facultyCoordinator, setFacultyCoordinator] = useState<string>('');
   
   // Student attendance details option toggle
   const [includeStudentDetails, setIncludeStudentDetails] = useState(false);
@@ -22,9 +31,19 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
   const entityName = decodeURIComponent(entity);
 
   useEffect(() => {
-    const fetchReports = async () => {
+    const fetchReportsAndFaculty = async () => {
+      setIsLoading(true);
       try {
-        const res = await fetch('/api/admin/audit-reports');
+        const supabase = createClient();
+
+        // 1. Fetch faculty coordinator name from clubs or centres
+        const { data: club } = await supabase.from('clubs').select('faculty_name').ilike('name', entityName).maybeSingle();
+        const { data: centre } = await supabase.from('centres').select('faculty_name').ilike('name', entityName).maybeSingle();
+        const faculty = club?.faculty_name || centre?.faculty_name || 'Faculty Coordinator';
+        setFacultyCoordinator(faculty);
+
+        // 2. Fetch reports with date range
+        const res = await fetch(`/api/admin/audit-reports?startDate=${startDate}&endDate=${endDate}`);
         const result = await res.json();
         if (result.success) {
           const entities = [...new Set(result.data.map((r: any) => r.entityName))] as string[];
@@ -38,14 +57,14 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           setError(result.error || 'Failed to load reports.');
         }
       } catch (err: any) {
-        setError('Failed to fetch from Google Sheets: ' + err.message);
+        setError('Failed to fetch audit data: ' + err.message);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchReports();
-  }, [entityName]);
+    fetchReportsAndFaculty();
+  }, [entityName, startDate, endDate]);
 
   const fetchStudentsForReports = async (reportsList: any[]) => {
     setIsFetchingStudents(true);
@@ -109,7 +128,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <p className="text-slate-500 font-medium">Preparing Visual Report for Print...</p>
+        <p className="text-slate-500 font-medium">Preparing Institutional Audit Report Cover Page...</p>
       </div>
     );
   }
@@ -188,36 +207,192 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       const pageHeight = doc.internal.pageSize.height;
       const margin = 14;
 
-      // Load RIT logo
+      // ----------------------------------------------------
+      // PAGE 1: INSTITUTIONAL COVER PAGE
+      // ----------------------------------------------------
+      // Top Accent Line
+      doc.setFillColor(30, 58, 138); // Deep Navy Blue
+      doc.rect(0, 0, pageWidth, 6, 'F');
+
+      // Logos: RIT Logo on left, Techspark Logo on right
       try {
         const logoData = await toBase64('/rit-logo.png', true);
         if (logoData) {
-          const logoH = 16;
+          const logoH = 18;
           const logoW = logoH * 4.5;
-          doc.addImage(logoData, 'PNG', margin, 10, logoW, logoH);
+          doc.addImage(logoData, 'PNG', margin, 12, logoW, logoH);
         }
       } catch {}
 
-      doc.setFontSize(10);
+      try {
+        const tsData = await toBase64('/techspark-logo.png', true);
+        if (tsData) {
+          const tsH = 14;
+          const tsW = tsH * 3.5;
+          doc.addImage(tsData, 'PNG', pageWidth - margin - tsW, 14, tsW, tsH);
+        }
+      } catch {}
+
+      // Institutional Title
+      let y = 36;
+      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 58, 138);
-      doc.text('ACTIVITY AUDIT REPORT', pageWidth - margin, 15, { align: 'right' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 20, { align: 'right' });
+      doc.text('RAJALAKSHMI INSTITUTE OF TECHNOLOGY', pageWidth / 2, y, { align: 'center' });
 
-      doc.setFontSize(16);
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('Autonomous Institution, Affiliated to Anna University | Accredited by NAAC', pageWidth / 2, y + 5, { align: 'center' });
+      doc.text('CLUB & CENTRE SLOT ALLOCATION PORTAL', pageWidth / 2, y + 9, { align: 'center' });
+
+      y += 15;
+
+      // Official Report Banner
+      doc.setFillColor(30, 58, 138);
+      doc.roundedRect(margin, y, pageWidth - margin * 2, 10, 2, 2, 'F');
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text('OFFICIAL ACTIVITY AUDIT & COMPLIANCE REPORT', pageWidth / 2, y + 6.8, { align: 'center' });
+
+      y += 16;
+
+      // Entity & Coordinator Metadata Box
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(margin, y, pageWidth - margin * 2, 26, 3, 3, 'FD');
+
+      doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
-      doc.text(entityName, pageWidth / 2, 40, { align: 'center' });
+      doc.text(entityName.toUpperCase(), margin + 6, y + 7);
 
       doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(71, 85, 105);
+      doc.text('Faculty Coordinator:', margin + 6, y + 14);
       doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text('Comprehensive Summary of All Scheduled Sessions & Conducted Activities', pageWidth / 2, 47, { align: 'center' });
+      doc.setTextColor(30, 58, 138);
+      doc.text(facultyCoordinator || 'Faculty Coordinator', margin + 42, y + 14);
 
-      let y = 55;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(71, 85, 105);
+      doc.text('Academic Year:', margin + 6, y + 20);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42);
+      doc.text('2026 - 2027', margin + 34, y + 20);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(71, 85, 105);
+      doc.text('Generated Date:', pageWidth - margin - 50, y + 14);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42);
+      doc.text(new Date().toLocaleDateString('en-GB'), pageWidth - margin - 22, y + 14);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(71, 85, 105);
+      doc.text('Audit Status:', pageWidth - margin - 50, y + 20);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(22, 163, 74);
+      doc.text('VERIFIED', pageWidth - margin - 22, y + 20);
+
+      y += 32;
+
+      // Executive Summary Metrics Bar
+      const totalSessions = reports.length;
+      const submittedCount = reports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
+      const missingCount = reports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
+      const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+
+      const boxWidth = (pageWidth - margin * 2 - 9) / 4;
+      const metricBoxes = [
+        { label: 'TOTAL SESSIONS', val: `${totalSessions}`, color: [30, 41, 59] },
+        { label: 'SUBMITTED', val: `${submittedCount}`, color: [22, 163, 74] },
+        { label: 'NOT MARKED', val: `${missingCount}`, color: [220, 38, 38] },
+        { label: 'COMPLIANCE RATE', val: `${complianceRate}%`, color: [37, 99, 235] },
+      ];
+
+      metricBoxes.forEach((box, bIdx) => {
+        const bX = margin + bIdx * (boxWidth + 3);
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(bX, y, boxWidth, 14, 2, 2, 'FD');
+        doc.setFontSize(6.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 116, 139);
+        doc.text(box.label, bX + boxWidth / 2, y + 4.5, { align: 'center' });
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(box.color[0], box.color[1], box.color[2]);
+        doc.text(box.val, bX + boxWidth / 2, y + 10.5, { align: 'center' });
+      });
+
+      y += 19;
+
+      // Index Table Header
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text('AUDIT INDEX & EXECUTIVE SUMMARY TABLE', margin, y);
+      y += 4;
+
+      const indexRows = reports.map((r, i) => {
+        const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+        const dObj = r.date ? new Date(r.date) : null;
+        const dStr = (dObj && !isNaN(dObj.getTime()))
+          ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : r.date || 'N/A';
+
+        return [
+          i + 1,
+          `${dStr} (${r.day || ''})`,
+          `${r.session || ''} (${r.timing || ''})`,
+          r.venue || 'N/A',
+          r.expected || 0,
+          isMissing ? 0 : r.present || 0,
+          isMissing ? 'NOT MARKED' : 'SUBMITTED'
+        ];
+      });
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['S.No', 'Date & Day', 'Session & Timing', 'Venue', 'Expected', 'Present', 'Status']],
+        body: indexRows,
+        styles: { fontSize: 7.5, cellPadding: 1.8 },
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 10, halign: 'center' },
+          1: { cellWidth: 38, fontStyle: 'bold' },
+          2: { cellWidth: 50 },
+          3: { cellWidth: 20 },
+          4: { cellWidth: 18, halign: 'center' },
+          5: { cellWidth: 18, halign: 'center' },
+          6: { cellWidth: 28, fontStyle: 'bold', halign: 'center' }
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 6) {
+            if (data.cell.raw === 'SUBMITTED') {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else {
+              data.cell.styles.textColor = [220, 38, 38];
+            }
+          }
+        }
+      });
+
+      // ----------------------------------------------------
+      // PAGE 2 ONWARDS: DETAILED ACTIVITY & SESSION CARDS
+      // ----------------------------------------------------
+      doc.addPage();
+      y = 15;
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text('DETAILED ACTIVITY & SESSION AUDIT CARDS', margin, y);
+      y += 8;
 
       for (let idx = 0; idx < reports.length; idx++) {
         const report = reports[idx];
@@ -405,25 +580,48 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
     }
   };
 
+  const totalSessions = reports.length;
+  const submittedCount = reports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
+  const missingCount = reports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
+  const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-slate-100 py-8">
       {/* Non-printable controls */}
-      <div className="print:hidden p-4 bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-50 shadow-md">
+      <div className="print:hidden max-w-[210mm] mx-auto mb-6 p-4 bg-slate-900 text-white rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sticky top-4 z-50 shadow-xl border border-slate-800">
         <div>
           <h1 className="font-bold text-lg">Visual Report: {entityName}</h1>
           <p className="text-xs text-slate-400">{reports.length} timetable slot(s) & activity report(s)</p>
         </div>
         
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <label className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700/80 px-4 py-2 rounded-xl cursor-pointer text-xs font-bold border border-slate-700 transition-all select-none">
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          {/* Date Range Inputs */}
+          <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 p-1.5 rounded-xl text-xs font-bold">
+            <span className="text-slate-400 px-1 text-[11px]">Period:</span>
+            <input 
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1 text-xs outline-none focus:border-blue-400"
+            />
+            <span className="text-slate-500 text-[10px]">to</span>
+            <input 
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-slate-900 text-slate-200 border border-slate-700 rounded px-2 py-1 text-xs outline-none focus:border-blue-400"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700/80 px-3 py-2 rounded-xl cursor-pointer text-xs font-bold border border-slate-700 transition-all select-none">
             <input 
               type="checkbox" 
               checked={includeStudentDetails} 
               onChange={(e) => handleToggleStudentDetails(e.target.checked)}
               className="w-4 h-4 accent-blue-500 rounded cursor-pointer"
             />
-            <span className="text-slate-200 flex items-center gap-1.5">
-              📋 Include Student Attendance Details
+            <span className="text-slate-200 flex items-center gap-1.5 text-xs">
+              📋 Student Roll
               {isFetchingStudents && <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full"></span>}
             </span>
           </label>
@@ -431,7 +629,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           <button 
             onClick={downloadPDF}
             disabled={isDownloading || isFetchingStudents}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 text-sm shadow-sm"
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 text-xs shadow-sm"
           >
             {isDownloading ? (
               <><span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Generating PDF...</>
@@ -443,27 +641,140 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       </div>
 
       {/* Printable Area - Standard A4 styling */}
-      <div className="w-full max-w-[210mm] mx-auto bg-white min-h-[297mm] p-8 md:p-12 text-slate-900" style={{ margin: '0 auto' }}>
+      <div className="w-full max-w-[210mm] mx-auto bg-white min-h-[297mm] p-8 md:p-12 text-slate-900 rounded-2xl shadow-xl border border-slate-200" style={{ margin: '0 auto' }}>
         
-        {/* Header */}
+        {/* Institutional Header with Dual Logos */}
         <div className="flex items-center justify-between border-b-4 border-blue-900 pb-6 mb-8">
           <div className="flex-1">
-            <Image src="/rit-logo.png" alt="RIT Logo" width={300} height={80} priority className="object-contain" />
+            <Image src="/rit-logo.png" alt="RIT Logo" width={260} height={70} priority className="object-contain" />
           </div>
-          <div className="text-right">
-            <h1 className="text-2xl font-black text-blue-900 uppercase tracking-wider">Activity Audit Report</h1>
-            <p className="text-slate-500 font-medium mt-1">Generated: {new Date().toLocaleDateString('en-GB')}</p>
+          <div className="flex-1 text-center">
+            <h1 className="text-xl font-black text-blue-900 tracking-tight">RAJALAKSHMI INSTITUTE OF TECHNOLOGY</h1>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Autonomous Institution | Affiliated to Anna University</p>
+            <p className="text-[11px] font-black text-blue-950 uppercase tracking-wider mt-1 bg-blue-50 py-0.5 px-2 rounded inline-block border border-blue-200">
+              Club & Centre Slot Allocation Portal
+            </p>
+          </div>
+          <div className="flex-1 flex justify-end">
+            <Image src="/techspark-logo.png" alt="TechSpark Logo" width={140} height={50} priority className="object-contain" />
           </div>
         </div>
 
-        {/* Entity Title */}
-        <div className="bg-slate-100 p-6 rounded-xl border border-slate-200 mb-10 text-center">
-          <h2 className="text-3xl font-black text-slate-800">{entityName}</h2>
-          <p className="text-slate-500 font-medium mt-2">Comprehensive Summary of All Scheduled Sessions & Conducted Activities</p>
+        {/* Official Executive Cover Title Card */}
+        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-8 rounded-2xl border border-slate-800 text-white mb-8 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-2xl"></div>
+          
+          <div className="text-center mb-6">
+            <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full border border-blue-400/30">
+              OFFICIAL ACTIVITY AUDIT & COMPLIANCE REPORT
+            </span>
+            <h2 className="text-3xl font-black uppercase tracking-wider text-white mt-3">{entityName}</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-xl border border-white/10 text-xs font-medium mb-6">
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Faculty Coordinator</span>
+              <span className="text-blue-200 font-bold text-sm">{facultyCoordinator}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Report Audit Period</span>
+              <span className="text-blue-300 font-bold text-xs">{startDate} to {endDate}</span>
+            </div>
+            <div className="md:text-right">
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Academic Year & Status</span>
+              <span className="text-white font-bold text-sm">2026-2027 <span className="text-emerald-400 text-xs ml-2">✓ VERIFIED AUDIT</span></span>
+            </div>
+          </div>
+          
+          {/* Executive Metrics Bar */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-white/10">
+            <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl text-center">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-slate-300">Total Sessions</span>
+              <span className="block text-xl font-black text-white mt-1">{totalSessions}</span>
+            </div>
+            <div className="bg-emerald-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-emerald-400/20">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Submitted</span>
+              <span className="block text-xl font-black text-emerald-400 mt-1">{submittedCount}</span>
+            </div>
+            <div className="bg-red-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-red-400/20">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-red-300">Not Marked</span>
+              <span className="block text-xl font-black text-red-400 mt-1">{missingCount}</span>
+            </div>
+            <div className="bg-blue-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-blue-400/20">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-blue-300">Compliance Rate</span>
+              <span className="block text-xl font-black text-blue-400 mt-1">{complianceRate}%</span>
+            </div>
+          </div>
         </div>
 
-        {/* Events Loop */}
+        {/* INDEX SUMMARY TABLE (Page 1 Web View) */}
+        <div className="bg-white border-2 border-slate-200 rounded-2xl p-6 mb-12 shadow-sm">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-base font-black text-blue-900 uppercase tracking-wider flex items-center gap-2">
+                📊 Audit Index & Executive Summary Table
+              </h3>
+              <p className="text-xs text-slate-500 font-bold mt-0.5">
+                Official table of contents & compliance summary for all scheduled sessions.
+              </p>
+            </div>
+            <span className="text-[10px] font-black bg-blue-50 text-blue-700 px-3 py-1 rounded-lg border border-blue-200 uppercase tracking-widest">
+              PDF Front Cover Page
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-700 font-black uppercase tracking-wider">
+                <tr>
+                  <th className="p-2.5 border-b text-center">S.No</th>
+                  <th className="p-2.5 border-b">Date & Day</th>
+                  <th className="p-2.5 border-b">Session & Timing</th>
+                  <th className="p-2.5 border-b">Venue</th>
+                  <th className="p-2.5 border-b text-center">Expected</th>
+                  <th className="p-2.5 border-b text-center">Present</th>
+                  <th className="p-2.5 border-b text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {reports.map((r, i) => {
+                  const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+                  const dObj = r.date ? new Date(r.date) : null;
+                  const dStr = (dObj && !isNaN(dObj.getTime()))
+                    ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : r.date || 'N/A';
+
+                  return (
+                    <tr key={i} className={isMissing ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-slate-50'}>
+                      <td className="p-2 text-center font-bold text-slate-400">{i + 1}</td>
+                      <td className="p-2 font-black text-slate-800">{dStr} ({r.day || ''})</td>
+                      <td className="p-2 text-slate-700 font-semibold">{r.session} {r.timing ? `(${r.timing})` : ''}</td>
+                      <td className="p-2 font-bold text-slate-600">{r.venue || 'N/A'}</td>
+                      <td className="p-2 text-center font-black text-slate-700">{r.expected}</td>
+                      <td className="p-2 text-center font-black">{isMissing ? <span className="text-red-600">0</span> : <span className="text-emerald-700">{r.present}</span>}</td>
+                      <td className="p-2 text-center">
+                        {isMissing ? (
+                          <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-black text-[10px]">NOT MARKED</span>
+                        ) : (
+                          <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-black text-[10px]">SUBMITTED</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Detailed Events Loop */}
         <div className="space-y-16">
+          <div className="border-b-2 border-blue-900 pb-2 mb-6">
+            <h3 className="text-lg font-black text-blue-900 uppercase tracking-wider">
+              Detailed Activity & Session Audit Cards
+            </h3>
+          </div>
+
           {reports.map((report, idx) => {
             const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
             const rDateStr = report.date ? new Date(report.date).toISOString().split('T')[0] : '';

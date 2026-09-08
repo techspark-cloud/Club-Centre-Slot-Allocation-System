@@ -18,6 +18,8 @@ export default function AuditReportsPage() {
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
 
   const [filterDate, setFilterDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('2026-08-03');
+  const [endDate, setEndDate] = useState<string>('');
   const [filterSession, setFilterSession] = useState<string>('ALL');
   const [filterEntity, setFilterEntity] = useState<string>('ALL');
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -53,8 +55,9 @@ export default function AuditReportsPage() {
     setIsMounted(true);
     // Set to local date on client side to avoid SSR hydration mismatch
     const today = new Date();
-    const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    setFilterDate(localDate);
+    const localToday = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    setEndDate(localToday);
+    setFilterDate(''); // Default to Date Range
     
     fetchReports();
   }, []);
@@ -127,40 +130,158 @@ export default function AuditReportsPage() {
       }
 
       const doc = new jsPDF('landscape');
-      
-      doc.setFontSize(18);
-      doc.text(`Overall Audit Report: ${filterEntity}`, 14, 22);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      let y = 14;
+
+      // 1. Dual Header Logos
+      try {
+        const logoRes = await fetch('/rit-logo.png');
+        const logoBlob = await logoRes.blob();
+        const ritDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(logoBlob);
+        });
+        doc.addImage(ritDataUrl, 'PNG', margin, y, 50, 14);
+
+        const tsRes = await fetch('/techspark-logo.png');
+        const tsBlob = await tsRes.blob();
+        const tsDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(tsBlob);
+        });
+        doc.addImage(tsDataUrl, 'PNG', pageWidth - margin - 35, y, 35, 12);
+      } catch (e) {
+        console.warn("Logo loading failed in exportPDF", e);
+      }
+
+      // Title & Subtitle
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138); // blue-900
+      doc.text('RAJALAKSHMI INSTITUTE OF TECHNOLOGY', pageWidth / 2, y + 5, { align: 'center' });
+
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('Club & Centre Slot Allocation Portal | Official Audit Report', pageWidth / 2, y + 11, { align: 'center' });
+
+      y += 18;
+      doc.setDrawColor(30, 58, 138);
+      doc.setLineWidth(1.5);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 8;
+
+      // Executive Title Box
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.roundedRect(margin, y, pageWidth - margin * 2, 16, 3, 3, 'F');
       
       doc.setFontSize(11);
-      doc.setTextColor(100);
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
-      
-      const tableColumn = ["Date", "Session", "Venue", "Coordinator", "Expected", "Present", "Description", "Evidence Link"];
-      const tableRows = entityReports.map(r => [
-        new Date(r.date).toLocaleDateString('en-GB'),
-        r.session || 'N/A',
-        r.venue || 'N/A',
-        r.coordinatorName || 'N/A',
-        r.expected,
-        r.present,
-        r.description,
-        r.imageUrl ? 'View Photo (Click Here)' : 'No Evidence'
-      ]);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text(`AUDIT REPORT & COMPLIANCE SUMMARY: ${filterEntity.toUpperCase()}`, margin + 6, y + 10.5);
+
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin - 6, y + 10.5, { align: 'right' });
+
+      y += 22;
+
+      // Metrics Summary Bar
+      const totalSessions = entityReports.length;
+      const submittedCount = entityReports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
+      const missingCount = entityReports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
+      const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+
+      const boxW = (pageWidth - margin * 2 - 12) / 4;
+      const metrics = [
+        { label: 'TOTAL SESSIONS', val: `${totalSessions}`, color: [30, 41, 59] },
+        { label: 'SUBMITTED', val: `${submittedCount}`, color: [22, 163, 74] },
+        { label: 'NOT MARKED', val: `${missingCount}`, color: [220, 38, 38] },
+        { label: 'COMPLIANCE RATE', val: `${complianceRate}%`, color: [37, 99, 235] },
+      ];
+
+      metrics.forEach((m, idx) => {
+        const bX = margin + idx * (boxW + 4);
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(bX, y, boxW, 14, 2, 2, 'FD');
+        
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 116, 139);
+        doc.text(m.label, bX + boxW / 2, y + 4.5, { align: 'center' });
+
+        doc.setFontSize(10.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(m.color[0], m.color[1], m.color[2]);
+        doc.text(m.val, bX + boxW / 2, y + 11, { align: 'center' });
+      });
+
+      y += 19;
+
+      // Index Table Header
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text('AUDIT INDEX TABLE', margin, y);
+      y += 4;
+
+      const tableColumn = ["S.No", "Date & Day", "Session & Timing", "Venue", "Coordinator", "Expected", "Present", "Status", "Evidence Link"];
+      const tableRows = entityReports.map((r, i) => {
+        const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+        const dObj = r.date ? new Date(r.date) : null;
+        const dStr = (dObj && !isNaN(dObj.getTime()))
+          ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : r.date || 'N/A';
+
+        return [
+          i + 1,
+          `${dStr} (${r.day || ''})`,
+          `${r.session || ''} (${r.timing || ''})`,
+          r.venue || 'N/A',
+          r.coordinatorName || 'N/A',
+          r.expected,
+          isMissing ? 0 : r.present,
+          isMissing ? 'NOT MARKED' : 'SUBMITTED',
+          r.imageUrl ? 'View Photo' : 'No Evidence'
+        ];
+      });
 
       autoTable(doc, {
-        startY: 35,
+        startY: y,
+        margin: { left: margin, right: margin },
         head: [tableColumn],
         body: tableRows,
         theme: 'grid',
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [30, 41, 59] },
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
         columnStyles: {
-          6: { cellWidth: 80 },
-          7: { cellWidth: 40, textColor: [37, 99, 235] }
+          0: { cellWidth: 12, halign: 'center' },
+          1: { cellWidth: 35, fontStyle: 'bold' },
+          2: { cellWidth: 45 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 40 },
+          5: { cellWidth: 18, halign: 'center' },
+          6: { cellWidth: 18, halign: 'center' },
+          7: { cellWidth: 28, fontStyle: 'bold', halign: 'center' },
+          8: { cellWidth: 30, textColor: [37, 99, 235], halign: 'center' }
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 7) {
+            if (data.cell.raw === 'SUBMITTED') {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else {
+              data.cell.styles.textColor = [220, 38, 38];
+            }
+          }
         },
         didDrawCell: function (data) {
-          if (data.section === 'body' && data.column.index === 7) {
-            const url = entityReports[data.row.index].imageUrl;
+          if (data.section === 'body' && data.column.index === 8) {
+            const url = entityReports[data.row.index]?.imageUrl;
             if (url) {
               doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: url });
             }
@@ -413,7 +534,7 @@ export default function AuditReportsPage() {
           {filterEntity !== 'ALL' && (
             <div className="flex gap-2 w-full sm:w-auto">
               <Link 
-                href={`/admin/audit-reports/print/${encodeURIComponent(filterEntity)}`}
+                href={`/admin/audit-reports/print/${encodeURIComponent(filterEntity)}?startDate=${startDate}&endDate=${endDate}`}
                 target="_blank"
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-500 transition-colors shadow-sm"
               >
@@ -434,7 +555,7 @@ export default function AuditReportsPage() {
           <select
             value={filterEntity}
             onChange={(e) => setFilterEntity(e.target.value)}
-            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-xs sm:text-sm"
           >
             <option value="ALL">All Clubs & Centres</option>
             {uniqueEntities.map((entity, i) => (
@@ -442,27 +563,56 @@ export default function AuditReportsPage() {
             ))}
           </select>
           
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Date Range Inputs */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto bg-white p-1.5 border-2 border-slate-200 rounded-xl">
+            <div className="flex items-center gap-1 text-xs font-bold text-slate-500 px-2">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              <span>Period:</span>
+            </div>
             <input 
               type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
+              title="Start Date"
             />
-            {filterDate && (
-              <button 
-                onClick={() => setFilterDate('')}
-                className="px-3 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold text-xs shrink-0 transition-colors"
-                title="Show All Semester Dates"
-              >
-                All Dates
-              </button>
-            )}
+            <span className="text-slate-400 font-bold text-xs">to</span>
+            <input 
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
+              title="End Date"
+            />
+            <button 
+              onClick={() => {
+                const today = new Date().toISOString().split('T')[0];
+                setStartDate('2026-08-03');
+                setEndDate(today);
+                setFilterDate('');
+              }}
+              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-bold text-[11px] border border-blue-200 transition-colors"
+              title="Full Academic Term (Aug 3 - Today)"
+            >
+              Full Term
+            </button>
+            <button 
+              onClick={() => {
+                const today = new Date().toISOString().split('T')[0];
+                setStartDate(today);
+                setEndDate(today);
+                setFilterDate(today);
+              }}
+              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] border border-slate-200 transition-colors"
+            >
+              Today
+            </button>
           </div>
+
           <select
             value={filterSession}
             onChange={(e) => setFilterSession(e.target.value)}
-            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-xs sm:text-sm"
           >
             <option value="ALL">All Sessions</option>
             <option value="FORENOON">Forenoon</option>
@@ -471,7 +621,7 @@ export default function AuditReportsPage() {
           <button 
             onClick={fetchReports}
             disabled={isLoading}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:border-blue-500 hover:text-blue-600 transition-colors disabled:opacity-50 shadow-sm"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border-2 border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:border-blue-500 hover:text-blue-600 transition-colors disabled:opacity-50 shadow-sm text-xs sm:text-sm"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh

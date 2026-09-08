@@ -67,24 +67,65 @@ export default function MonthlyReportGenerator() {
         doc.addImage(canvas.toDataURL('image/png'), 'PNG', logoX, 25, logoWidth, logoHeight);
       } catch (e) { console.warn(e); }
       
-      doc.setFontSize(18);
-      doc.setTextColor(15, 23, 42); // slate-900
-      doc.text(`Monthly Attendance Report`, 40, 95);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138); // blue-900
+      doc.text(`Monthly Attendance Audit Report`, 40, 95);
       
-      doc.setFontSize(12);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
       doc.setTextColor(100, 116, 139); // slate-500
-      doc.text(`Department: ${department}  |  Month: ${selectedMonthLabel}`, 40, 115);
+      doc.text(`Department: ${department}   |   Month: ${selectedMonthLabel}   |   Total Students: ${data.length}`, 40, 112);
 
-      let currentY = 145;
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(1);
+      doc.line(40, 122, doc.internal.pageSize.getWidth() - 40, 122);
+
+      // --- PAGE 1: EXECUTIVE INDEX TABLE (Section Overview) ---
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text('SECTION-WISE EXECUTIVE INDEX SUMMARY TABLE', 40, 140);
+
+      const indexRows = sections.map((section: string, i: number) => {
+        const secSts = data.filter((s: any) => s.section === section);
+        const totalSts = secSts.length;
+        const clubAvg = totalSts > 0 ? Math.round(secSts.reduce((acc: number, s: any) => acc + (s.clubTotal > 0 ? (s.clubPresent / s.clubTotal) * 100 : 0), 0) / totalSts) : 0;
+        const centreAvg = totalSts > 0 ? Math.round(secSts.reduce((acc: number, s: any) => acc + (s.centreTotal > 0 ? (s.centrePresent / s.centreTotal) * 100 : 0), 0) / totalSts) : 0;
+        const overallAvg = totalSts > 0 ? Math.round(secSts.reduce((acc: number, s: any) => acc + (s.overallTotal > 0 ? (s.overallPresent / s.overallTotal) * 100 : 0), 0) / totalSts) : 0;
+        return [i + 1, `Section ${section}`, totalSts, `${clubAvg}%`, `${centreAvg}%`, `${overallAvg}%`];
+      });
+
+      autoTable(doc, {
+        startY: 148,
+        head: [['S.No', 'Section Name', 'Total Students', 'Avg Club %', 'Avg Centre %', 'Overall Attendance %']],
+        body: indexRows,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 5 },
+        columnStyles: {
+          0: { cellWidth: 35, halign: 'center' },
+          1: { cellWidth: 100, fontStyle: 'bold' },
+          2: { cellWidth: 90, halign: 'center' },
+          3: { cellWidth: 80, halign: 'center' },
+          4: { cellWidth: 80, halign: 'center' },
+          5: { cellWidth: 100, halign: 'center', fontStyle: 'bold' }
+        }
+      });
+
+      // --- PAGE 2 ONWARDS: DETAILED SECTION-BY-SECTION TABLES ---
+      doc.addPage();
+      let currentY = 40;
 
       sections.forEach((section: string, idx: number) => {
         const sectionStudents = data.filter((s: any) => s.section === section);
         
         if (sectionStudents.length > 0) {
-          doc.setFontSize(14);
+          doc.setFontSize(13);
+          doc.setFont('helvetica', 'bold');
           doc.setTextColor(30, 64, 175); // blue-800
-          doc.text(`Section: ${section}`, 40, currentY);
-          currentY += 15;
+          doc.text(`Detailed Roll: Section ${section} (${sectionStudents.length} Students)`, 40, currentY);
+          currentY += 12;
 
           const tableData = sectionStudents.map((s: any, index: number) => {
             const clubPct = s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) + '%' : 'N/A';
@@ -107,7 +148,7 @@ export default function MonthlyReportGenerator() {
             body: tableData,
             theme: 'grid',
             headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, // slate-100
-            styles: { fontSize: 9, cellPadding: 4 },
+            styles: { fontSize: 8.5, cellPadding: 3.5 },
             didDrawPage: function (data: any) {
               // Footer
               let str = "Page " + doc.internal.getNumberOfPages();
@@ -117,7 +158,7 @@ export default function MonthlyReportGenerator() {
             }
           });
 
-          currentY = (doc as any).lastAutoTable.finalY + 30;
+          currentY = (doc as any).lastAutoTable.finalY + 25;
           
           // Add new page if not the last section and running out of space
           if (idx < sections.length - 1 && currentY > doc.internal.pageSize.height - 100) {

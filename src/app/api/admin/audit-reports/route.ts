@@ -18,7 +18,11 @@ function formatTimeRange(startTime?: string, endTime?: string, session?: string)
   return 'N/A';
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const qStartDate = searchParams.get('startDate');
+  const qEndDate = searchParams.get('endDate');
+
   const GAS_URL = "https://script.google.com/macros/s/AKfycbzCt4gzTXrlASBm-fV26GSMPLHprdA5hvNwTH4Ko6NugcxnyB1dX_GSbaz-zLk80zq6/exec";
   
   const supabaseAdmin = createClient(
@@ -63,14 +67,14 @@ export async function GET() {
       console.error("Slots Fetch Error:", slotsError);
     }
 
-    // Determine audit start date (earliest report date or default to Aug 3, 2026)
+    // Determine audit start and end dates
     const reportDates = submittedReports
       .map(r => r.date ? new Date(r.date).getTime() : null)
       .filter((t): t is number => t !== null && !isNaN(t))
       .sort((a, b) => a - b);
 
-    const startDate = reportDates.length > 0 ? new Date(reportDates[0]) : new Date('2026-08-03');
-    const endDate = new Date(); // Today
+    const startDate = qStartDate ? new Date(qStartDate) : (reportDates.length > 0 ? new Date(reportDates[0]) : new Date('2026-08-03'));
+    const endDate = qEndDate ? new Date(qEndDate) : new Date(); // Today
 
     const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
     const allAuditEntries: any[] = [];
