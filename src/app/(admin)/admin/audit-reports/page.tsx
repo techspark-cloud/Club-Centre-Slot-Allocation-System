@@ -5,6 +5,7 @@ import { FileText, Calendar, MapPin, Users, Image as ImageIcon, ExternalLink, Re
 import { createClient } from '@/lib/supabase/client';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import Link from 'next/link';
 
 export default function AuditReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
@@ -109,7 +110,7 @@ export default function AuditReportsPage() {
 
   const uniqueEntities = Array.from(new Set(reports.map(r => r.entityName))).sort();
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (filterEntity === 'ALL') return;
     
     setIsGeneratingPDF(true);
@@ -165,6 +166,29 @@ export default function AuditReportsPage() {
           }
         }
       });
+
+      try {
+        const tsLogoRes = await fetch('/techspark-logo.png');
+        const tsLogoBlob = await tsLogoRes.blob();
+        const tsDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(tsLogoBlob);
+        });
+
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
+        const tsWidth = 35;
+        const tsHeight = 10;
+        
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(148, 163, 184);
+        doc.text("Managed by", pageWidth - tsWidth - 22, pageHeight - 10);
+        doc.addImage(tsDataUrl, 'PNG', pageWidth - tsWidth - 4, pageHeight - 16, tsWidth, tsHeight);
+      } catch (e) {
+        console.error("Could not load Techspark logo", e);
+      }
 
       doc.save(`${filterEntity.replace(/ /g, '_')}_Overall_Report.pdf`);
     } catch (err) {
@@ -407,14 +431,24 @@ export default function AuditReportsPage() {
         
         <div className="flex flex-col sm:flex-row flex-wrap items-center gap-3 w-full md:w-auto md:justify-end">
           {filterEntity !== 'ALL' && (
-            <button 
-              onClick={exportPDF}
-              disabled={isGeneratingPDF}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-sm"
-            >
-              {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Download PDF
-            </button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Link 
+                href={`/admin/audit-reports/print/${encodeURIComponent(filterEntity)}`}
+                target="_blank"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-500 transition-colors shadow-sm"
+              >
+                <ImageIcon className="w-4 h-4" />
+                Visual Report
+              </Link>
+              <button 
+                onClick={exportPDF}
+                disabled={isGeneratingPDF}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                Export PDF
+              </button>
+            </div>
           )}
           
           <select
