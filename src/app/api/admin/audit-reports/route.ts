@@ -114,7 +114,7 @@ export async function GET() {
             coordinatorName: 'Not Uploaded',
             expected: s.allocated_count || s.capacity || 0,
             present: 0,
-            description: '⚠️ Attendance Not Marked / Activity Report Not Submitted by Coordinator',
+            description: '[!] Attendance Not Marked / Activity Report Not Submitted by Coordinator',
             imageUrl: '',
             submitted: false,
             status: 'NOT_SUBMITTED'

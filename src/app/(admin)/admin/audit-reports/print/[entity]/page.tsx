@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { use } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
 export default function PrintReportPage({ params }: { params: Promise<{ entity: string }> }) {
   const { entity } = use(params);
@@ -12,6 +13,11 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
   const [allEntities, setAllEntities] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
   
+  // Student attendance details option toggle
+  const [includeStudentDetails, setIncludeStudentDetails] = useState(false);
+  const [isFetchingStudents, setIsFetchingStudents] = useState(false);
+  const [studentsMap, setStudentsMap] = useState<Record<string, any[]>>({});
+
   // Extract entity name from URL and decode it properly
   const entityName = decodeURIComponent(entity);
 
@@ -21,11 +27,9 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         const res = await fetch('/api/admin/audit-reports');
         const result = await res.json();
         if (result.success) {
-          // Debug: show all available entity names
           const entities = [...new Set(result.data.map((r: any) => r.entityName))] as string[];
           setAllEntities(entities);
           
-          // Filter by entity and sort by date ascending
           const filtered = result.data
             .filter((r: any) => r.entityName === entityName)
             .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -42,6 +46,64 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
 
     fetchReports();
   }, [entityName]);
+
+  const fetchStudentsForReports = async (reportsList: any[]) => {
+    setIsFetchingStudents(true);
+    try {
+      const supabase = createClient();
+      const slotIds = Array.from(new Set(reportsList.map((r: any) => r.slotId).filter(Boolean)));
+      if (slotIds.length === 0) return {};
+
+      const { data: allocations } = await supabase
+        .from('allocations')
+        .select('slot_id, student_id, students(register_no, name, course, section)')
+        .in('slot_id', slotIds);
+
+      const { data: attendance } = await supabase
+        .from('attendance')
+        .select('slot_id, date, student_id, status')
+        .in('slot_id', slotIds);
+
+      const map: Record<string, any[]> = {};
+
+      reportsList.forEach((r: any) => {
+        if (!r.slotId) return;
+        const rDateStr = r.date ? new Date(r.date).toISOString().split('T')[0] : '';
+        const key = `${r.slotId}_${rDateStr}`;
+
+        const slotAllocs = (allocations || []).filter((a: any) => a.slot_id === r.slotId);
+        const slotAtts = (attendance || []).filter((at: any) => at.slot_id === r.slotId && at.date === rDateStr);
+
+        const merged = slotAllocs.map((a: any) => {
+          const att = slotAtts.find((at: any) => at.student_id === a.student_id);
+          return {
+            register_no: a.students?.register_no || '',
+            name: a.students?.name || '',
+            course: a.students?.course || '',
+            section: a.students?.section || '',
+            status: att ? att.status : 'UNMARKED'
+          };
+        }).sort((a: any, b: any) => a.register_no.localeCompare(b.register_no));
+
+        map[key] = merged;
+      });
+
+      setStudentsMap(map);
+      return map;
+    } catch (err) {
+      console.error("Failed to fetch student details for report:", err);
+      return {};
+    } finally {
+      setIsFetchingStudents(false);
+    }
+  };
+
+  const handleToggleStudentDetails = async (checked: boolean) => {
+    setIncludeStudentDetails(checked);
+    if (checked && Object.keys(studentsMap).length === 0) {
+      await fetchStudentsForReports(reports);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -80,7 +142,6 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
 
   const toBase64 = async (url: string, isPng = false): Promise<string | null> => {
     try {
-      // Use fetch to bypass CORS issues
       const res = await fetch(url);
       if (!res.ok) return null;
       const blob = await res.blob();
@@ -89,7 +150,6 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         reader.onloadend = () => {
           const dataUrl = reader.result as string;
           if (!isPng) { resolve(dataUrl); return; }
-          // For PNG with transparency, draw on white canvas to avoid black background in PDF
           const img = new window.Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
@@ -111,12 +171,17 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
     }
   };
 
-
   const downloadPDF = async () => {
     setIsDownloading(true);
     try {
       const { jsPDF } = await import('jspdf');
       const { default: autoTable } = await import('jspdf-autotable');
+
+      // Fetch student data if toggle is ON and map is empty
+      let currentStudentsMap = studentsMap;
+      if (includeStudentDetails && Object.keys(studentsMap).length === 0) {
+        currentStudentsMap = await fetchStudentsForReports(reports);
+      }
 
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageWidth = doc.internal.pageSize.width;
@@ -140,13 +205,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
-      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 21, { align: 'right' });
+      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 20, { align: 'right' });
 
-      doc.setDrawColor(30, 58, 138);
-      doc.setLineWidth(0.8);
-      doc.line(margin, 30, pageWidth - margin, 30);
-
-      // Entity title
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
@@ -155,7 +215,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(100, 116, 139);
-      doc.text('Comprehensive Summary of All Conducted Activities', pageWidth / 2, 47, { align: 'center' });
+      doc.text('Comprehensive Summary of All Scheduled Sessions & Conducted Activities', pageWidth / 2, 47, { align: 'center' });
 
       let y = 55;
 
@@ -170,6 +230,11 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
 
         const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
 
+        const dateObj = report.date ? new Date(report.date) : null;
+        const dateStr = (dateObj && !isNaN(dateObj.getTime()))
+          ? dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : report.date || 'N/A';
+
         // Section header
         if (isMissing) {
           doc.setFillColor(220, 38, 38); // Red for missing
@@ -177,15 +242,14 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           doc.setFillColor(30, 58, 138); // Blue for submitted
         }
         doc.roundedRect(margin, y, pageWidth - margin * 2, 8, 2, 2, 'F');
-        doc.setFontSize(10);
+        doc.setFontSize(8.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(255, 255, 255);
         
         if (isMissing) {
-          doc.text(`${idx + 1}.  Scheduled Slot (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Status: ❌ NOT MARKED`, margin + 3, y + 5.5);
+          doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Status: ATTENDANCE NOT MARKED`, margin + 3, y + 5.5);
         } else {
-          const dateStr = new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-          doc.text(`${idx + 1}.  Date: ${dateStr} [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
+          doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
         }
         y += 11;
 
@@ -221,7 +285,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         } else {
           doc.setTextColor(71, 85, 105);
         }
-        const descLines = doc.splitTextToSize(`"${report.description}"`, pageWidth - margin * 2 - 65);
+        const cleanDesc = (report.description || '').replace(/[^\x00-\x7F]/g, '');
+        const descLines = doc.splitTextToSize(`"${cleanDesc}"`, pageWidth - margin * 2 - 65);
         doc.text(descLines, margin, y + 5);
 
         // Image
@@ -229,7 +294,6 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           const match = report.imageUrl.match(/[-\w]{25,}/);
           const driveId = match ? match[0] : null;
           if (driveId) {
-            // Use export=view via our CORS-bypass proxy
             const driveUrl = `https://drive.google.com/uc?export=view&id=${driveId}`;
             const proxiedUrl = `/api/admin/proxy-image?url=${encodeURIComponent(driveUrl)}`;
             const imgData = await toBase64(proxiedUrl, false);
@@ -246,6 +310,60 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         }
 
         y += Math.max(descLines.length * 4 + 10, 48);
+
+        // OPTIONAL: Include Student Details Table in PDF if turned ON
+        if (includeStudentDetails) {
+          const rDateStr = report.date ? new Date(report.date).toISOString().split('T')[0] : '';
+          const key = `${report.slotId}_${rDateStr}`;
+          const stList = (currentStudentsMap || studentsMap)[key] || [];
+
+          if (stList.length > 0) {
+            if (y > pageHeight - 50) {
+              doc.addPage();
+              y = 15;
+            }
+
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 58, 138);
+            doc.text(`Student Attendance Roll (${stList.length} Students)`, margin, y + 4);
+            y += 6;
+
+            autoTable(doc, {
+              startY: y,
+              margin: { left: margin, right: margin },
+              head: [['#', 'Register No', 'Student Name', 'Course & Sec', 'Status']],
+              body: stList.map((st: any, i: number) => [
+                i + 1,
+                st.register_no,
+                st.name,
+                `${st.course} (${st.section})`,
+                st.status
+              ]),
+              styles: { fontSize: 7, cellPadding: 1.5 },
+              headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+              columnStyles: {
+                0: { cellWidth: 8 },
+                1: { cellWidth: 28, fontStyle: 'bold' },
+                2: { cellWidth: 60, fontStyle: 'bold' },
+                3: { cellWidth: 62 },
+                4: { cellWidth: 22, fontStyle: 'bold' }
+              },
+              didParseCell: (data) => {
+                if (data.section === 'body' && data.column.index === 4) {
+                  if (data.cell.raw === 'PRESENT') {
+                    data.cell.styles.textColor = [22, 163, 74];
+                  } else if (data.cell.raw === 'ABSENT') {
+                    data.cell.styles.textColor = [220, 38, 38];
+                  } else {
+                    data.cell.styles.textColor = [217, 119, 6];
+                  }
+                }
+              }
+            });
+            y = (doc as any).lastAutoTable.finalY + 8;
+          }
+        }
 
         // Separator
         doc.setDrawColor(226, 232, 240);
@@ -290,22 +408,38 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
   return (
     <div className="min-h-screen bg-white">
       {/* Non-printable controls */}
-      <div className="print:hidden p-4 bg-slate-900 text-white flex justify-between items-center sticky top-0 z-50">
+      <div className="print:hidden p-4 bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-50 shadow-md">
         <div>
-          <h1 className="font-bold">Visual Report: {entityName}</h1>
+          <h1 className="font-bold text-lg">Visual Report: {entityName}</h1>
           <p className="text-xs text-slate-400">{reports.length} timetable slot(s) & activity report(s)</p>
         </div>
-        <button 
-          onClick={downloadPDF}
-          disabled={isDownloading}
-          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2"
-        >
-          {isDownloading ? (
-            <><span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Generating PDF...</>
-          ) : (
-            '⬇ Download PDF'
-          )}
-        </button>
+        
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <label className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700/80 px-4 py-2 rounded-xl cursor-pointer text-xs font-bold border border-slate-700 transition-all select-none">
+            <input 
+              type="checkbox" 
+              checked={includeStudentDetails} 
+              onChange={(e) => handleToggleStudentDetails(e.target.checked)}
+              className="w-4 h-4 accent-blue-500 rounded cursor-pointer"
+            />
+            <span className="text-slate-200 flex items-center gap-1.5">
+              📋 Include Student Attendance Details
+              {isFetchingStudents && <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full"></span>}
+            </span>
+          </label>
+
+          <button 
+            onClick={downloadPDF}
+            disabled={isDownloading || isFetchingStudents}
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 text-sm shadow-sm"
+          >
+            {isDownloading ? (
+              <><span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Generating PDF...</>
+            ) : (
+              '⬇ Download PDF'
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Printable Area - Standard A4 styling */}
@@ -332,6 +466,9 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         <div className="space-y-16">
           {reports.map((report, idx) => {
             const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
+            const rDateStr = report.date ? new Date(report.date).toISOString().split('T')[0] : '';
+            const key = `${report.slotId}_${rDateStr}`;
+            const studentList = studentsMap[key] || [];
 
             return (
               <div key={idx} className="page-break-inside-avoid">
@@ -437,6 +574,58 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
                     )}
                   </div>
                 </div>
+
+                {/* Optional Student Attendance Roll Table */}
+                {includeStudentDetails && (
+                  <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-200">
+                    <h4 className="text-sm font-black text-blue-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      📋 Student Attendance Roll ({studentList.length} Students Allocated)
+                    </h4>
+                    {isFetchingStudents ? (
+                      <div className="p-6 text-center text-slate-400 text-xs font-bold flex items-center justify-center gap-2">
+                        <span className="animate-spin inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                        Loading student attendance records from database...
+                      </div>
+                    ) : studentList.length === 0 ? (
+                      <p className="text-xs text-slate-400 font-bold italic bg-slate-50 p-4 rounded-xl text-center border border-slate-200">
+                        No student allocation data recorded for this slot.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-black uppercase tracking-wider">
+                            <tr>
+                              <th className="p-3 border-b">#</th>
+                              <th className="p-3 border-b">Register No</th>
+                              <th className="p-3 border-b">Student Name</th>
+                              <th className="p-3 border-b">Course / Sec</th>
+                              <th className="p-3 border-b text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium">
+                            {studentList.map((st: any, i: number) => (
+                              <tr key={i} className={st.status === 'PRESENT' ? 'bg-green-50/50' : st.status === 'ABSENT' ? 'bg-red-50/50' : ''}>
+                                <td className="p-2.5 font-bold text-slate-400">{i + 1}</td>
+                                <td className="p-2.5 font-black text-slate-800">{st.register_no}</td>
+                                <td className="p-2.5 font-bold text-slate-700">{st.name}</td>
+                                <td className="p-2.5 text-slate-500 font-semibold">{st.course} ({st.section})</td>
+                                <td className="p-2.5 text-center">
+                                  {st.status === 'PRESENT' ? (
+                                    <span className="bg-green-100 text-green-800 border border-green-200 px-2.5 py-0.5 rounded-md font-black text-[10px]">PRESENT</span>
+                                  ) : st.status === 'ABSENT' ? (
+                                    <span className="bg-red-100 text-red-800 border border-red-200 px-2.5 py-0.5 rounded-md font-black text-[10px]">ABSENT</span>
+                                  ) : (
+                                    <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-md font-bold text-[10px]">UNMARKED</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
