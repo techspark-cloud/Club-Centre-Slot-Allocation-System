@@ -2,14 +2,17 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
+import { use } from 'react';
 
-export default function PrintReportPage({ params }: { params: { entity: string } }) {
+export default function PrintReportPage({ params }: { params: Promise<{ entity: string }> }) {
+  const { entity } = use(params);
   const [reports, setReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [allEntities, setAllEntities] = useState<string[]>([]);
   
   // Extract entity name from URL and decode it properly
-  const entityName = decodeURIComponent(params.entity);
+  const entityName = decodeURIComponent(entity);
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -17,6 +20,10 @@ export default function PrintReportPage({ params }: { params: { entity: string }
         const res = await fetch('/api/admin/audit-reports');
         const result = await res.json();
         if (result.success) {
+          // Debug: show all available entity names
+          const entities = [...new Set(result.data.map((r: any) => r.entityName))] as string[];
+          setAllEntities(entities);
+          
           // Filter by entity and sort by date ascending
           const filtered = result.data
             .filter((r: any) => r.entityName === entityName)
@@ -49,7 +56,25 @@ export default function PrintReportPage({ params }: { params: { entity: string }
   }
 
   if (reports.length === 0) {
-    return <div className="p-10 text-slate-500 font-bold text-center">No reports found for {entityName}.</div>;
+    return (
+      <div className="p-10 text-center">
+        <p className="text-slate-700 font-black text-lg mb-2">No reports found for:</p>
+        <p className="text-red-600 font-bold bg-red-50 px-4 py-2 rounded-lg inline-block mb-6">"{entityName}"</p>
+        {allEntities.length > 0 && (
+          <div className="mt-4">
+            <p className="text-slate-500 font-bold mb-3 text-sm">Available entities in Google Sheets:</p>
+            <div className="flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
+              {allEntities.map((e, i) => (
+                <a key={i} href={`/admin/audit-reports/print/${encodeURIComponent(e)}`}
+                  className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-600 hover:text-white transition-colors">
+                  {e}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   const printReport = () => {
@@ -152,16 +177,25 @@ export default function PrintReportPage({ params }: { params: { entity: string }
                         const driveId = match ? match[0] : null;
                         
                         if (driveId) {
-                          // Using standard img tag with Google Drive content export URL works perfectly for print!
-                          const downloadUrl = `https://drive.google.com/uc?export=view&id=${driveId}`;
+                          // Try thumbnail URL - works without authentication for public files
+                          const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`;
                           return (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img 
-                              src={downloadUrl}
-                              alt="Activity Evidence"
-                              className="object-cover w-full h-full"
-                              crossOrigin="anonymous"
-                            />
+                            <div className="relative w-full h-full">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img 
+                                src={thumbUrl}
+                                alt="Activity Evidence"
+                                className="object-cover w-full h-full"
+                                onError={(e) => {
+                                  // Fallback to export=view URL
+                                  (e.target as HTMLImageElement).src = `https://drive.google.com/uc?export=view&id=${driveId}`;
+                                }}
+                              />
+                              <a href={url} target="_blank" rel="noopener noreferrer"
+                                className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-xs px-2 py-1 rounded font-bold">
+                                Open Full ↗
+                              </a>
+                            </div>
                           );
                         } else {
                           return (
