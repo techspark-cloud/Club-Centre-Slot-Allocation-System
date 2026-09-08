@@ -10,6 +10,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [allEntities, setAllEntities] = useState<string[]>([]);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // Extract entity name from URL and decode it properly
   const entityName = decodeURIComponent(entity);
@@ -77,8 +78,180 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
     );
   }
 
-  const printReport = () => {
-    window.print();
+  const toBase64 = async (url: string, isPng = false): Promise<string | null> => {
+    try {
+      // Use fetch to bypass CORS issues
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          if (!isPng) { resolve(dataUrl); return; }
+          // For PNG with transparency, draw on white canvas to avoid black background in PDF
+          const img = new window.Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d')!;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          };
+          img.onerror = () => resolve(dataUrl);
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+
+  const downloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.width;
+      const pageHeight = doc.internal.pageSize.height;
+      const margin = 14;
+
+      // Load RIT logo
+      try {
+        const logoData = await toBase64('/rit-logo.png', true);
+        if (logoData) {
+          const logoH = 16;
+          const logoW = logoH * 4.5;
+          doc.addImage(logoData, 'PNG', margin, 10, logoW, logoH);
+        }
+      } catch {}
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text('ACTIVITY AUDIT REPORT', pageWidth - margin, 15, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 21, { align: 'right' });
+
+      doc.setDrawColor(30, 58, 138);
+      doc.setLineWidth(0.8);
+      doc.line(margin, 30, pageWidth - margin, 30);
+
+      // Entity title
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(entityName, pageWidth / 2, 40, { align: 'center' });
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('Comprehensive Summary of All Conducted Activities', pageWidth / 2, 47, { align: 'center' });
+
+      let y = 55;
+
+      for (let idx = 0; idx < reports.length; idx++) {
+        const report = reports[idx];
+
+        // Add new page if not enough space
+        if (y > pageHeight - 80) {
+          doc.addPage();
+          y = 15;
+        }
+
+        // Section header
+        doc.setFillColor(30, 58, 138);
+        doc.roundedRect(margin, y, pageWidth - margin * 2, 8, 2, 2, 'F');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        const dateStr = new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        doc.text(`${idx + 1}.  Activity on ${dateStr}   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
+        y += 11;
+
+        // Details row
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(51, 65, 85);
+        doc.text('Session:', margin, y + 5);
+        doc.setFont('helvetica', 'normal');
+        doc.text(report.session || 'N/A', margin + 18, y + 5);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Venue:', margin + 55, y + 5);
+        doc.setFont('helvetica', 'normal');
+        doc.text(report.venue || 'N/A', margin + 67, y + 5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(22, 163, 74);
+        doc.text(`Expected: ${report.expected}`, margin + 110, y + 5);
+        doc.setTextColor(21, 128, 61);
+        doc.text(`Present: ${report.present}`, margin + 135, y + 5);
+        y += 9;
+
+        // Description
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8.5);
+        doc.setTextColor(71, 85, 105);
+        const descLines = doc.splitTextToSize(`"${report.description}"`, pageWidth - margin * 2 - 65);
+        doc.text(descLines, margin, y + 5);
+
+        // Image
+        if (report.imageUrl) {
+          const match = report.imageUrl.match(/[-\w]{25,}/);
+          const driveId = match ? match[0] : null;
+          if (driveId) {
+            // Use export=view via our CORS-bypass proxy
+            const driveUrl = `https://drive.google.com/uc?export=view&id=${driveId}`;
+            const proxiedUrl = `/api/admin/proxy-image?url=${encodeURIComponent(driveUrl)}`;
+            const imgData = await toBase64(proxiedUrl, false);
+            
+            if (imgData) {
+              const imgX = pageWidth - margin - 55;
+              const imgY = y;
+              doc.addImage(imgData, 'JPEG', imgX, imgY, 55, 40);
+              doc.setDrawColor(226, 232, 240);
+              doc.setLineWidth(0.3);
+              doc.rect(imgX, imgY, 55, 40);
+            }
+          }
+        }
+
+        y += Math.max(descLines.length * 4 + 10, 48);
+
+        // Separator
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 6;
+      }
+
+      // Footer with Techspark logo on last page
+      try {
+        const tsData = await toBase64('/techspark-logo.png', true);
+        if (tsData) {
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(148, 163, 184);
+          doc.text('Managed by', pageWidth - 50, pageHeight - 10);
+          doc.addImage(tsData, 'PNG', pageWidth - 40, pageHeight - 17, 28, 8);
+        }
+      } catch {}
+
+      doc.save(`${entityName.replace(/\s+/g, '_')}_Visual_Report.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert('PDF generation failed. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -86,14 +259,19 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       {/* Non-printable controls */}
       <div className="print:hidden p-4 bg-slate-900 text-white flex justify-between items-center sticky top-0 z-50">
         <div>
-          <h1 className="font-bold">Print Preview: {entityName}</h1>
-          <p className="text-xs text-slate-400">Please make sure "Background graphics" is checked in your print settings for best results.</p>
+          <h1 className="font-bold">Visual Report: {entityName}</h1>
+          <p className="text-xs text-slate-400">{reports.length} activity report(s) found</p>
         </div>
         <button 
-          onClick={printReport}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold transition-colors"
+          onClick={downloadPDF}
+          disabled={isDownloading}
+          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2"
         >
-          Print to PDF
+          {isDownloading ? (
+            <><span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Generating PDF...</>
+          ) : (
+            '⬇ Download PDF'
+          )}
         </button>
       </div>
 
