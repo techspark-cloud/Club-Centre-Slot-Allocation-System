@@ -192,16 +192,17 @@ export default function AuditReportsPage() {
 
       // Metrics Summary Bar
       const totalSessions = entityReports.length;
-      const submittedCount = entityReports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
-      const missingCount = entityReports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
-      const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+      const submittedCount = entityReports.filter(r => r.status === 'SUBMITTED').length;
+      const pendingCount = entityReports.filter(r => r.status === 'REPORT_PENDING').length;
+      const missingCount = entityReports.filter(r => r.status === 'NOT_SUBMITTED').length;
+      const complianceRate = totalSessions > 0 ? Math.round(((submittedCount + pendingCount) / totalSessions) * 100) : 0;
 
       const boxW = (pageWidth - margin * 2 - 12) / 4;
       const metrics = [
         { label: 'TOTAL SESSIONS', val: `${totalSessions}`, color: [30, 41, 59] },
         { label: 'SUBMITTED', val: `${submittedCount}`, color: [22, 163, 74] },
+        { label: 'REPORT PENDING', val: `${pendingCount}`, color: [217, 119, 6] },
         { label: 'NOT MARKED', val: `${missingCount}`, color: [220, 38, 38] },
-        { label: 'COMPLIANCE RATE', val: `${complianceRate}%`, color: [37, 99, 235] },
       ];
 
       metrics.forEach((m, idx) => {
@@ -232,11 +233,17 @@ export default function AuditReportsPage() {
 
       const tableColumn = ["S.No", "Date & Day", "Session & Timing", "Venue", "Coordinator", "Expected", "Present", "Status", "Evidence Link"];
       const tableRows = entityReports.map((r, i) => {
-        const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+        const isSubmitted = r.status === 'SUBMITTED';
+        const isPending = r.status === 'REPORT_PENDING';
+        const isHoliday = r.status === 'HOLIDAY';
+        const isMissing = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
+
         const dObj = r.date ? new Date(r.date) : null;
         const dStr = (dObj && !isNaN(dObj.getTime()))
           ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : r.date || 'N/A';
+
+        const statusLabel = isSubmitted ? 'SUBMITTED' : isPending ? 'REPORT PENDING' : isHoliday ? 'HOLIDAY' : 'NOT MARKED';
 
         return [
           i + 1,
@@ -245,8 +252,8 @@ export default function AuditReportsPage() {
           r.venue || 'N/A',
           r.coordinatorName || 'N/A',
           r.expected,
-          isMissing ? 0 : r.present,
-          isMissing ? 'NOT MARKED' : 'SUBMITTED',
+          isMissing || isHoliday ? 0 : r.present,
+          statusLabel,
           r.imageUrl ? 'View Photo' : 'No Evidence'
         ];
       });
@@ -267,13 +274,17 @@ export default function AuditReportsPage() {
           4: { cellWidth: 40 },
           5: { cellWidth: 18, halign: 'center' },
           6: { cellWidth: 18, halign: 'center' },
-          7: { cellWidth: 28, fontStyle: 'bold', halign: 'center' },
-          8: { cellWidth: 30, textColor: [37, 99, 235], halign: 'center' }
+          7: { cellWidth: 32, fontStyle: 'bold', halign: 'center' },
+          8: { cellWidth: 26, textColor: [37, 99, 235], halign: 'center' }
         },
         didParseCell: (data) => {
           if (data.section === 'body' && data.column.index === 7) {
             if (data.cell.raw === 'SUBMITTED') {
               data.cell.styles.textColor = [22, 163, 74];
+            } else if (data.cell.raw === 'REPORT PENDING') {
+              data.cell.styles.textColor = [217, 119, 6];
+            } else if (data.cell.raw === 'HOLIDAY') {
+              data.cell.styles.textColor = [147, 51, 234];
             } else {
               data.cell.styles.textColor = [220, 38, 38];
             }
@@ -534,7 +545,7 @@ export default function AuditReportsPage() {
           {filterEntity !== 'ALL' && (
             <div className="flex gap-2 w-full sm:w-auto">
               <Link 
-                href={`/admin/audit-reports/print/${encodeURIComponent(filterEntity)}?startDate=${startDate}&endDate=${endDate}`}
+                href={`/admin/audit-reports/print?entity=${encodeURIComponent(filterEntity)}&startDate=${startDate}&endDate=${endDate}`}
                 target="_blank"
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-500 transition-colors shadow-sm"
               >
@@ -684,30 +695,41 @@ export default function AuditReportsPage() {
               return true;
             })
             .map((report, idx) => {
-              const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
+              const isSubmitted = report.status === 'SUBMITTED';
+              const isPending = report.status === 'REPORT_PENDING';
+              const isHoliday = report.status === 'HOLIDAY';
+              const isMissing = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
 
               return (
-                <div key={idx} className={`border rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${isMissing ? 'bg-red-50/30 border-red-200' : 'bg-white border-slate-200'}`}>
-                  <div className={`absolute top-0 right-0 w-32 h-32 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform ${isMissing ? 'bg-red-100' : 'bg-blue-50'}`}></div>
+                <div key={idx} className={`border rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${isMissing ? 'bg-red-50/30 border-red-200' : isPending ? 'bg-amber-50/30 border-amber-200' : isHoliday ? 'bg-purple-50/30 border-purple-200' : 'bg-white border-slate-200'}`}>
+                  <div className={`absolute top-0 right-0 w-32 h-32 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform ${isMissing ? 'bg-red-100' : isPending ? 'bg-amber-100' : isHoliday ? 'bg-purple-100' : 'bg-blue-50'}`}></div>
                   
                   <div className="flex items-start justify-between relative">
                     <div>
                       <h3 className="text-lg font-black text-slate-800">{report.entityName}</h3>
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                        <User className="w-3.5 h-3.5" /> <span className={isMissing ? 'text-red-600 font-bold' : ''}>{report.coordinatorName}</span>
+                        <User className="w-3.5 h-3.5" /> <span className={isMissing ? 'text-red-600 font-bold' : isPending ? 'text-amber-700 font-bold' : isHoliday ? 'text-purple-700 font-bold' : ''}>{report.coordinatorName}</span>
                       </div>
                     </div>
                     <div className="text-right flex flex-col items-end gap-1.5">
                       <span className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-lg inline-block border border-slate-200 shadow-xs">
                         📅 {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ({report.day || ''})
                       </span>
-                      {isMissing ? (
-                        <span className="text-xs font-black text-red-700 bg-red-100 border border-red-200 px-2.5 py-0.5 rounded-md inline-block">
-                          ❌ ATTENDANCE NOT MARKED
-                        </span>
-                      ) : (
+                      {isSubmitted ? (
                         <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md inline-block">
                           ✅ SUBMITTED
+                        </span>
+                      ) : isPending ? (
+                        <span className="text-xs font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-md inline-block">
+                          ⚠️ REPORT PENDING
+                        </span>
+                      ) : isHoliday ? (
+                        <span className="text-xs font-black text-purple-800 bg-purple-100 border border-purple-300 px-2.5 py-0.5 rounded-md inline-block">
+                          🎉 HOLIDAY
+                        </span>
+                      ) : (
+                        <span className="text-xs font-black text-red-700 bg-red-100 border border-red-200 px-2.5 py-0.5 rounded-md inline-block">
+                          ❌ ATTENDANCE NOT MARKED
                         </span>
                       )}
                     </div>
@@ -734,9 +756,9 @@ export default function AuditReportsPage() {
                     </div>
                   </div>
 
-                  <div className={`rounded-xl p-4 mb-6 border relative ${isMissing ? 'bg-red-50/80 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
-                    <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${isMissing ? 'text-red-500' : 'text-slate-400'}`}>Activity Description</p>
-                    <p className={`text-sm font-medium leading-relaxed relative z-10 ${isMissing ? 'text-red-800 font-bold' : 'text-slate-700 italic'}`}>
+                  <div className={`rounded-xl p-4 mb-6 border relative ${isMissing ? 'bg-red-50/80 border-red-200' : isPending ? 'bg-amber-50/80 border-amber-200' : isHoliday ? 'bg-purple-50/80 border-purple-200' : 'bg-slate-50 border-slate-100'}`}>
+                    <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${isMissing ? 'text-red-500' : isPending ? 'text-amber-600' : isHoliday ? 'text-purple-600' : 'text-slate-400'}`}>Activity Description</p>
+                    <p className={`text-sm font-medium leading-relaxed relative z-10 ${isMissing ? 'text-red-800 font-bold' : isPending ? 'text-amber-900 font-semibold' : isHoliday ? 'text-purple-900 font-semibold' : 'text-slate-700 italic'}`}>
                       "{report.description}"
                     </p>
                   </div>
@@ -747,9 +769,9 @@ export default function AuditReportsPage() {
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Expected</span>
                     <span className="text-sm font-black text-slate-700">{report.expected}</span>
                   </div>
-                  <div className="px-3 py-1.5 bg-green-50 border border-green-100 rounded-lg">
-                    <span className="text-[10px] font-black text-green-600 uppercase tracking-wider block">Present</span>
-                    <span className="text-sm font-black text-green-700">{report.present}</span>
+                  <div className={`px-3 py-1.5 rounded-lg border ${isMissing ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider block ${isMissing ? 'text-red-600' : 'text-green-600'}`}>Present</span>
+                    <span className={`text-sm font-black ${isMissing ? 'text-red-700' : 'text-green-700'}`}>{report.present}</span>
                   </div>
                 </div>
                 <div className="flex gap-2">

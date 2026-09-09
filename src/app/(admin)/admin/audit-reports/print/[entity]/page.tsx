@@ -5,8 +5,8 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function PrintReportPage({ params }: { params: Promise<{ entity: string }> }) {
-  const { entity } = use(params);
+export default function PrintReportPage({ params }: { params: Promise<{ entity?: string }> }) {
+  const resolvedParams = use(params);
   const searchParams = useSearchParams();
 
   const initialStart = searchParams.get('startDate') || '2026-08-03';
@@ -27,14 +27,16 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
   const [isFetchingStudents, setIsFetchingStudents] = useState(false);
   const [studentsMap, setStudentsMap] = useState<Record<string, any[]>>({});
 
-  // Extract entity name from URL and decode it properly
-  const entityName = decodeURIComponent(entity);
+  // Extract entity name from URL params or query searchParam and decode it properly
+  const entityParam = searchParams.get('entity') || resolvedParams.entity || '';
+  const entityName = decodeURIComponent(entityParam);
 
   useEffect(() => {
     const fetchReportsAndFaculty = async () => {
       setIsLoading(true);
       try {
         const supabase = createClient();
+        const targetName = entityName.trim().toLowerCase();
 
         // 1. Fetch faculty coordinator name from clubs or centres
         const { data: club } = await supabase.from('clubs').select('faculty_name').ilike('name', entityName).maybeSingle();
@@ -50,7 +52,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           setAllEntities(entities);
           
           const filtered = result.data
-            .filter((r: any) => r.entityName === entityName)
+            .filter((r: any) => r.entityName && r.entityName.trim().toLowerCase() === targetName)
             .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
           setReports(filtered);
         } else {
@@ -159,9 +161,13 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
     );
   }
 
-  const toBase64 = async (url: string, isPng = false): Promise<string | null> => {
+  const toBase64 = async (url: string, isPng = false, timeoutMs = 4000): Promise<string | null> => {
     try {
-      const res = await fetch(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       if (!res.ok) return null;
       const blob = await res.blob();
       return new Promise((resolve) => {
@@ -301,16 +307,17 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
 
       // Executive Summary Metrics Bar
       const totalSessions = reports.length;
-      const submittedCount = reports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
-      const missingCount = reports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
-      const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+      const submittedCount = reports.filter(r => r.status === 'SUBMITTED').length;
+      const pendingCount = reports.filter(r => r.status === 'REPORT_PENDING').length;
+      const missingCount = reports.filter(r => r.status === 'NOT_SUBMITTED').length;
+      const complianceRate = totalSessions > 0 ? Math.round(((submittedCount + pendingCount) / totalSessions) * 100) : 0;
 
       const boxWidth = (pageWidth - margin * 2 - 9) / 4;
       const metricBoxes = [
         { label: 'TOTAL SESSIONS', val: `${totalSessions}`, color: [30, 41, 59] },
         { label: 'SUBMITTED', val: `${submittedCount}`, color: [22, 163, 74] },
+        { label: 'REPORT PENDING', val: `${pendingCount}`, color: [217, 119, 6] },
         { label: 'NOT MARKED', val: `${missingCount}`, color: [220, 38, 38] },
-        { label: 'COMPLIANCE RATE', val: `${complianceRate}%`, color: [37, 99, 235] },
       ];
 
       metricBoxes.forEach((box, bIdx) => {
@@ -338,11 +345,16 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
       y += 4;
 
       const indexRows = reports.map((r, i) => {
-        const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+        const isSubmitted = r.status === 'SUBMITTED';
+        const isPending = r.status === 'REPORT_PENDING';
+        const isMissing = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+
         const dObj = r.date ? new Date(r.date) : null;
         const dStr = (dObj && !isNaN(dObj.getTime()))
           ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : r.date || 'N/A';
+
+        const statusText = isSubmitted ? 'SUBMITTED' : isPending ? 'REPORT PENDING' : 'NOT MARKED';
 
         return [
           i + 1,
@@ -351,7 +363,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           r.venue || 'N/A',
           r.expected || 0,
           isMissing ? 0 : r.present || 0,
-          isMissing ? 'NOT MARKED' : 'SUBMITTED'
+          statusText
         ];
       });
 
@@ -375,6 +387,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           if (data.section === 'body' && data.column.index === 6) {
             if (data.cell.raw === 'SUBMITTED') {
               data.cell.styles.textColor = [22, 163, 74];
+            } else if (data.cell.raw === 'REPORT PENDING') {
+              data.cell.styles.textColor = [217, 119, 6];
             } else {
               data.cell.styles.textColor = [220, 38, 38];
             }
@@ -403,7 +417,9 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           y = 15;
         }
 
-        const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
+        const isSubmitted = report.status === 'SUBMITTED';
+        const isPending = report.status === 'REPORT_PENDING';
+        const isMissing = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
 
         const dateObj = report.date ? new Date(report.date) : null;
         const dateStr = (dateObj && !isNaN(dateObj.getTime()))
@@ -413,6 +429,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         // Section header
         if (isMissing) {
           doc.setFillColor(220, 38, 38); // Red for missing
+        } else if (isPending) {
+          doc.setFillColor(217, 119, 6); // Amber for report pending
         } else {
           doc.setFillColor(30, 58, 138); // Blue for submitted
         }
@@ -423,6 +441,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
         
         if (isMissing) {
           doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Status: ATTENDANCE NOT MARKED`, margin + 3, y + 5.5);
+        } else if (isPending) {
+          doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName} (REPORT PENDING)`, margin + 3, y + 5.5);
         } else {
           doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
         }
@@ -581,9 +601,10 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
   };
 
   const totalSessions = reports.length;
-  const submittedCount = reports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
-  const missingCount = reports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
-  const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+  const submittedCount = reports.filter(r => r.status === 'SUBMITTED').length;
+  const pendingCount = reports.filter(r => r.status === 'REPORT_PENDING').length;
+  const missingCount = reports.filter(r => r.status === 'NOT_SUBMITTED').length;
+  const complianceRate = totalSessions > 0 ? Math.round(((submittedCount + pendingCount) / totalSessions) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
@@ -696,13 +717,13 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
               <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Submitted</span>
               <span className="block text-xl font-black text-emerald-400 mt-1">{submittedCount}</span>
             </div>
+            <div className="bg-amber-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-amber-400/20">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-amber-300">Report Pending</span>
+              <span className="block text-xl font-black text-amber-400 mt-1">{pendingCount}</span>
+            </div>
             <div className="bg-red-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-red-400/20">
               <span className="block text-[10px] font-black uppercase tracking-widest text-red-300">Not Marked</span>
               <span className="block text-xl font-black text-red-400 mt-1">{missingCount}</span>
-            </div>
-            <div className="bg-blue-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-blue-400/20">
-              <span className="block text-[10px] font-black uppercase tracking-widest text-blue-300">Compliance Rate</span>
-              <span className="block text-xl font-black text-blue-400 mt-1">{complianceRate}%</span>
             </div>
           </div>
         </div>
@@ -738,25 +759,30 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {reports.map((r, i) => {
-                  const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+                  const isSubmitted = r.status === 'SUBMITTED';
+                  const isPending = r.status === 'REPORT_PENDING';
+                  const isNotMarked = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+                  
                   const dObj = r.date ? new Date(r.date) : null;
                   const dStr = (dObj && !isNaN(dObj.getTime()))
                     ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                     : r.date || 'N/A';
 
                   return (
-                    <tr key={i} className={isMissing ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-slate-50'}>
+                    <tr key={i} className={isNotMarked ? 'bg-red-50/40 hover:bg-red-50/70' : isPending ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'}>
                       <td className="p-2 text-center font-bold text-slate-400">{i + 1}</td>
                       <td className="p-2 font-black text-slate-800">{dStr} ({r.day || ''})</td>
                       <td className="p-2 text-slate-700 font-semibold">{r.session} {r.timing ? `(${r.timing})` : ''}</td>
                       <td className="p-2 font-bold text-slate-600">{r.venue || 'N/A'}</td>
                       <td className="p-2 text-center font-black text-slate-700">{r.expected}</td>
-                      <td className="p-2 text-center font-black">{isMissing ? <span className="text-red-600">0</span> : <span className="text-emerald-700">{r.present}</span>}</td>
+                      <td className="p-2 text-center font-black">{isNotMarked ? <span className="text-red-600">0</span> : <span className="text-emerald-700">{r.present}</span>}</td>
                       <td className="p-2 text-center">
-                        {isMissing ? (
-                          <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-black text-[10px]">NOT MARKED</span>
-                        ) : (
+                        {isSubmitted ? (
                           <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-black text-[10px]">SUBMITTED</span>
+                        ) : isPending ? (
+                          <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-black text-[10px]">REPORT PENDING</span>
+                        ) : (
+                          <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-black text-[10px]">NOT MARKED</span>
                         )}
                       </td>
                     </tr>
@@ -776,7 +802,10 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
           </div>
 
           {reports.map((report, idx) => {
-            const isMissing = report.submitted === false || report.status === 'NOT_SUBMITTED';
+            const isSubmitted = report.status === 'SUBMITTED';
+            const isPending = report.status === 'REPORT_PENDING';
+            const isNotMarked = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+            
             const rDateStr = report.date ? new Date(report.date).toISOString().split('T')[0] : '';
             const key = `${report.slotId}_${rDateStr}`;
             const studentList = studentsMap[key] || [];
@@ -785,23 +814,27 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity: 
               <div key={idx} className="page-break-inside-avoid">
                 <div className="flex items-center justify-between border-b-2 border-slate-100 pb-2 mb-4">
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0 ${isMissing ? 'bg-red-600 text-white' : 'bg-blue-900 text-white'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0 ${isNotMarked ? 'bg-red-600 text-white' : isPending ? 'bg-amber-600 text-white' : 'bg-blue-900 text-white'}`}>
                       {idx + 1}
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-slate-800">
                         Date: {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ({report.day || 'N/A'})
                       </h3>
-                      <p className="text-sm font-medium text-slate-500">Coordinator: <span className={`font-bold ${isMissing ? 'text-red-600' : 'text-slate-700'}`}>{report.coordinatorName}</span></p>
+                      <p className="text-sm font-medium text-slate-500">Coordinator: <span className={`font-bold ${isNotMarked ? 'text-red-600' : isPending ? 'text-amber-700' : 'text-slate-700'}`}>{report.coordinatorName}</span></p>
                     </div>
                   </div>
-                  {isMissing ? (
-                    <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
-                      ❌ ATTENDANCE NOT MARKED
-                    </span>
-                  ) : (
+                  {isSubmitted ? (
                     <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
                       ✅ SUBMITTED
+                    </span>
+                  ) : isPending ? (
+                    <span className="bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
+                      ⚠️ REPORT PENDING
+                    </span>
+                  ) : (
+                    <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
+                      ❌ ATTENDANCE NOT MARKED
                     </span>
                   )}
                 </div>

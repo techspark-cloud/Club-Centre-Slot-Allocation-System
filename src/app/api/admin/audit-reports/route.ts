@@ -76,6 +76,43 @@ export async function GET(request: Request) {
     const startDate = qStartDate ? new Date(qStartDate) : (reportDates.length > 0 ? new Date(reportDates[0]) : new Date('2026-08-03'));
     const endDate = qEndDate ? new Date(qEndDate) : new Date(); // Today
 
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    // 3. Fetch attendance records marked in Supabase for the date range
+    const { data: attendanceRecords } = await supabaseAdmin
+      .from('attendance')
+      .select('slot_id, date, status, recorded_by, profiles!recorded_by(full_name)')
+      .gte('date', startDateStr)
+      .lte('date', endDateStr);
+
+    // 4. Fetch declared holidays from Supabase
+    const { data: holidaysList } = await supabaseAdmin
+      .from('holidays')
+      .select('date, description')
+      .gte('date', startDateStr)
+      .lte('date', endDateStr);
+
+    const holidayMap = new Map<string, string>();
+    (holidaysList || []).forEach((h: any) => {
+      if (h.date) holidayMap.set(h.date, h.description || 'Declared Holiday');
+    });
+
+    // Map attendance count by slotId_date
+    const attendanceMap = new Map<string, { present: number; absent: number; recordedBy: string }>();
+    (attendanceRecords || []).forEach((a: any) => {
+      const key = `${a.slot_id}_${a.date}`;
+      if (!attendanceMap.has(key)) {
+        attendanceMap.set(key, { present: 0, absent: 0, recordedBy: a.profiles?.full_name || '' });
+      }
+      const curr = attendanceMap.get(key)!;
+      if (a.status === 'PRESENT') curr.present++;
+      else if (a.status === 'ABSENT') curr.absent++;
+      if (a.profiles?.full_name && !curr.recordedBy) {
+        curr.recordedBy = a.profiles.full_name;
+      }
+    });
+
     const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
     const allAuditEntries: any[] = [];
 
@@ -106,23 +143,66 @@ export async function GET(request: Request) {
             status: 'SUBMITTED'
           });
         } else {
-          allAuditEntries.push({
-            timestamp: new Date(dateISO).toISOString(),
-            slotId: s.id,
-            date: dateISO,
-            day: dayName,
-            session: s.session,
-            timing: timing,
-            venue: s.venue,
-            entityName: entityName,
-            coordinatorName: 'Not Uploaded',
-            expected: s.allocated_count || s.capacity || 0,
-            present: 0,
-            description: '[!] Attendance Not Marked / Activity Report Not Submitted by Coordinator',
-            imageUrl: '',
-            submitted: false,
-            status: 'NOT_SUBMITTED'
-          });
+          const holidayReason = holidayMap.get(dateISO);
+          if (holidayReason) {
+            allAuditEntries.push({
+              timestamp: new Date(dateISO).toISOString(),
+              slotId: s.id,
+              date: dateISO,
+              day: dayName,
+              session: s.session,
+              timing: timing,
+              venue: s.venue,
+              entityName: entityName,
+              coordinatorName: 'N/A (Holiday)',
+              expected: s.allocated_count || s.capacity || 0,
+              present: 0,
+              description: `🎉 Declared Holiday (${holidayReason}). No activity scheduled.`,
+              imageUrl: '',
+              submitted: false,
+              status: 'HOLIDAY'
+            });
+          } else {
+            // Check if attendance was marked in Supabase portal
+            const att = attendanceMap.get(`${s.id}_${dateISO}`);
+            if (att && (att.present > 0 || att.absent > 0)) {
+              allAuditEntries.push({
+                timestamp: new Date(dateISO).toISOString(),
+                slotId: s.id,
+                date: dateISO,
+                day: dayName,
+                session: s.session,
+                timing: timing,
+                venue: s.venue,
+                entityName: entityName,
+                coordinatorName: att.recordedBy || 'Coordinator',
+                expected: s.allocated_count || s.capacity || 0,
+                present: att.present,
+                description: `⚠️ Attendance marked in portal (${att.present} Present), photo activity report pending upload`,
+                imageUrl: '',
+                submitted: false,
+                status: 'REPORT_PENDING'
+              });
+            } else {
+              allAuditEntries.push({
+                timestamp: new Date(dateISO).toISOString(),
+                slotId: s.id,
+                date: dateISO,
+                day: dayName,
+                session: s.session,
+                timing: timing,
+                venue: s.venue,
+                entityName: entityName,
+                coordinatorName: 'Not Uploaded',
+                expected: s.allocated_count || s.capacity || 0,
+                present: 0,
+                description: '❌ Attendance Not Marked / Activity Report Not Submitted by Coordinator',
+                imageUrl: '',
+                submitted: false,
+                status: 'NOT_SUBMITTED'
+              });
+            }
+          }
         }
       });
     }
@@ -135,8 +215,10 @@ export async function GET(request: Request) {
       data: allAuditEntries,
       summary: {
         totalEntries: allAuditEntries.length,
-        totalSubmitted: allAuditEntries.filter(e => e.submitted).length,
-        totalMissing: allAuditEntries.filter(e => !e.submitted).length
+        totalSubmitted: allAuditEntries.filter(e => e.status === 'SUBMITTED').length,
+        totalPending: allAuditEntries.filter(e => e.status === 'REPORT_PENDING').length,
+        totalHolidays: allAuditEntries.filter(e => e.status === 'HOLIDAY').length,
+        totalMissing: allAuditEntries.filter(e => e.status === 'NOT_SUBMITTED').length
       }
     });
 
