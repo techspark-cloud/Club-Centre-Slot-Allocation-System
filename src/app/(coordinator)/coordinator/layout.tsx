@@ -1,7 +1,8 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import SignOutButton from '@/components/SignOutButton';
-import { LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, FileText } from 'lucide-react';
 
 export default async function CoordinatorLayout({
   children,
@@ -39,9 +40,21 @@ export default async function CoordinatorLayout({
             </div>
 
             {/* Navigation Menu (Absolute Center on Desktop) */}
-            <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-slate-700 font-bold text-sm">
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Coordinator Dashboard</span>
+            <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200 text-slate-700 font-bold text-sm">
+              <Link 
+                href="/coordinator"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-slate-700 hover:bg-white hover:text-blue-600 transition-all"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Dashboard</span>
+              </Link>
+              <Link 
+                href="/coordinator/reports"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-900 text-white shadow-sm hover:bg-blue-800 transition-all"
+              >
+                <FileText className="w-4 h-4 text-blue-300" />
+                <span>Reports</span>
+              </Link>
             </div>
             
             {/* User Section (Right) */}
