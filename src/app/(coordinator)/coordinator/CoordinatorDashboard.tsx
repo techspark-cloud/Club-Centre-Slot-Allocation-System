@@ -585,8 +585,8 @@ export default function CoordinatorDashboard({
   return (
     <div className="w-full max-w-full space-y-6 overflow-hidden">
       
-      {/* Enterprise Executive Banner (Linear/Stripe Inspired UI) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-7 text-white shadow-2xl border border-white/10">
+      {/* Enterprise Executive Banner (Linear/Stripe Inspired UI - Fully Mobile Optimized) */}
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-4 sm:p-7 text-white shadow-2xl border border-white/10">
         
         {/* Ambient Mesh Glow Effects */}
         <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl" />
@@ -596,12 +596,12 @@ export default function CoordinatorDashboard({
         {/* Subtle Grid Background Pattern */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] opacity-10" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6">
           {/* Left Column: User Identity & Active Status */}
-          <div className="space-y-4 max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2.5">
+          <div className="space-y-3.5 sm:space-y-4 max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
               {/* Live Operational Status Pulse Badge */}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs backdrop-blur-md">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -610,40 +610,40 @@ export default function CoordinatorDashboard({
               </span>
 
               {/* Portal Type Pill */}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-300 border border-blue-400/20 shadow-xs backdrop-blur-md">
-                <Building2 className="w-3.5 h-3.5 text-blue-400" /> Faculty Coordinator Portal
+              <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-300 border border-blue-400/20 shadow-xs backdrop-blur-md">
+                <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-400" /> Faculty Coordinator Portal
               </span>
 
               {/* Verified Account Pill */}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-white/5 text-slate-300 border border-white/10 shadow-xs backdrop-blur-md">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Verified Account
+              <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider uppercase bg-white/5 text-slate-300 border border-white/10 shadow-xs backdrop-blur-md">
+                <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" /> Verified Account
               </span>
             </div>
 
-            <div className="flex items-start gap-4">
-              {/* User Initial Avatar Badge */}
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-0.5 shadow-lg shrink-0 hidden sm:block">
-                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center font-black text-lg text-white">
+            <div className="flex items-start gap-3 sm:gap-4">
+              {/* User Initial Avatar Badge (Visible on both mobile & desktop) */}
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-0.5 shadow-lg shrink-0 flex items-center justify-center">
+                <div className="w-full h-full bg-slate-950 rounded-[10px] sm:rounded-[14px] flex items-center justify-center font-black text-base sm:text-lg text-white">
                   {displayName.replace(/^(Mr\.|Ms\.|Dr\.|Prof\.)\s+/i, '').charAt(0)}
                 </div>
               </div>
 
               <div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+                <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">
                   {timeGreeting}, {displayName}
                 </h1>
-                <p className="text-slate-300 text-xs sm:text-sm font-normal mt-1.5 leading-relaxed">
+                <p className="text-slate-300 text-xs sm:text-sm font-normal mt-1 leading-relaxed">
                   Manage your assigned extracurricular entities, record live student attendance, and submit official activity reports seamlessly.
                 </p>
               </div>
             </div>
 
             {/* Glassmorphic Live Operational Insight Capsule */}
-            <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 shadow-inner">
+            <div className="flex items-center gap-2.5 sm:gap-3 bg-white/5 backdrop-blur-md px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-white/10 shadow-inner">
               <Activity className="w-4 h-4 text-cyan-400 shrink-0" />
               <p className="text-xs text-slate-200 font-medium">
                 {selectedSlotId ? (
-                  <span className="flex items-center gap-2">
+                  <span className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <span className="font-bold text-white">Active Slot Selected:</span>
                     <span className="text-emerald-400 font-semibold">{attendanceData.length > 0 ? `${attendanceData.length} student attendance records logged.` : 'Ready to take attendance.'}</span>
                   </span>
@@ -654,25 +654,25 @@ export default function CoordinatorDashboard({
             </div>
           </div>
 
-          {/* Right Column: Executive Metrics & Time Widget */}
-          <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/10">
-            <div className="flex items-center gap-3">
+          {/* Right Column: Executive Metrics & Time Widget (Fully Mobile Responsive) */}
+          <div className="flex flex-wrap lg:flex-col items-center lg:items-end justify-between gap-2.5 sm:gap-3 shrink-0 pt-3.5 lg:pt-0 border-t lg:border-t-0 border-white/10">
+            <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto justify-between sm:justify-start">
               {/* Stat Box 1: Assigned Entities */}
-              <div className="bg-white/5 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 text-center min-w-[110px] shadow-sm hover:bg-white/10 transition-all">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Entities</span>
-                <span className="block text-2xl font-black text-white mt-0.5 tracking-tight">{allAssignedEntities.length}</span>
+              <div className="flex-1 sm:flex-none bg-white/5 backdrop-blur-md px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-white/10 text-center min-w-[100px] sm:min-w-[110px] shadow-sm hover:bg-white/10 transition-all">
+                <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Entities</span>
+                <span className="block text-xl sm:text-2xl font-black text-white mt-0.5 tracking-tight">{allAssignedEntities.length}</span>
               </div>
 
               {/* Stat Box 2: Total Timetable Slots */}
-              <div className="bg-white/5 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 text-center min-w-[110px] shadow-sm hover:bg-white/10 transition-all">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Timetable Slots</span>
-                <span className="block text-2xl font-black text-cyan-400 mt-0.5 tracking-tight">{currentSlots.length}</span>
+              <div className="flex-1 sm:flex-none bg-white/5 backdrop-blur-md px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-white/10 text-center min-w-[100px] sm:min-w-[110px] shadow-sm hover:bg-white/10 transition-all">
+                <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Timetable Slots</span>
+                <span className="block text-xl sm:text-2xl font-black text-cyan-400 mt-0.5 tracking-tight">{currentSlots.length}</span>
               </div>
             </div>
 
             {/* Date Pill */}
-            <div className="bg-white/5 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 text-xs font-semibold text-slate-200 flex items-center gap-2 shadow-xs">
-              <Calendar className="w-4 h-4 text-cyan-400" />
+            <div className="bg-white/5 backdrop-blur-md px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-white/10 text-[11px] sm:text-xs font-semibold text-slate-200 flex items-center gap-2 shadow-xs ml-auto lg:ml-0">
+              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
               {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
             </div>
           </div>
