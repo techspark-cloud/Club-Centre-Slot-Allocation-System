@@ -7,12 +7,14 @@ import {
   Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, 
   CheckCircle2, XCircle, AlertCircle, FileText, QrCode, Search, Filter,
   CheckCheck, UserX, Sparkles, Phone, ShieldCheck, RefreshCw, ChevronRight,
-  BarChart3, Sun, Moon, Activity, Check
+  BarChart3, Sun, Moon, Activity, Check, FileSpreadsheet, Eye
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import QRScannerModal from './QRScannerModal';
 import ActivityReportModal from './ActivityReportModal';
+import StudentAttendanceModal from './StudentAttendanceModal';
 import { getEntityLogoUrl } from '@/lib/clubLogos';
 
 interface CoordinatorDashboardProps {
@@ -53,6 +55,9 @@ export default function CoordinatorDashboard({
   const [showReportModal, setShowReportModal] = useState(false);
   const [auditReports, setAuditReports] = useState<any[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
+
+  // Individual Student Attendance Monitor Modal State
+  const [selectedStudentForHistory, setSelectedStudentForHistory] = useState<{ id: string; name: string } | null>(null);
 
   // Advanced Search & Filter States
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -453,6 +458,52 @@ export default function CoordinatorDashboard({
     });
 
     doc.save(`${entityName.replace(/\s+/g, '_')}_Attendance_${selectedDate}.pdf`);
+  };
+
+  const downloadExcel = (slotId: string, entityName: string, day: string) => {
+    const students = allocationsForSlot(slotId);
+    if (students.length === 0) {
+      alert("No students enrolled in this slot yet.");
+      return;
+    }
+
+    const rows = students.map((m, i) => {
+      const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
+      const status = studentAttendance?.status === 'PRESENT' ? 'Present' : (studentAttendance?.status === 'ABSENT' ? 'Absent' : 'Unmarked');
+
+      return {
+        'S.No': i + 1,
+        'Register Number': m.student?.register_no || '',
+        'Student Name': m.student?.name || '',
+        'Course / Department': m.student?.course || '',
+        'Section': m.student?.section || '',
+        'Academic Year': m.student?.academic_year || 'N/A',
+        'Hosteler': m.student?.hosteler ? 'Yes' : 'No',
+        'Contact Number': m.student?.contact_no || 'N/A',
+        'Attendance Date': selectedDate,
+        'Attendance Status': status
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = [
+      { wch: 6 },  // S.No
+      { wch: 16 }, // Register No
+      { wch: 25 }, // Student Name
+      { wch: 15 }, // Course
+      { wch: 10 }, // Section
+      { wch: 14 }, // Academic Year
+      { wch: 10 }, // Hosteler
+      { wch: 15 }, // Contact
+      { wch: 16 }, // Attendance Date
+      { wch: 18 }  // Attendance Status
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Live Attendance');
+    
+    const fileName = `${entityName.replace(/\s+/g, '_')}_Attendance_${selectedDate}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
   };
 
   const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
@@ -1003,6 +1054,13 @@ export default function CoordinatorDashboard({
                           >
                             <Download className="w-3.5 h-3.5" /> Export PDF
                           </button>
+
+                          <button 
+                            onClick={() => downloadExcel(selectedSlot.id, entity.name, selectedSlot.day)}
+                            className="flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg transition-colors shadow-xs"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" /> Export Excel
+                          </button>
                         </div>
                       </div>
 
@@ -1151,6 +1209,13 @@ export default function CoordinatorDashboard({
                                         <td className="px-4 py-3 text-right">
                                           <div className="flex items-center justify-end gap-1.5">
                                             <button 
+                                              onClick={() => m.student && setSelectedStudentForHistory({ id: m.student.id, name: m.student.name })}
+                                              title="Monitor Individual Student Attendance History"
+                                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200"
+                                            >
+                                              <Eye className="w-3.5 h-3.5 text-blue-600" /> History
+                                            </button>
+                                            <button 
                                               onClick={() => m.student && markAttendance(m.student.id, 'PRESENT')}
                                               disabled={isDateLocked || isHoliday}
                                               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -1210,6 +1275,12 @@ export default function CoordinatorDashboard({
                                           </p>
                                         </div>
                                       </div>
+                                      <button 
+                                        onClick={() => m.student && setSelectedStudentForHistory({ id: m.student.id, name: m.student.name })}
+                                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded border border-blue-100 shrink-0"
+                                      >
+                                        <Eye className="w-3 h-3" /> Monitor
+                                      </button>
                                     </div>
                                     
                                     <div className="grid grid-cols-2 gap-2 mt-2">
@@ -1294,6 +1365,16 @@ export default function CoordinatorDashboard({
           onClose={() => setShowQRScanner(false)}
           onScanSuccess={handleQRScanSuccess}
           slotName={`Slot ID: ${selectedSlotId}`}
+        />
+      )}
+
+      {selectedStudentForHistory && activeSlot && (
+        <StudentAttendanceModal
+          isOpen={!!selectedStudentForHistory}
+          onClose={() => setSelectedStudentForHistory(null)}
+          studentId={selectedStudentForHistory.id}
+          slotId={activeSlot.id}
+          entityName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.name || 'Extracurricular Entity'}
         />
       )}
     </div>
