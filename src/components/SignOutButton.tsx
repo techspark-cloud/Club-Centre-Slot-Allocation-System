@@ -10,16 +10,19 @@ export default function SignOutButton() {
     setIsSigningOut(true);
     
     try {
-      // Call the signout API
-      await fetch('/api/auth/signout', { method: 'POST' });
-      
-      // Add an artificial delay so they can enjoy the gorgeous animation
+      await fetch('/api/auth/signout', { 
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (error) {
+      console.warn("Sign out API call error, proceeding to login redirect", error);
+    } finally {
       setTimeout(() => {
         window.location.href = '/login';
-      }, 1500);
-    } catch (error) {
-      console.error("Sign out failed", error);
-      setIsSigningOut(false);
+      }, 1200);
     }
   };
 
