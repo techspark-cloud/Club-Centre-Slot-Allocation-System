@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import html2canvas from 'html2canvas';
 import QRCode from 'react-qr-code';
 import CampusMapModal from '@/components/3d/CampusMapModal';
+import { getEntityLogoUrl } from '@/lib/clubLogos';
 
 export default function BookingClient({ 
   student,
@@ -301,9 +302,20 @@ export default function BookingClient({
         {/* Left Side: Name and Status */}
         <div className="flex flex-col min-w-0 flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 items-start">
-            <h3 className={`font-extrabold text-base sm:text-lg truncate w-full sm:w-auto ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>
-              {name}
-            </h3>
+            <div className="flex items-center gap-2">
+              {getEntityLogoUrl(name, type === 'CLUB' ? slot.club?.logo_url : slot.centre?.logo_url) ? (
+                <div className="w-10 h-10 bg-white rounded-xl p-1 border-2 border-slate-200 shadow-sm flex items-center justify-center shrink-0">
+                  <img 
+                    src={getEntityLogoUrl(name, type === 'CLUB' ? slot.club?.logo_url : slot.centre?.logo_url)} 
+                    alt={name} 
+                    className="w-full h-full object-contain rounded-lg" 
+                  />
+                </div>
+              ) : null}
+              <h3 className={`font-extrabold text-base sm:text-lg truncate w-full sm:w-auto ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>
+                {name}
+              </h3>
+            </div>
             
             <div className="flex flex-wrap items-center gap-1.5">
               {!isBooked && !isFull && !isSelected && (

@@ -805,6 +805,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
             const isSubmitted = report.status === 'SUBMITTED';
             const isPending = report.status === 'REPORT_PENDING';
             const isNotMarked = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+            const isMissing = isNotMarked;
             
             const rDateStr = report.date ? new Date(report.date).toISOString().split('T')[0] : '';
             const key = `${report.slotId}_${rDateStr}`;

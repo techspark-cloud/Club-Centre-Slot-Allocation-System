@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FileText, Calendar, Building2, Users, RefreshCw, Loader2, Image as ImageIcon, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import { getEntityLogoUrl } from '@/lib/clubLogos';
 
 interface FacultyReportsClientProps {
   assignedClubs: any[];
@@ -169,9 +170,19 @@ export default function FacultyReportsClient({
                 {/* Entity Header & Export Action */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-slate-100 pb-6">
                   <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shrink-0">
-                      <FileText className="w-7 h-7 text-blue-900" />
-                    </div>
+                    {getEntityLogoUrl(entity.name, entity.logo_url) ? (
+                      <div className="w-14 h-14 bg-white rounded-2xl p-1.5 border-2 border-slate-200 shadow-md flex items-center justify-center shrink-0">
+                        <img 
+                          src={getEntityLogoUrl(entity.name, entity.logo_url)} 
+                          alt={entity.name} 
+                          className="w-full h-full object-contain rounded-lg" 
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shrink-0">
+                        <FileText className="w-7 h-7 text-blue-900" />
+                      </div>
+                    )}
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded">

@@ -10,6 +10,13 @@ export default async function CoordinatorPage() {
     redirect('/login');
   }
 
+  // Fetch coordinator profile name
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, name')
+    .eq('id', user.id)
+    .maybeSingle();
+
   // Find their club assignments
   const { data: clubAssignments } = await supabase
     .from('club_coordinators')
@@ -102,6 +109,8 @@ export default async function CoordinatorPage() {
 
   const holidaysList = holidaysData || [];
 
+  const coordinatorName = profile?.full_name || profile?.name || assignedClubs[0]?.faculty_name || assignedCentres[0]?.faculty_name || 'Faculty Coordinator';
+
   return (
     <CoordinatorDashboard
       assignedClubs={assignedClubs}
@@ -111,6 +120,7 @@ export default async function CoordinatorPage() {
       clubAllocations={clubAllocations}
       centreAllocations={centreAllocations}
       holidaysList={holidaysList}
+      coordinatorName={coordinatorName}
     />
   );
 }
