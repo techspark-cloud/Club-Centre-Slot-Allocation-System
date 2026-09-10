@@ -585,32 +585,68 @@ export default function CoordinatorDashboard({
   return (
     <div className="w-full max-w-full space-y-6 overflow-hidden">
       
-      {/* Executive Professional Banner */}
-      <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 border border-slate-800 shadow-lg relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded border border-blue-400/30 flex items-center gap-1">
-                <Building2 className="w-3 h-3 text-blue-400" /> Faculty Coordinator Portal
+      {/* Enterprise Executive Banner (Linear/Stripe Inspired UI) */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-7 text-white shadow-2xl border border-white/10">
+        
+        {/* Ambient Mesh Glow Effects */}
+        <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute top-1/2 left-1/3 h-48 w-48 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-2xl" />
+        
+        {/* Subtle Grid Background Pattern */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] opacity-10" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          {/* Left Column: User Identity & Active Status */}
+          <div className="space-y-4 max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Live Operational Status Pulse Badge */}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs backdrop-blur-md">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                System Operational
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded border border-emerald-400/30 flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Verified Account
+
+              {/* Portal Type Pill */}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-300 border border-blue-400/20 shadow-xs backdrop-blur-md">
+                <Building2 className="w-3.5 h-3.5 text-blue-400" /> Faculty Coordinator Portal
+              </span>
+
+              {/* Verified Account Pill */}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-white/5 text-slate-300 border border-white/10 shadow-xs backdrop-blur-md">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Verified Account
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              {timeGreeting}, {displayName}
-            </h1>
-            <p className="text-slate-300 text-xs sm:text-sm font-normal mt-1 max-w-2xl leading-relaxed">
-              Manage your assigned extracurricular entities, record live student attendance, and submit official activity reports.
-            </p>
+            <div className="flex items-start gap-4">
+              {/* User Initial Avatar Badge */}
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-0.5 shadow-lg shrink-0 hidden sm:block">
+                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center font-black text-lg text-white">
+                  {displayName.replace(/^(Mr\.|Ms\.|Dr\.|Prof\.)\s+/i, '').charAt(0)}
+                </div>
+              </div>
 
-            {/* Status Insight Bar */}
-            <div className="mt-4 flex items-center gap-3 bg-slate-800/80 p-3 rounded-xl border border-slate-700 max-w-2xl">
-              <Activity className="w-4 h-4 text-blue-400 shrink-0" />
-              <p className="text-xs text-slate-300 font-medium">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+                  {timeGreeting}, {displayName}
+                </h1>
+                <p className="text-slate-300 text-xs sm:text-sm font-normal mt-1.5 leading-relaxed">
+                  Manage your assigned extracurricular entities, record live student attendance, and submit official activity reports seamlessly.
+                </p>
+              </div>
+            </div>
+
+            {/* Glassmorphic Live Operational Insight Capsule */}
+            <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 shadow-inner">
+              <Activity className="w-4 h-4 text-cyan-400 shrink-0" />
+              <p className="text-xs text-slate-200 font-medium">
                 {selectedSlotId ? (
-                  `Active Slot Selected: ${attendanceData.length > 0 ? `${attendanceData.length} student attendance records logged.` : 'Ready to take attendance.'}`
+                  <span className="flex items-center gap-2">
+                    <span className="font-bold text-white">Active Slot Selected:</span>
+                    <span className="text-emerald-400 font-semibold">{attendanceData.length > 0 ? `${attendanceData.length} student attendance records logged.` : 'Ready to take attendance.'}</span>
+                  </span>
                 ) : (
                   'Select an allocated timetable slot below to open student roster and attendance controls.'
                 )}
@@ -618,13 +654,25 @@ export default function CoordinatorDashboard({
             </div>
           </div>
 
-          <div className="flex flex-row md:flex-col items-center md:items-end gap-3 shrink-0">
-            <div className="bg-slate-800 px-4 py-2.5 rounded-xl border border-slate-700 text-center w-full md:w-auto">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Entities</span>
-              <span className="block text-xl font-bold text-white mt-0.5">{allAssignedEntities.length}</span>
+          {/* Right Column: Executive Metrics & Time Widget */}
+          <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0 pt-4 lg:pt-0 border-t lg:border-t-0 border-white/10">
+            <div className="flex items-center gap-3">
+              {/* Stat Box 1: Assigned Entities */}
+              <div className="bg-white/5 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 text-center min-w-[110px] shadow-sm hover:bg-white/10 transition-all">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Entities</span>
+                <span className="block text-2xl font-black text-white mt-0.5 tracking-tight">{allAssignedEntities.length}</span>
+              </div>
+
+              {/* Stat Box 2: Total Timetable Slots */}
+              <div className="bg-white/5 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 text-center min-w-[110px] shadow-sm hover:bg-white/10 transition-all">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Timetable Slots</span>
+                <span className="block text-2xl font-black text-cyan-400 mt-0.5 tracking-tight">{currentSlots.length}</span>
+              </div>
             </div>
-            <div className="bg-slate-800 px-3.5 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-400" />
+
+            {/* Date Pill */}
+            <div className="bg-white/5 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 text-xs font-semibold text-slate-200 flex items-center gap-2 shadow-xs">
+              <Calendar className="w-4 h-4 text-cyan-400" />
               {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
             </div>
           </div>
