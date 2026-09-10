@@ -14,6 +14,10 @@ export default function AdminSidebar() {
     setIsOpen(false);
   }, [pathname]);
 
+  if (pathname.includes('/print')) {
+    return null;
+  }
+
   const navItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Executive View', href: '/admin/executive', icon: Activity },

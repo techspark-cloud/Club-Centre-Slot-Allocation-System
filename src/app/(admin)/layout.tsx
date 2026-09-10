@@ -21,7 +21,16 @@ export default async function AdminLayout({
     .eq('id', user.id)
     .single();
 
-  if (!profile || !['SUPER_ADMIN', 'ALLOCATION_ADMIN'].includes(profile.role)) {
+  const allowedRoles = [
+    'SUPER_ADMIN', 
+    'ALLOCATION_ADMIN', 
+    'COORDINATOR', 
+    'CLUB_COORDINATOR', 
+    'CENTRE_COORDINATOR', 
+    'FACULTY'
+  ];
+
+  if (!profile || !allowedRoles.includes(profile.role)) {
     redirect('/unauthorized');
   }
 
