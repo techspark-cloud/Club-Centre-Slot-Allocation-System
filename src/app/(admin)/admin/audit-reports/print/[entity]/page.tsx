@@ -4,6 +4,7 @@ import React, { useEffect, useState, use } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getEntityLogoUrl } from '@/lib/clubLogos';
 
 export default function PrintReportPage({ params }: { params: Promise<{ entity?: string }> }) {
   const resolvedParams = use(params);
@@ -268,6 +269,21 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
       doc.setFillColor(248, 250, 252);
       doc.setDrawColor(203, 213, 225);
       doc.roundedRect(margin, y, pageWidth - margin * 2, 26, 3, 3, 'FD');
+
+      // Attach Club Logo to PDF
+      const entityLogoUrl = getEntityLogoUrl(entityName);
+      if (entityLogoUrl) {
+        try {
+          const clubLogoData = await toBase64(entityLogoUrl, true);
+          if (clubLogoData) {
+            doc.setFillColor(255, 255, 255);
+            doc.roundedRect(pageWidth - margin - 22, y + 3, 18, 20, 2, 2, 'F');
+            doc.setDrawColor(203, 213, 225);
+            doc.roundedRect(pageWidth - margin - 22, y + 3, 18, 20, 2, 2, 'D');
+            doc.addImage(clubLogoData, 'PNG', pageWidth - margin - 21, y + 4, 16, 18);
+          }
+        } catch {}
+      }
 
       doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
@@ -685,11 +701,18 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
         <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-8 rounded-2xl border border-slate-800 text-white mb-8 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-2xl"></div>
           
-          <div className="text-center mb-6">
-            <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full border border-blue-400/30">
-              OFFICIAL ACTIVITY AUDIT & COMPLIANCE REPORT
-            </span>
-            <h2 className="text-3xl font-black uppercase tracking-wider text-white mt-3">{entityName}</h2>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6 text-center">
+            {getEntityLogoUrl(entityName) && (
+              <div className="w-14 h-14 bg-white rounded-2xl p-1 border-2 border-slate-200 shadow-md flex items-center justify-center shrink-0">
+                <img src={getEntityLogoUrl(entityName)} alt={entityName} className="w-full h-full object-contain rounded-lg" />
+              </div>
+            )}
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full border border-blue-400/30">
+                OFFICIAL ACTIVITY AUDIT & COMPLIANCE REPORT
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white mt-2">{entityName}</h2>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-xl border border-white/10 text-xs font-medium mb-6">
