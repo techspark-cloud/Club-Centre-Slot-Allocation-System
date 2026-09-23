@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
-import { HOD_EMAILS, VICE_PRINCIPAL_EMAIL } from '@/config/hod-emails';
+import { HOD_EMAILS, HOD_REPORT_CC_EMAILS } from '@/config/hod-emails';
 
 export async function POST(request: Request) {
   try {
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const mailOptions = {
       from: `"RIT Allocations" <${process.env.EMAIL_USER}>`,
       to: toEmail,
-      cc: VICE_PRINCIPAL_EMAIL,
+      cc: HOD_REPORT_CC_EMAILS,
       subject: `Monthly Attendance Report - ${department} - ${month}`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">

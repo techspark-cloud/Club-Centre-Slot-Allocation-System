@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getEntityLogoUrl } from '@/lib/clubLogos';
+import { FileText } from 'lucide-react';
 
 export default function PrintReportPage({ params }: { params: Promise<{ entity?: string }> }) {
   const resolvedParams = use(params);
@@ -22,6 +23,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
   const [allEntities, setAllEntities] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [facultyCoordinator, setFacultyCoordinator] = useState<string>('');
+  const [entityType, setEntityType] = useState<'CLUB' | 'CENTRE'>('CLUB');
   
   // Student attendance details option toggle
   const [includeStudentDetails, setIncludeStudentDetails] = useState(false);
@@ -39,9 +41,14 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
         const supabase = createClient();
         const targetName = entityName.trim().toLowerCase();
 
-        // 1. Fetch faculty coordinator name from clubs or centres
+        // 1. Fetch faculty coordinator name and entity type from clubs or centres
         const { data: club } = await supabase.from('clubs').select('faculty_name').ilike('name', entityName).maybeSingle();
         const { data: centre } = await supabase.from('centres').select('faculty_name').ilike('name', entityName).maybeSingle();
+        
+        const isClub = !!club;
+        const detectedType: 'CLUB' | 'CENTRE' = isClub ? 'CLUB' : 'CENTRE';
+        setEntityType(detectedType);
+
         const faculty = club?.faculty_name || centre?.faculty_name || 'Faculty Coordinator';
         setFacultyCoordinator(faculty);
 
@@ -213,62 +220,66 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
       const pageWidth = doc.internal.pageSize.width;
       const pageHeight = doc.internal.pageSize.height;
       const margin = 14;
+      const contentWidth = pageWidth - margin * 2;
 
       // ----------------------------------------------------
-      // PAGE 1: INSTITUTIONAL COVER PAGE
+      // PAGE 1: NAAC CRITERION 7 INSTITUTIONAL COVER PAGE
       // ----------------------------------------------------
       // Top Accent Line
       doc.setFillColor(30, 58, 138); // Deep Navy Blue
-      doc.rect(0, 0, pageWidth, 6, 'F');
+      doc.rect(0, 0, pageWidth, 5, 'F');
 
       // Logos: RIT Logo on left, Techspark Logo on right
       try {
         const logoData = await toBase64('/rit-logo.png', true);
         if (logoData) {
-          const logoH = 18;
+          const logoH = 16;
           const logoW = logoH * 4.5;
-          doc.addImage(logoData, 'PNG', margin, 12, logoW, logoH);
+          doc.addImage(logoData, 'PNG', margin, 10, logoW, logoH);
         }
       } catch {}
 
       try {
         const tsData = await toBase64('/techspark-logo.png', true);
         if (tsData) {
-          const tsH = 14;
+          const tsH = 12;
           const tsW = tsH * 3.5;
-          doc.addImage(tsData, 'PNG', pageWidth - margin - tsW, 14, tsW, tsH);
+          doc.addImage(tsData, 'PNG', pageWidth - margin - tsW, 12, tsW, tsH);
         }
       } catch {}
 
       // Institutional Title
-      let y = 36;
-      doc.setFontSize(14);
+      let y = 32;
+      doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 58, 138);
       doc.text('RAJALAKSHMI INSTITUTE OF TECHNOLOGY', pageWidth / 2, y, { align: 'center' });
 
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(100, 116, 139);
-      doc.text('Autonomous Institution, Affiliated to Anna University | Accredited by NAAC', pageWidth / 2, y + 5, { align: 'center' });
-      doc.text('CLUB & CENTRE SLOT ALLOCATION PORTAL', pageWidth / 2, y + 9, { align: 'center' });
+      doc.text('Autonomous Institution, Affiliated to Anna University | Accredited by NAAC', pageWidth / 2, y + 4.5, { align: 'center' });
+      doc.text('INTERNAL QUALITY ASSURANCE CELL (IQAC) & ACTIVITY ALLOCATION PORTAL', pageWidth / 2, y + 8.5, { align: 'center' });
+
+      y += 13;
+
+      // NAAC Criterion 7 Official Header Banner
+      doc.setFillColor(30, 58, 138);
+      doc.roundedRect(margin, y, contentWidth, 11, 2, 2, 'F');
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text(`OVERALL ${entityType === 'CLUB' ? 'CLUBS' : 'CENTRES'} ACTIVITY REPORT (NAAC CRITERION VII)`, pageWidth / 2, y + 4.5, { align: 'center' });
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Key Indicator 7.1 / 7.3: Overall ${entityType === 'CLUB' ? 'Club' : 'Centre'} Activity & Compliance Audit Dossier`, pageWidth / 2, y + 8.5, { align: 'center' });
 
       y += 15;
 
-      // Official Report Banner
-      doc.setFillColor(30, 58, 138);
-      doc.roundedRect(margin, y, pageWidth - margin * 2, 10, 2, 2, 'F');
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(255, 255, 255);
-      doc.text('OFFICIAL ACTIVITY AUDIT & COMPLIANCE REPORT', pageWidth / 2, y + 6.8, { align: 'center' });
-
-      y += 16;
-
-      // Entity & Coordinator Metadata Box
+      // Entity & NAAC Factsheet Box
       doc.setFillColor(248, 250, 252);
       doc.setDrawColor(203, 213, 225);
-      doc.roundedRect(margin, y, pageWidth - margin * 2, 26, 3, 3, 'FD');
+      doc.roundedRect(margin, y, contentWidth, 32, 2, 2, 'FD');
 
       // Attach Club Logo to PDF
       const entityLogoUrl = getEntityLogoUrl(entityName);
@@ -277,100 +288,105 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           const clubLogoData = await toBase64(entityLogoUrl, true);
           if (clubLogoData) {
             doc.setFillColor(255, 255, 255);
-            doc.roundedRect(pageWidth - margin - 22, y + 3, 18, 20, 2, 2, 'F');
+            doc.roundedRect(pageWidth - margin - 24, y + 4, 20, 24, 2, 2, 'F');
             doc.setDrawColor(203, 213, 225);
-            doc.roundedRect(pageWidth - margin - 22, y + 3, 18, 20, 2, 2, 'D');
-            doc.addImage(clubLogoData, 'PNG', pageWidth - margin - 21, y + 4, 16, 18);
+            doc.roundedRect(pageWidth - margin - 24, y + 4, 20, 24, 2, 2, 'D');
+            doc.addImage(clubLogoData, 'PNG', pageWidth - margin - 23, y + 5, 18, 22);
           }
         } catch {}
       }
 
-      doc.setFontSize(13);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
-      doc.text(entityName.toUpperCase(), margin + 6, y + 7);
+      doc.text(entityName.toUpperCase(), margin + 5, y + 6);
 
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(71, 85, 105);
-      doc.text('Faculty Coordinator:', margin + 6, y + 14);
+      doc.text('Category & Metric:', margin + 5, y + 12);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(30, 58, 138);
-      doc.text(facultyCoordinator || 'Faculty Coordinator', margin + 42, y + 14);
+      doc.text(`${entityType === 'CLUB' ? 'Student Activity Club' : 'Technical Centre'} | NAAC VII (7.1.1, 7.1.8, 7.3)`, margin + 34, y + 12);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(71, 85, 105);
-      doc.text('Academic Year:', margin + 6, y + 20);
+      doc.text('Faculty In-Charge:', margin + 5, y + 18);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(15, 23, 42);
-      doc.text('2026 - 2027', margin + 34, y + 20);
+      doc.text(`${facultyCoordinator || 'Faculty Coordinator'} (${entityType === 'CLUB' ? 'Club In-Charge' : 'Centre In-Charge'})`, margin + 34, y + 18);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(71, 85, 105);
-      doc.text('Generated Date:', pageWidth - margin - 50, y + 14);
+      doc.text('Overall Coordination:', margin + 5, y + 23.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(15, 23, 42);
-      doc.text(new Date().toLocaleDateString('en-GB'), pageWidth - margin - 22, y + 14);
+      doc.text(`Overall ${entityType === 'CLUB' ? 'Club' : 'Centre'} Coordinator`, margin + 34, y + 23.5);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(71, 85, 105);
-      doc.text('Audit Status:', pageWidth - margin - 50, y + 20);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(22, 163, 74);
-      doc.text('VERIFIED', pageWidth - margin - 22, y + 20);
+      doc.text('Academic Year:', margin + 5, y + 28.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42);
+      doc.text(`2026 - 2027 (Odd Sem)  |  Period: ${startDate} to ${endDate}`, margin + 34, y + 28.5);
 
-      y += 32;
+      y += 36;
 
       // Executive Summary Metrics Bar
       const totalSessions = reports.length;
       const submittedCount = reports.filter(r => r.status === 'SUBMITTED').length;
       const pendingCount = reports.filter(r => r.status === 'REPORT_PENDING').length;
-      const missingCount = reports.filter(r => r.status === 'NOT_SUBMITTED').length;
-      const complianceRate = totalSessions > 0 ? Math.round(((submittedCount + pendingCount) / totalSessions) * 100) : 0;
+      const holidayCount = reports.filter(r => r.status === 'HOLIDAY').length;
+      const missingCount = reports.filter(r => r.status === 'NOT_SUBMITTED' || (!['SUBMITTED', 'REPORT_PENDING', 'HOLIDAY'].includes(r.status))).length;
+      const totalBeneficiaries = reports.reduce((acc, r) => acc + (r.present || 0), 0);
+      const totalExpected = reports.reduce((acc, r) => acc + (r.status === 'HOLIDAY' ? 0 : (r.expected || 0)), 0);
+      const activeSessions = totalSessions - holidayCount;
+      const complianceRate = activeSessions > 0 ? Math.round(((submittedCount + pendingCount) / activeSessions) * 100) : (totalSessions > 0 ? 100 : 0);
 
-      const boxWidth = (pageWidth - margin * 2 - 9) / 4;
+      const boxWidth = (contentWidth - 9) / 4;
       const metricBoxes = [
         { label: 'TOTAL SESSIONS', val: `${totalSessions}`, color: [30, 41, 59] },
-        { label: 'SUBMITTED', val: `${submittedCount}`, color: [22, 163, 74] },
-        { label: 'REPORT PENDING', val: `${pendingCount}`, color: [217, 119, 6] },
-        { label: 'NOT MARKED', val: `${missingCount}`, color: [220, 38, 38] },
+        { label: 'AUDITED & COMPLIANT', val: `${submittedCount}`, color: [22, 163, 74] },
+        { label: 'TOTAL PARTICIPANTS', val: `${totalBeneficiaries}`, color: [37, 99, 235] },
+        { label: 'COMPLIANCE RATE', val: `${complianceRate}%`, color: complianceRate >= 75 ? [22, 163, 74] : [217, 119, 6] },
       ];
 
       metricBoxes.forEach((box, bIdx) => {
         const bX = margin + bIdx * (boxWidth + 3);
         doc.setFillColor(255, 255, 255);
         doc.setDrawColor(226, 232, 240);
-        doc.roundedRect(bX, y, boxWidth, 14, 2, 2, 'FD');
+        doc.roundedRect(bX, y, boxWidth, 13, 2, 2, 'FD');
         doc.setFontSize(6.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(100, 116, 139);
         doc.text(box.label, bX + boxWidth / 2, y + 4.5, { align: 'center' });
-        doc.setFontSize(11);
+        doc.setFontSize(10.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(box.color[0], box.color[1], box.color[2]);
-        doc.text(box.val, bX + boxWidth / 2, y + 10.5, { align: 'center' });
+        doc.text(box.val, bX + boxWidth / 2, y + 10, { align: 'center' });
       });
 
-      y += 19;
+      y += 17;
 
       // Index Table Header
-      doc.setFontSize(9.5);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 58, 138);
-      doc.text('AUDIT INDEX & EXECUTIVE SUMMARY TABLE', margin, y);
-      y += 4;
+      doc.text('NAAC CRITERION VII - AUDIT INDEX & COMPLIANCE SUMMARY TABLE', margin, y);
+      y += 3;
 
       const indexRows = reports.map((r, i) => {
         const isSubmitted = r.status === 'SUBMITTED';
         const isPending = r.status === 'REPORT_PENDING';
-        const isMissing = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+        const isHoliday = r.status === 'HOLIDAY';
+        const isMissing = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
 
         const dObj = r.date ? new Date(r.date) : null;
         const dStr = (dObj && !isNaN(dObj.getTime()))
           ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : r.date || 'N/A';
 
-        const statusText = isSubmitted ? 'SUBMITTED' : isPending ? 'REPORT PENDING' : 'NOT MARKED';
+        const statusText = isSubmitted ? 'SUBMITTED' : isPending ? 'REPORT PENDING' : isHoliday ? 'HOLIDAY' : 'NOT MARKED';
 
         return [
           i + 1,
@@ -378,7 +394,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           `${r.session || ''} (${r.timing || ''})`,
           r.venue || 'N/A',
           r.expected || 0,
-          isMissing ? 0 : r.present || 0,
+          isMissing || isHoliday ? 0 : r.present || 0,
           statusText
         ];
       });
@@ -388,16 +404,16 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
         margin: { left: margin, right: margin },
         head: [['S.No', 'Date & Day', 'Session & Timing', 'Venue', 'Expected', 'Present', 'Status']],
         body: indexRows,
-        styles: { fontSize: 7.5, cellPadding: 1.8 },
-        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 7, cellPadding: 1.8, overflow: 'linebreak' },
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', halign: 'center' },
         columnStyles: {
           0: { cellWidth: 10, halign: 'center' },
-          1: { cellWidth: 38, fontStyle: 'bold' },
-          2: { cellWidth: 50 },
-          3: { cellWidth: 20 },
+          1: { cellWidth: 35, fontStyle: 'bold' },
+          2: { cellWidth: 45 },
+          3: { cellWidth: 26 },
           4: { cellWidth: 18, halign: 'center' },
           5: { cellWidth: 18, halign: 'center' },
-          6: { cellWidth: 28, fontStyle: 'bold', halign: 'center' }
+          6: { cellWidth: 30, fontStyle: 'bold', halign: 'center' }
         },
         didParseCell: (data) => {
           if (data.section === 'body' && data.column.index === 6) {
@@ -405,6 +421,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
               data.cell.styles.textColor = [22, 163, 74];
             } else if (data.cell.raw === 'REPORT PENDING') {
               data.cell.styles.textColor = [217, 119, 6];
+            } else if (data.cell.raw === 'HOLIDAY') {
+              data.cell.styles.textColor = [126, 34, 206];
             } else {
               data.cell.styles.textColor = [220, 38, 38];
             }
@@ -413,114 +431,166 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
       });
 
       // ----------------------------------------------------
-      // PAGE 2 ONWARDS: DETAILED ACTIVITY & SESSION CARDS
+      // DETAILED ACTIVITY & SESSION COMPLIANCE CARDS
       // ----------------------------------------------------
       doc.addPage();
       y = 15;
 
-      doc.setFontSize(11);
+      doc.setFontSize(10.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 58, 138);
-      doc.text('DETAILED ACTIVITY & SESSION AUDIT CARDS', margin, y);
-      y += 8;
+      doc.text('NAAC ACTIVITY COMPLIANCE & PHOTO EVIDENCE DOSSIER', margin, y);
+      y += 6;
 
       for (let idx = 0; idx < reports.length; idx++) {
         const report = reports[idx];
 
-        // Add new page if not enough space
-        if (y > pageHeight - 80) {
+        // Clean Page-Fit Check: A full session card with image requires ~110mm
+        // Never split a session across pages!
+        if (y > pageHeight - margin - 105) {
           doc.addPage();
           y = 15;
         }
 
         const isSubmitted = report.status === 'SUBMITTED';
         const isPending = report.status === 'REPORT_PENDING';
-        const isMissing = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+        const isHoliday = report.status === 'HOLIDAY';
+        const isMissing = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
 
         const dateObj = report.date ? new Date(report.date) : null;
         const dateStr = (dateObj && !isNaN(dateObj.getTime()))
           ? dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : report.date || 'N/A';
 
-        // Section header
-        if (isMissing) {
-          doc.setFillColor(220, 38, 38); // Red for missing
+        // 1. Session Header Bar
+        if (isHoliday) {
+          doc.setFillColor(126, 34, 206);
+        } else if (isMissing) {
+          doc.setFillColor(220, 38, 38);
         } else if (isPending) {
-          doc.setFillColor(217, 119, 6); // Amber for report pending
+          doc.setFillColor(217, 119, 6);
         } else {
-          doc.setFillColor(30, 58, 138); // Blue for submitted
+          doc.setFillColor(30, 58, 138);
         }
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 8, 2, 2, 'F');
-        doc.setFontSize(8.5);
+        doc.roundedRect(margin, y, contentWidth, 7.5, 1.5, 1.5, 'F');
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(255, 255, 255);
         
-        if (isMissing) {
-          doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Status: ATTENDANCE NOT MARKED`, margin + 3, y + 5.5);
-        } else if (isPending) {
-          doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName} (REPORT PENDING)`, margin + 3, y + 5.5);
-        } else {
-          doc.text(`${idx + 1}. Date: ${dateStr} (${report.day || 'N/A'}) [${report.timing || report.session}]   |   Coordinator: ${report.coordinatorName}`, margin + 3, y + 5.5);
-        }
-        y += 11;
+        const statusLabel = isSubmitted ? 'SUBMITTED' : isPending ? 'REPORT PENDING' : isHoliday ? 'DECLARED HOLIDAY' : 'ATTENDANCE NOT MARKED';
+        doc.text(`SESSION #${idx + 1}  -  ${dateStr} (${report.day || 'N/A'})  -  ${report.session || ''} (${report.timing || 'N/A'})`, margin + 3, y + 5);
+        doc.text(statusLabel, pageWidth - margin - 3, y + 5, { align: 'right' });
+        y += 10.5;
 
-        // Details row
-        doc.setFontSize(9);
+        // 2. Metadata Grid Row
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(margin, y, contentWidth, 9, 1.5, 1.5, 'FD');
+
+        doc.setFontSize(7.5);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(51, 65, 85);
-        doc.text('Timing:', margin, y + 5);
+        doc.setTextColor(71, 85, 105);
+        doc.text('Venue:', margin + 3, y + 5.8);
         doc.setFont('helvetica', 'normal');
-        doc.text(`${report.session || ''} (${report.timing || 'N/A'})`, margin + 15, y + 5);
+        doc.setTextColor(15, 23, 42);
+        doc.text(report.venue || 'N/A', margin + 14, y + 5.8);
+
         doc.setFont('helvetica', 'bold');
-        doc.text('Venue:', margin + 75, y + 5);
+        doc.setTextColor(71, 85, 105);
+        doc.text('Faculty Coordinator:', margin + 55, y + 5.8);
         doc.setFont('helvetica', 'normal');
-        doc.text(report.venue || 'N/A', margin + 87, y + 5);
+        doc.setTextColor(15, 23, 42);
+        doc.text(isHoliday ? 'N/A (Declared Holiday)' : (report.coordinatorName || facultyCoordinator || 'Coordinator'), margin + 82, y + 5.8);
+
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(22, 163, 74);
-        doc.text(`Expected: ${report.expected}`, margin + 120, y + 5);
+        doc.text(`Expected: ${report.expected}`, margin + 138, y + 5.8);
         
-        if (!isMissing) {
+        if (isHoliday) {
+          doc.setTextColor(126, 34, 206);
+          doc.text(`Present: 0 (Holiday)`, margin + 160, y + 5.8);
+        } else if (!isMissing) {
           doc.setTextColor(21, 128, 61);
-          doc.text(`Present: ${report.present}`, margin + 145, y + 5);
+          doc.text(`Present: ${report.present}`, margin + 160, y + 5.8);
         } else {
           doc.setTextColor(220, 38, 38);
-          doc.text(`Present: 0`, margin + 145, y + 5);
+          doc.text(`Present: 0`, margin + 160, y + 5.8);
         }
-        y += 9;
+        y += 12;
 
-        // Description
+        // 3. Activity Description Box
+        const cleanDesc = (report.description || (isHoliday ? 'Declared Holiday. No activity scheduled.' : 'No description provided for this session.')).replace(/[^\x00-\x7F]/g, '');
+        const descLines = doc.splitTextToSize(`Objective & Activity Brief: "${cleanDesc}"`, contentWidth - 6);
+        const descBoxH = Math.max(descLines.length * 3.8 + 5, 11);
+
+        if (isHoliday) {
+          doc.setFillColor(245, 243, 255);
+          doc.setDrawColor(221, 214, 254);
+        } else {
+          doc.setFillColor(241, 245, 249);
+          doc.setDrawColor(226, 232, 240);
+        }
+        doc.roundedRect(margin, y, contentWidth, descBoxH, 1.5, 1.5, 'FD');
+
         doc.setFont('helvetica', 'italic');
-        doc.setFontSize(8.5);
-        if (isMissing) {
-          doc.setTextColor(220, 38, 38);
+        doc.setFontSize(7.5);
+        if (isHoliday) {
+          doc.setTextColor(109, 40, 217);
         } else {
-          doc.setTextColor(71, 85, 105);
+          doc.setTextColor(isMissing ? 185 : 51, isMissing ? 28 : 65, isMissing ? 28 : 85);
         }
-        const cleanDesc = (report.description || '').replace(/[^\x00-\x7F]/g, '');
-        const descLines = doc.splitTextToSize(`"${cleanDesc}"`, pageWidth - margin * 2 - 65);
-        doc.text(descLines, margin, y + 5);
+        doc.text(descLines, margin + 3, y + 4.5);
+        y += descBoxH + 3;
 
-        // Image
-        if (report.imageUrl) {
-          const match = report.imageUrl.match(/[-\w]{25,}/);
-          const driveId = match ? match[0] : null;
-          if (driveId) {
-            const driveUrl = `https://drive.google.com/uc?export=view&id=${driveId}`;
-            const proxiedUrl = `/api/admin/proxy-image?url=${encodeURIComponent(driveUrl)}`;
-            const imgData = await toBase64(proxiedUrl, false);
-            
-            if (imgData) {
-              const imgX = pageWidth - margin - 55;
-              const imgY = y;
-              doc.addImage(imgData, 'JPEG', imgX, imgY, 55, 40);
-              doc.setDrawColor(226, 232, 240);
-              doc.setLineWidth(0.3);
-              doc.rect(imgX, imgY, 55, 40);
+        // 4. Photographic Evidence (Only rendered for non-holidays)
+        if (!isHoliday) {
+          if (report.imageUrl) {
+            const match = report.imageUrl.match(/[-\w]{25,}/);
+            const driveId = match ? match[0] : null;
+            if (driveId) {
+              const driveUrl = `https://drive.google.com/uc?export=view&id=${driveId}`;
+              const proxiedUrl = `/api/admin/proxy-image?url=${encodeURIComponent(driveUrl)}`;
+              const imgData = await toBase64(proxiedUrl, false);
+              
+              if (imgData) {
+                const imgW = 130;
+                const imgH = 65;
+                const imgX = margin + (contentWidth - imgW) / 2;
+                const imgY = y;
+
+                doc.addImage(imgData, 'JPEG', imgX, imgY, imgW, imgH);
+                doc.setDrawColor(203, 213, 225);
+                doc.setLineWidth(0.4);
+                doc.rect(imgX, imgY, imgW, imgH);
+                
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(100, 116, 139);
+                doc.text(`[VERIFIED PHOTO EVIDENCE - ${entityName.toUpperCase()} | ${dateStr}]`, imgX + imgW / 2, imgY + imgH + 3.8, { align: 'center' });
+                
+                y += imgH + 7;
+              }
             }
+          } else {
+            doc.setFillColor(254, 242, 242);
+            doc.setDrawColor(254, 202, 202);
+            doc.roundedRect(margin, y, contentWidth, 11, 1.5, 1.5, 'FD');
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(220, 38, 38);
+            doc.text(
+              isMissing
+                ? '[UNMARKED] Report and photographic evidence not uploaded for this scheduled slot.'
+                : '[PENDING] No photographic evidence uploaded.',
+              margin + contentWidth / 2,
+              y + 7,
+              { align: 'center' }
+            );
+            y += 14;
           }
+        } else {
+          y += 3;
         }
-
-        y += Math.max(descLines.length * 4 + 10, 48);
 
         // OPTIONAL: Include Student Details Table in PDF if turned ON
         if (includeStudentDetails) {
@@ -529,16 +599,16 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           const stList = (currentStudentsMap || studentsMap)[key] || [];
 
           if (stList.length > 0) {
-            if (y > pageHeight - 50) {
+            if (y > pageHeight - margin - 45) {
               doc.addPage();
               y = 15;
             }
 
-            doc.setFontSize(8.5);
+            doc.setFontSize(8);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(30, 58, 138);
-            doc.text(`Student Attendance Roll (${stList.length} Students)`, margin, y + 4);
-            y += 6;
+            doc.text(`Student Attendance Roll (${stList.length} Students Allocated)`, margin, y + 4);
+            y += 5.5;
 
             autoTable(doc, {
               startY: y,
@@ -572,42 +642,94 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
                 }
               }
             });
-            y = (doc as any).lastAutoTable.finalY + 8;
+            y = (doc as any).lastAutoTable.finalY + 6;
           }
         }
 
-        // Separator
+        // Section Divider
         doc.setDrawColor(226, 232, 240);
         doc.setLineWidth(0.3);
         doc.line(margin, y, pageWidth - margin, y);
         y += 6;
       }
 
-      // Footer with Techspark logo on last page
-      try {
-        const tsData = await toBase64('/techspark-logo.png', true);
-        if (tsData) {
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'italic');
-          doc.setTextColor(148, 163, 184);
+      // ----------------------------------------------------
+      // NAAC CRITERION 7 INSTITUTIONAL SIGNATURE BLOCK
+      // ----------------------------------------------------
+      if (y > pageHeight - margin - 40) {
+        doc.addPage();
+        y = 25;
+      } else {
+        y += 8;
+      }
 
-          const tsWidth = 28;
-          const tsHeight = 8;
-          const rightMargin = 15;
-          const textStr = 'Managed by';
-          const textWidth = doc.getTextWidth(textStr);
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 58, 138);
+      doc.text('INSTITUTIONAL VERIFICATION & NAAC COMPLIANCE SIGN-OFF', pageWidth / 2, y, { align: 'center' });
+      y += 6;
 
-          const logoX = pageWidth - rightMargin - tsWidth;
-          const logoY = pageHeight - 16;
-          const textX = logoX - textWidth - 3;
-          const textY = logoY + 5.5;
+      const sigWidth = (contentWidth - 16) / 3;
+      const sigTitles = [
+        `Faculty In-Charge\n(${entityType === 'CLUB' ? 'Club' : 'Centre'} Coordinator)`,
+        `Overall Coordinator\n(Overall ${entityType === 'CLUB' ? 'Club' : 'Centre'} Coordinator)`,
+        'HOD\n(Head of the Department)'
+      ];
 
-          doc.text(textStr, textX, textY);
-          doc.addImage(tsData, 'PNG', logoX, logoY, tsWidth, tsHeight);
+      sigTitles.forEach((title, sIdx) => {
+        const sX = margin + sIdx * (sigWidth + 8);
+        doc.setDrawColor(148, 163, 184);
+        doc.setLineWidth(0.5);
+        doc.line(sX, y + 14, sX + sigWidth, y + 14);
+        
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        const lines = title.split('\n');
+        doc.text(lines[0], sX + sigWidth / 2, y + 18, { align: 'center' });
+        if (lines[1]) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(100, 116, 139);
+          doc.text(lines[1], sX + sigWidth / 2, y + 21.5, { align: 'center' });
         }
-      } catch {}
+      });
 
-      doc.save(`${entityName.replace(/\s+/g, '_')}_Visual_Report.pdf`);
+      // ----------------------------------------------------
+      // POST-PROCESSING: RUNNING HEADER & RUNNING FOOTER
+      // ----------------------------------------------------
+      const totalPages = (doc.internal as any).getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        
+        // Running Header on Page 2+
+        if (i > 1) {
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(100, 116, 139);
+          doc.text('RAJALAKSHMI INSTITUTE OF TECHNOLOGY  |  NAAC CRITERION VII AUDIT DOSSIER', margin, 7.5);
+          doc.text(entityName.toUpperCase(), pageWidth - margin, 7.5, { align: 'right' });
+          doc.setDrawColor(226, 232, 240);
+          doc.setLineWidth(0.3);
+          doc.line(margin, 9.5, pageWidth - margin, 9.5);
+        }
+
+        // Running Footer on All Pages
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `NAAC Criterion VII Compliance Dossier  |  Academic Year 2026-2027  |  ${entityType === 'CLUB' ? 'Clubs' : 'Centres'} Portal`,
+          margin,
+          pageHeight - 6
+        );
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 6, { align: 'right' });
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(margin, pageHeight - 9, pageWidth - margin, pageHeight - 9);
+      }
+
+      doc.save(`${entityName.replace(/\s+/g, '_')}_NAAC_Criterion_7_Report.pdf`);
     } catch (err) {
       console.error(err);
       alert('PDF generation failed. Please try again.');
@@ -619,8 +741,10 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
   const totalSessions = reports.length;
   const submittedCount = reports.filter(r => r.status === 'SUBMITTED').length;
   const pendingCount = reports.filter(r => r.status === 'REPORT_PENDING').length;
-  const missingCount = reports.filter(r => r.status === 'NOT_SUBMITTED').length;
-  const complianceRate = totalSessions > 0 ? Math.round(((submittedCount + pendingCount) / totalSessions) * 100) : 0;
+  const holidayCount = reports.filter(r => r.status === 'HOLIDAY').length;
+  const missingCount = reports.filter(r => r.status === 'NOT_SUBMITTED' || (!['SUBMITTED', 'REPORT_PENDING', 'HOLIDAY'].includes(r.status))).length;
+  const activeSessions = totalSessions - holidayCount;
+  const complianceRate = activeSessions > 0 ? Math.round(((submittedCount + pendingCount) / activeSessions) * 100) : (totalSessions > 0 ? 100 : 0);
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
@@ -658,7 +782,7 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
               className="w-4 h-4 accent-blue-500 rounded cursor-pointer"
             />
             <span className="text-slate-200 flex items-center gap-1.5 text-xs">
-              📋 Student Roll
+              Student Roll
               {isFetchingStudents && <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full"></span>}
             </span>
           </label>
@@ -666,12 +790,12 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           <button 
             onClick={downloadPDF}
             disabled={isDownloading || isFetchingStudents}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 text-xs shadow-sm"
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-bold transition-colors flex items-center gap-2 text-xs shadow-md"
           >
             {isDownloading ? (
               <><span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> Generating PDF...</>
             ) : (
-              '⬇ Download PDF'
+              <><FileText className="w-4 h-4" /> Download PDF</>
             )}
           </button>
         </div>
@@ -687,9 +811,9 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           </div>
           <div className="flex-1 text-center">
             <h1 className="text-xl font-black text-blue-900 tracking-tight">RAJALAKSHMI INSTITUTE OF TECHNOLOGY</h1>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Autonomous Institution | Affiliated to Anna University</p>
-            <p className="text-[11px] font-black text-blue-950 uppercase tracking-wider mt-1 bg-blue-50 py-0.5 px-2 rounded inline-block border border-blue-200">
-              Club & Centre Slot Allocation Portal
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Autonomous Institution | Affiliated to Anna University | Accredited by NAAC</p>
+            <p className="text-[11px] font-black text-blue-950 uppercase tracking-wider mt-1 bg-blue-50 py-0.5 px-3 rounded-full inline-block border border-blue-200">
+              INTERNAL QUALITY ASSURANCE CELL (IQAC) & ACTIVITY ALLOCATION PORTAL
             </p>
           </div>
           <div className="flex-1 flex justify-end">
@@ -697,56 +821,76 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           </div>
         </div>
 
-        {/* Official Executive Cover Title Card */}
+        {/* NAAC Criterion 7 Official Header Card */}
         <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-8 rounded-2xl border border-slate-800 text-white mb-8 shadow-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-2xl"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
           
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6 text-center">
-            {getEntityLogoUrl(entityName) && (
-              <div className="w-14 h-14 bg-white rounded-2xl p-1 border-2 border-slate-200 shadow-md flex items-center justify-center shrink-0">
-                <img src={getEntityLogoUrl(entityName)} alt={entityName} className="w-full h-full object-contain rounded-lg" />
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 border-b border-white/10 pb-6">
+            <div className="flex items-center gap-4 text-left">
+              {getEntityLogoUrl(entityName) && (
+                <div className="w-16 h-16 bg-white rounded-2xl p-1.5 border-2 border-slate-200 shadow-md flex items-center justify-center shrink-0">
+                  <img src={getEntityLogoUrl(entityName)} alt={entityName} className="w-full h-full object-contain rounded-lg" />
+                </div>
+              )}
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-300 px-3 py-0.5 rounded-full border border-blue-400/30">
+                    OVERALL {entityType === 'CLUB' ? 'CLUBS' : 'CENTRES'} REPORT (NAAC VII)
+                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                    NAAC AUDITED
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">{entityName}</h2>
+                <p className="text-xs text-slate-300 font-medium mt-0.5">
+                  Official Overall {entityType === 'CLUB' ? 'Club' : 'Centre'} Institutional Values & Activity Compliance Dossier
+                </p>
               </div>
-            )}
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full border border-blue-400/30">
-                OFFICIAL ACTIVITY AUDIT & COMPLIANCE REPORT
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white mt-2">{entityName}</h2>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 text-right shrink-0">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Academic Year</span>
+              <span className="text-sm font-black text-white">2026 - 2027 (ODD SEM)</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-xl border border-white/10 text-xs font-medium mb-6">
+          {/* NAAC Factsheet Info Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-xl border border-white/10 text-xs font-medium mb-6">
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">Faculty Coordinator</span>
-              <span className="text-blue-200 font-bold text-sm">{facultyCoordinator}</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Faculty In-Charge</span>
+              <span className="text-blue-200 font-bold text-sm">{facultyCoordinator} ({entityType === 'CLUB' ? 'Club In-Charge' : 'Centre In-Charge'})</span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">Report Audit Period</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Overall Coordination</span>
+              <span className="text-slate-200 font-bold text-xs">Overall {entityType === 'CLUB' ? 'Club' : 'Centre'} Coordinator</span>
+            </div>
+            <div>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Audit Duration</span>
               <span className="text-blue-300 font-bold text-xs">{startDate} to {endDate}</span>
             </div>
             <div className="md:text-right">
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">Academic Year & Status</span>
-              <span className="text-white font-bold text-sm">2026-2027 <span className="text-emerald-400 text-xs ml-2">✓ VERIFIED AUDIT</span></span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Compliance Status</span>
+              <span className="text-emerald-400 font-bold text-xs">OFFICIALLY VERIFIED</span>
             </div>
           </div>
           
           {/* Executive Metrics Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-white/10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
             <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl text-center">
               <span className="block text-[10px] font-black uppercase tracking-widest text-slate-300">Total Sessions</span>
               <span className="block text-xl font-black text-white mt-1">{totalSessions}</span>
             </div>
             <div className="bg-emerald-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-emerald-400/20">
-              <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Submitted</span>
+              <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Audited & Verified</span>
               <span className="block text-xl font-black text-emerald-400 mt-1">{submittedCount}</span>
             </div>
-            <div className="bg-amber-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-amber-400/20">
-              <span className="block text-[10px] font-black uppercase tracking-widest text-amber-300">Report Pending</span>
-              <span className="block text-xl font-black text-amber-400 mt-1">{pendingCount}</span>
+            <div className="bg-blue-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-blue-400/20">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-blue-300">Total Participants</span>
+              <span className="block text-xl font-black text-blue-400 mt-1">{reports.reduce((acc, r) => acc + (r.present || 0), 0)}</span>
             </div>
-            <div className="bg-red-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-red-400/20">
-              <span className="block text-[10px] font-black uppercase tracking-widest text-red-300">Not Marked</span>
-              <span className="block text-xl font-black text-red-400 mt-1">{missingCount}</span>
+            <div className="bg-indigo-500/20 backdrop-blur-sm p-3 rounded-xl text-center border border-indigo-400/20">
+              <span className="block text-[10px] font-black uppercase tracking-widest text-indigo-300">Compliance Rate</span>
+              <span className="block text-xl font-black text-indigo-400 mt-1">{complianceRate}%</span>
             </div>
           </div>
         </div>
@@ -756,14 +900,14 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-base font-black text-blue-900 uppercase tracking-wider flex items-center gap-2">
-                📊 Audit Index & Executive Summary Table
+                NAAC Criterion 7 Index & Summary Factsheet
               </h3>
               <p className="text-xs text-slate-500 font-bold mt-0.5">
                 Official table of contents & compliance summary for all scheduled sessions.
               </p>
             </div>
             <span className="text-[10px] font-black bg-blue-50 text-blue-700 px-3 py-1 rounded-lg border border-blue-200 uppercase tracking-widest">
-              PDF Front Cover Page
+              NAAC Dossier Section
             </span>
           </div>
 
@@ -784,7 +928,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
                 {reports.map((r, i) => {
                   const isSubmitted = r.status === 'SUBMITTED';
                   const isPending = r.status === 'REPORT_PENDING';
-                  const isNotMarked = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+                  const isHoliday = r.status === 'HOLIDAY';
+                  const isNotMarked = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
                   
                   const dObj = r.date ? new Date(r.date) : null;
                   const dStr = (dObj && !isNaN(dObj.getTime()))
@@ -792,18 +937,28 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
                     : r.date || 'N/A';
 
                   return (
-                    <tr key={i} className={isNotMarked ? 'bg-red-50/40 hover:bg-red-50/70' : isPending ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'}>
+                    <tr key={i} className={isHoliday ? 'bg-purple-50/40 hover:bg-purple-50/70' : isNotMarked ? 'bg-red-50/40 hover:bg-red-50/70' : isPending ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'}>
                       <td className="p-2 text-center font-bold text-slate-400">{i + 1}</td>
                       <td className="p-2 font-black text-slate-800">{dStr} ({r.day || ''})</td>
                       <td className="p-2 text-slate-700 font-semibold">{r.session} {r.timing ? `(${r.timing})` : ''}</td>
                       <td className="p-2 font-bold text-slate-600">{r.venue || 'N/A'}</td>
                       <td className="p-2 text-center font-black text-slate-700">{r.expected}</td>
-                      <td className="p-2 text-center font-black">{isNotMarked ? <span className="text-red-600">0</span> : <span className="text-emerald-700">{r.present}</span>}</td>
+                      <td className="p-2 text-center font-black">
+                        {isHoliday ? (
+                          <span className="text-purple-600 font-bold">0 (Holiday)</span>
+                        ) : isNotMarked ? (
+                          <span className="text-red-600">0</span>
+                        ) : (
+                          <span className="text-emerald-700">{r.present}</span>
+                        )}
+                      </td>
                       <td className="p-2 text-center">
                         {isSubmitted ? (
                           <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-black text-[10px]">SUBMITTED</span>
                         ) : isPending ? (
                           <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-black text-[10px]">REPORT PENDING</span>
+                        ) : isHoliday ? (
+                          <span className="bg-purple-100 text-purple-800 border border-purple-300 px-2 py-0.5 rounded font-black text-[10px]">HOLIDAY</span>
                         ) : (
                           <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-black text-[10px]">NOT MARKED</span>
                         )}
@@ -827,7 +982,8 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           {reports.map((report, idx) => {
             const isSubmitted = report.status === 'SUBMITTED';
             const isPending = report.status === 'REPORT_PENDING';
-            const isNotMarked = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+            const isHoliday = report.status === 'HOLIDAY';
+            const isNotMarked = report.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
             const isMissing = isNotMarked;
             
             const rDateStr = report.date ? new Date(report.date).toISOString().split('T')[0] : '';
@@ -838,116 +994,137 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
               <div key={idx} className="page-break-inside-avoid">
                 <div className="flex items-center justify-between border-b-2 border-slate-100 pb-2 mb-4">
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0 ${isNotMarked ? 'bg-red-600 text-white' : isPending ? 'bg-amber-600 text-white' : 'bg-blue-900 text-white'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xl shrink-0 ${isHoliday ? 'bg-purple-700 text-white' : isNotMarked ? 'bg-red-600 text-white' : isPending ? 'bg-amber-600 text-white' : 'bg-blue-900 text-white'}`}>
                       {idx + 1}
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-slate-800">
                         Date: {new Date(report.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ({report.day || 'N/A'})
                       </h3>
-                      <p className="text-sm font-medium text-slate-500">Coordinator: <span className={`font-bold ${isNotMarked ? 'text-red-600' : isPending ? 'text-amber-700' : 'text-slate-700'}`}>{report.coordinatorName}</span></p>
+                      <p className="text-sm font-medium text-slate-500">
+                        Coordinator: <span className={`font-bold ${isHoliday ? 'text-purple-700' : isNotMarked ? 'text-red-600' : isPending ? 'text-amber-700' : 'text-slate-700'}`}>{isHoliday ? 'N/A (Declared Holiday)' : report.coordinatorName}</span>
+                      </p>
                     </div>
                   </div>
                   {isSubmitted ? (
                     <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
-                      ✅ SUBMITTED
+                      SUBMITTED
                     </span>
                   ) : isPending ? (
                     <span className="bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
-                      ⚠️ REPORT PENDING
+                      REPORT PENDING
+                    </span>
+                  ) : isHoliday ? (
+                    <span className="bg-purple-100 text-purple-800 border border-purple-300 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
+                      DECLARED HOLIDAY
                     </span>
                   ) : (
                     <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
-                      ❌ ATTENDANCE NOT MARKED
+                      ATTENDANCE NOT MARKED
                     </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
-                  {/* Details Column */}
-                  <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Session & Timing</span>
-                        <span className="block text-sm font-bold text-slate-700">{report.session || 'N/A'} {report.timing ? `(${report.timing})` : ''}</span>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Venue</span>
-                        <span className="block text-sm font-bold text-slate-700">{report.venue || 'N/A'}</span>
-                      </div>
+                <div className="mt-6 space-y-6">
+                  {/* Metadata Stats Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Session & Timing</span>
+                      <span className="block text-sm font-bold text-slate-800">{report.session || 'N/A'} {report.timing ? `(${report.timing})` : ''}</span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-slate-100 p-3 rounded-lg border border-slate-300">
-                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Expected</span>
-                        <span className="block text-lg font-black text-slate-800">{report.expected}</span>
-                      </div>
-                      <div className={`p-3 rounded-lg border ${isMissing ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-                        <span className={`block text-[10px] font-black uppercase tracking-wider ${isMissing ? 'text-red-500' : 'text-green-600'}`}>Present</span>
-                        <span className={`block text-lg font-black ${isMissing ? 'text-red-700' : 'text-green-700'}`}>{isMissing ? '0 (Unmarked)' : report.present}</span>
-                      </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Venue</span>
+                      <span className="block text-sm font-bold text-slate-800">{report.venue || 'N/A'}</span>
                     </div>
-
-                    <div className={`p-4 rounded-lg border ${isMissing ? 'bg-red-50/70 border-red-200' : 'bg-blue-50/50 border-blue-100'}`}>
-                      <span className={`block text-[10px] font-black uppercase tracking-wider mb-2 ${isMissing ? 'text-red-600' : 'text-blue-500'}`}>Description</span>
-                      <p className={`text-sm font-medium leading-relaxed ${isMissing ? 'text-red-800 font-bold' : 'text-slate-700 italic'}`}>
-                        "{report.description}"
-                      </p>
+                    <div className="bg-slate-100 p-3 rounded-xl border border-slate-300">
+                      <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Expected Students</span>
+                      <span className="block text-lg font-black text-slate-800">{report.expected}</span>
+                    </div>
+                    <div className={`p-3 rounded-xl border ${isHoliday ? 'bg-purple-50 border-purple-200' : isMissing ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                      <span className={`block text-[10px] font-black uppercase tracking-wider ${isHoliday ? 'text-purple-600' : isMissing ? 'text-red-500' : 'text-emerald-600'}`}>Present Students</span>
+                      <span className={`block text-lg font-black ${isHoliday ? 'text-purple-700' : isMissing ? 'text-red-700' : 'text-emerald-700'}`}>
+                        {isHoliday ? '0 (Holiday)' : isMissing ? '0 (Unmarked)' : report.present}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Photo Column */}
-                  <div>
-                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Photographic Evidence</span>
-                    {report.imageUrl ? (
-                      <div className="rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50 flex items-center justify-center relative w-full h-64 shadow-inner">
-                        {(() => {
-                          const url = report.imageUrl;
-                          const match = url.match(/[-\w]{25,}/);
-                          const driveId = match ? match[0] : null;
-                          
-                          if (driveId) {
-                            const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`;
-                            return (
-                              <div className="relative w-full h-full">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img 
-                                  src={thumbUrl}
-                                  alt="Activity Evidence"
-                                  className="object-cover w-full h-full"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).src = `https://drive.google.com/uc?export=view&id=${driveId}`;
-                                  }}
-                                />
-                                <a href={url} target="_blank" rel="noopener noreferrer"
-                                  className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-xs px-2 py-1 rounded font-bold">
-                                  Open Full ↗
-                                </a>
-                              </div>
-                            );
-                          } else {
-                            return (
-                              <div className="p-4 text-center">
-                                <p className="text-sm font-bold text-slate-500">External Image URL</p>
-                                <a href={url} className="text-xs text-blue-600 break-all">{url}</a>
-                              </div>
-                            );
-                          }
-                        })()}
-                      </div>
-                    ) : (
-                      <div className={`rounded-xl border-2 border-dashed flex items-center justify-center w-full h-64 ${isMissing ? 'border-red-200 bg-red-50/40 text-red-400' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                        <p className="text-sm font-bold">{isMissing ? '❌ Report Not Uploaded' : 'No Photo Uploaded'}</p>
-                      </div>
-                    )}
+                  {/* Activity Description */}
+                  <div className={`p-4 rounded-xl border ${isHoliday ? 'bg-purple-50/70 border-purple-200' : isMissing ? 'bg-red-50/70 border-red-200' : 'bg-blue-50/50 border-blue-100'}`}>
+                    <span className={`block text-[10px] font-black uppercase tracking-wider mb-1.5 ${isHoliday ? 'text-purple-700' : isMissing ? 'text-red-600' : 'text-blue-600'}`}>Activity Objective & Description</span>
+                    <p className={`text-sm font-medium leading-relaxed ${isHoliday ? 'text-purple-900 font-semibold' : isMissing ? 'text-red-800 font-bold' : 'text-slate-700 italic'}`}>
+                      "{report.description}"
+                    </p>
                   </div>
+
+                  {/* Photographic Evidence Section (Only rendered for non-holidays) */}
+                  {!isHoliday && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="block text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          Photographic Evidence
+                        </span>
+                        {report.imageUrl && (
+                          <a 
+                            href={report.imageUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                          >
+                            Open Full Resolution ↗
+                          </a>
+                        )}
+                      </div>
+
+                      {report.imageUrl ? (
+                        <div className="rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-900/5 flex items-center justify-center relative w-full min-h-[360px] md:h-[500px] shadow-sm">
+                          {(() => {
+                            const url = report.imageUrl;
+                            const match = url.match(/[-\w]{25,}/);
+                            const driveId = match ? match[0] : null;
+                            
+                            if (driveId) {
+                              const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+                              return (
+                                <div className="relative w-full h-full flex items-center justify-center bg-slate-950/5 p-2">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img 
+                                    src={thumbUrl}
+                                    alt="Activity Photographic Evidence"
+                                    className="object-contain w-full h-full max-h-[490px] rounded-xl"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = `https://drive.google.com/uc?export=view&id=${driveId}`;
+                                    }}
+                                  />
+                                  <a href={url} target="_blank" rel="noopener noreferrer"
+                                    className="absolute bottom-4 right-4 bg-slate-900/80 hover:bg-blue-600 backdrop-blur text-white text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all shadow-lg flex items-center gap-1.5">
+                                    View Original Photo
+                                  </a>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="p-8 text-center">
+                                  <p className="text-sm font-bold text-slate-500 mb-2">External Image URL</p>
+                                  <a href={url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 font-semibold underline break-all">{url}</a>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </div>
+                      ) : (
+                        <div className={`rounded-2xl border-2 border-dashed flex items-center justify-center w-full h-48 ${isMissing ? 'border-red-200 bg-red-50/40 text-red-400' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                          <p className="text-sm font-bold">{isMissing ? 'Report Not Uploaded' : 'No Photographic Evidence Uploaded'}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Optional Student Attendance Roll Table */}
                 {includeStudentDetails && (
                   <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-200">
                     <h4 className="text-sm font-black text-blue-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                      📋 Student Attendance Roll ({studentList.length} Students Allocated)
+                      Student Attendance Roll ({studentList.length} Students Allocated)
                     </h4>
                     {isFetchingStudents ? (
                       <div className="p-6 text-center text-slate-400 text-xs font-bold flex items-center justify-center gap-2">
@@ -999,11 +1176,44 @@ export default function PrintReportPage({ params }: { params: Promise<{ entity?:
           })}
         </div>
 
+        {/* Institutional Verification Sign-Off Block */}
+        <div className="mt-16 pt-8 border-t-2 border-slate-300 page-break-inside-avoid">
+          <h4 className="text-xs font-black text-blue-900 uppercase tracking-wider mb-8 text-center">
+            Institutional Verification & Compliance Sign-Off (NAAC Criterion VII)
+          </h4>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center max-w-4xl mx-auto">
+            <div className="space-y-12">
+              <div className="h-12 border-b-2 border-dashed border-slate-300"></div>
+              <div>
+                <p className="text-xs font-black text-slate-800 uppercase">Faculty In-Charge</p>
+                <p className="text-[10px] font-bold text-slate-500">{entityType === 'CLUB' ? 'Club Coordinator' : 'Centre Coordinator'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-12">
+              <div className="h-12 border-b-2 border-dashed border-slate-300"></div>
+              <div>
+                <p className="text-xs font-black text-slate-800 uppercase">Overall Coordinator</p>
+                <p className="text-[10px] font-bold text-slate-500">Overall {entityType === 'CLUB' ? 'Club' : 'Centre'} Coordinator</p>
+              </div>
+            </div>
+
+            <div className="space-y-12">
+              <div className="h-12 border-b-2 border-dashed border-slate-300"></div>
+              <div>
+                <p className="text-xs font-black text-slate-800 uppercase">HOD</p>
+                <p className="text-[10px] font-bold text-slate-500">Head of the Department</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Footer with Techspark Logo - Printed at the bottom of the document */}
-        <div className="mt-20 pt-8 border-t-2 border-slate-100 flex items-center justify-between text-slate-500 page-break-inside-avoid">
+        <div className="mt-16 pt-6 border-t border-slate-200 flex items-center justify-between text-slate-500 page-break-inside-avoid">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest">Rajalakshmi Institute of Technology</p>
-            <p className="text-[10px] font-medium mt-1">Club & Centre Slot Allocation Portal</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Rajalakshmi Institute of Technology</p>
+            <p className="text-[10px] font-medium text-slate-400 mt-0.5">NAAC Criterion VII Activity Compliance Dossier</p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold italic text-slate-400">Managed by</span>

@@ -157,7 +157,7 @@ export async function GET(request: Request) {
               coordinatorName: 'N/A (Holiday)',
               expected: s.allocated_count || s.capacity || 0,
               present: 0,
-              description: `🎉 Declared Holiday (${holidayReason}). No activity scheduled.`,
+              description: `Declared Holiday (${holidayReason}). No activity scheduled.`,
               imageUrl: '',
               submitted: false,
               status: 'HOLIDAY'

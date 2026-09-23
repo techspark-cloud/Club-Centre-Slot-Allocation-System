@@ -7,6 +7,7 @@ import { Navigation, MapPin, Play, Square } from 'lucide-react';
 import * as THREE from 'three';
 import Image from 'next/image';
 import Building from './Building';
+import GreenBuilding from './GreenBuilding';
 
 // Prototype data based on user input
 const BLOCKS = [
@@ -49,19 +50,6 @@ const BLOCKS = [
       { size: [0.2, 1.5, 0.2], position: [1.4, 1.95, -1.4], color: '#e2e8f0' }, // Corner pillar
       { size: [0.2, 1.5, 0.2], position: [-1.4, 1.95, 1.4], color: '#e2e8f0' }, // Corner pillar
       { size: [0.2, 1.5, 0.2], position: [1.4, 1.95, 1.4], color: '#e2e8f0' } // Corner pillar
-    ]
-  },
-  {
-    id: 'GB',
-    name: 'Green Building',
-    color: '#10b981', // Emerald Green
-    position: [-26, 0, -4] as [number, number, number], // Left of the road, past security
-    parts: [
-      { size: [12, 10, 24], position: [2, 5, 0], color: '#10b981' },    // Main right spine
-      { size: [8, 10, 16], position: [-8, 5, 2], color: '#10b981' },    // Middle left stepped extension
-      { size: [6, 10, 6], position: [-12, 5, 5], color: '#10b981' },    // Further left stepped extension
-      { size: [8, 10, 6], position: [-2, 5, 12], color: '#10b981' },    // Bottom protrusion
-      { size: [4, 10, 4], position: [6, 5, 10], color: '#10b981' }      // Small bottom-right square extension
     ]
   },
   {
@@ -945,7 +933,19 @@ export default function CampusMap({
 
 
 
-      {/* Buildings */}
+      {/* Detailed Realistic Grand Green Building (Rajalakshmi School of Business) */}
+      <GreenBuilding
+        position={[-34, 0, -6]}
+        scale={[2.8, 2.6, 2.8]}
+        highlightVenue={highlightVenue}
+        hasReachedDestination={hasReachedDestination}
+        onClick={() => {
+          console.log('Focused on Green Building');
+          setControlsTarget([-34, 16, -6]);
+        }}
+      />
+
+      {/* Other Campus Buildings */}
       {BLOCKS.map(block => (
         <Building
           key={block.id}

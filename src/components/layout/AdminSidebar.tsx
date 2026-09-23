@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity, UserCheck, FileText, Mail, PieChart } from 'lucide-react';
+import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity, UserCheck, FileText, Mail, PieChart, Award } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function AdminSidebar() {
@@ -20,6 +20,7 @@ export default function AdminSidebar() {
 
   const navItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+    { name: 'Centre Certificates (Demo)', href: '/admin/centre-certificates', icon: Award },
     { name: 'Executive View', href: '/admin/executive', icon: Activity },
     { name: 'Audit Reports', href: '/admin/audit-reports', icon: FileText },
     { name: 'Reports Hub', href: '/admin/reports', icon: FileText },

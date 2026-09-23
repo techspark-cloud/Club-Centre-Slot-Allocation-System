@@ -161,8 +161,10 @@ export default function FacultyReportsClient({
             const totalSessions = entityReports.length;
             const submittedCount = entityReports.filter(r => r.status === 'SUBMITTED').length;
             const pendingCount = entityReports.filter(r => r.status === 'REPORT_PENDING').length;
-            const missingCount = entityReports.filter(r => r.status === 'NOT_SUBMITTED').length;
-            const complianceRate = totalSessions > 0 ? Math.round(((submittedCount + pendingCount) / totalSessions) * 100) : 0;
+            const holidayCount = entityReports.filter(r => r.status === 'HOLIDAY').length;
+            const missingCount = entityReports.filter(r => r.status === 'NOT_SUBMITTED' || (!['SUBMITTED', 'REPORT_PENDING', 'HOLIDAY'].includes(r.status))).length;
+            const activeSessions = totalSessions - holidayCount;
+            const complianceRate = activeSessions > 0 ? Math.round(((submittedCount + pendingCount) / activeSessions) * 100) : (totalSessions > 0 ? 100 : 0);
 
             return (
               <div key={entity.id} className="bg-white rounded-3xl border-2 border-slate-200 shadow-sm overflow-hidden p-6 sm:p-8 space-y-6">
@@ -198,53 +200,52 @@ export default function FacultyReportsClient({
 
                   <div className="flex items-center gap-3">
                     <Link
-                      href={`/admin/audit-reports/print?entity=${encodeURIComponent(entity.name)}&startDate=${startDate}&endDate=${endDate}`}
+                      href={`/admin/audit-reports/print/${encodeURIComponent(entity.name)}`}
                       target="_blank"
-                      className="flex items-center gap-2 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-md text-xs sm:text-sm shrink-0 border border-blue-800/40"
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-black px-5 py-3 rounded-2xl transition-all shadow-md text-xs tracking-wider uppercase"
                     >
-                      <ImageIcon className="w-4 h-4 text-blue-300" />
-                      View & Download Visual PDF Report
+                      <FileText className="w-4 h-4" />
+                      Visual & PDF Dossier
                     </Link>
                   </div>
                 </div>
 
-                {/* Metrics Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Summary Metrics */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center">
-                    <span className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Total Timetable Slots</span>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Total Sessions</span>
                     <span className="block text-2xl font-black text-slate-900 mt-1">{totalSessions}</span>
                   </div>
                   <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-center">
-                    <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-700">Submitted Reports</span>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-emerald-700">Submitted</span>
                     <span className="block text-2xl font-black text-emerald-700 mt-1">{submittedCount}</span>
                   </div>
                   <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 text-center">
-                    <span className="block text-[10px] font-black uppercase tracking-widest text-amber-700">Report Pending</span>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-amber-700">Pending</span>
                     <span className="block text-2xl font-black text-amber-700 mt-1">{pendingCount}</span>
                   </div>
                   <div className="bg-red-50 p-4 rounded-2xl border border-red-200 text-center">
-                    <span className="block text-[10px] font-black uppercase tracking-widest text-red-700">Not Marked</span>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-red-700">Not Marked</span>
                     <span className="block text-2xl font-black text-red-700 mt-1">{missingCount}</span>
                   </div>
                 </div>
 
-                {/* Audit Records Table */}
+                {/* Audit Index Table */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                    <span>📊 Activity Audit Records ({startDate} to {endDate})</span>
-                    <span className="text-slate-500 font-bold">{entityReports.length} sessions</span>
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                    Scheduled Session Audit Index
                   </h4>
 
                   {isLoading ? (
                     <div className="p-12 text-center text-slate-400 font-bold text-sm">Loading activity audit records...</div>
                   ) : entityReports.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400 font-medium text-sm bg-slate-50 rounded-2xl">
-                      No audit records found for this period.
+                    <div className="p-8 text-center text-slate-400 font-bold text-xs bg-slate-50 rounded-2xl border border-slate-200">
+                      No audit records found for this entity.
                     </div>
                   ) : (
                     <div className="overflow-x-auto rounded-2xl border border-slate-200">
                       <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-100 text-slate-700 font-black uppercase tracking-wider">
+                        <thead className="bg-slate-100 text-slate-700 font-black uppercase tracking-wider border-b border-slate-200">
                           <tr>
                             <th className="p-3 text-center border-b">S.No</th>
                             <th className="p-3 border-b">Date & Day</th>
@@ -260,7 +261,8 @@ export default function FacultyReportsClient({
                           {entityReports.map((r, i) => {
                             const isSubmitted = r.status === 'SUBMITTED';
                             const isPending = r.status === 'REPORT_PENDING';
-                            const isNotMarked = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending);
+                            const isHoliday = r.status === 'HOLIDAY';
+                            const isNotMarked = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
                             
                             const dObj = r.date ? new Date(r.date) : null;
                             const dStr = (dObj && !isNaN(dObj.getTime()))
@@ -268,20 +270,28 @@ export default function FacultyReportsClient({
                               : r.date || 'N/A';
 
                             return (
-                              <tr key={i} className={isNotMarked ? 'bg-red-50/40 hover:bg-red-50/70' : isPending ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'}>
+                              <tr key={i} className={isHoliday ? 'bg-purple-50/40 hover:bg-purple-50/70' : isNotMarked ? 'bg-red-50/40 hover:bg-red-50/70' : isPending ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'}>
                                 <td className="p-2.5 text-center font-bold text-slate-400">{i + 1}</td>
                                 <td className="p-2.5 font-black text-slate-800">{dStr} ({r.day || ''})</td>
                                 <td className="p-2.5 text-slate-700 font-semibold">{r.session} ({r.timing || ''})</td>
                                 <td className="p-2.5 font-bold text-slate-600">{r.venue || 'N/A'}</td>
                                 <td className="p-2.5 text-center font-black text-slate-700">{r.expected}</td>
                                 <td className="p-2.5 text-center font-black">
-                                  {isNotMarked ? <span className="text-red-600">0</span> : <span className="text-emerald-700">{r.present}</span>}
+                                  {isHoliday ? (
+                                    <span className="text-purple-600 font-bold">0 (Holiday)</span>
+                                  ) : isNotMarked ? (
+                                    <span className="text-red-600">0</span>
+                                  ) : (
+                                    <span className="text-emerald-700">{r.present}</span>
+                                  )}
                                 </td>
                                 <td className="p-2.5 text-center">
                                   {isSubmitted ? (
                                     <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-black text-[10px]">SUBMITTED</span>
                                   ) : isPending ? (
-                                    <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-black text-[10px]">⚠️ REPORT PENDING</span>
+                                    <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-black text-[10px]">REPORT PENDING</span>
+                                  ) : isHoliday ? (
+                                    <span className="bg-purple-100 text-purple-800 border border-purple-300 px-2 py-0.5 rounded font-black text-[10px]">HOLIDAY</span>
                                   ) : (
                                     <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-black text-[10px]">NOT MARKED</span>
                                   )}
@@ -291,6 +301,8 @@ export default function FacultyReportsClient({
                                     <a href={r.imageUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">
                                       View Photo <ExternalLink className="w-3 h-3" />
                                     </a>
+                                  ) : isHoliday ? (
+                                    <span className="text-purple-600 text-[10px] font-bold">Holiday</span>
                                   ) : (
                                     <span className="text-slate-400">-</span>
                                   )}

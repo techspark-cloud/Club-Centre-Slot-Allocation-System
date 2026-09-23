@@ -1,5 +1,5 @@
-import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, VICE_PRINCIPAL_EMAIL } from '@/config/hod-emails';
-import { Mail, GraduationCap, School } from 'lucide-react';
+import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, HOD_REPORT_CC_EMAILS } from '@/config/hod-emails';
+import { Mail, GraduationCap, School, Users } from 'lucide-react';
 
 export default function EmailConfigPage() {
   return (
@@ -61,14 +61,20 @@ export default function EmailConfigPage() {
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-orange-500" />
-              <h2 className="font-bold text-slate-800 text-lg">Vice Principal (CC)</h2>
+              <Users className="w-5 h-5 text-orange-500" />
+              <h2 className="font-bold text-slate-800 text-lg">Report CC Recipients</h2>
             </div>
-            <div className="p-6">
-              <p className="text-sm text-slate-500 mb-2">Automatically CC'd on all automated reports.</p>
-              <a href={`mailto:${VICE_PRINCIPAL_EMAIL}`} className="text-lg font-bold text-orange-600 hover:underline">
-                {VICE_PRINCIPAL_EMAIL}
-              </a>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-slate-500">Automatically CC'd on all automated attendance and HOD reports:</p>
+              <div className="space-y-1.5">
+                {HOD_REPORT_CC_EMAILS.map((email) => (
+                  <div key={email}>
+                    <a href={`mailto:${email}`} className="text-base font-bold text-orange-600 hover:underline">
+                      {email}
+                    </a>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -77,3 +83,4 @@ export default function EmailConfigPage() {
     </div>
   );
 }
+

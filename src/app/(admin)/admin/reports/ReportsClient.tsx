@@ -37,12 +37,16 @@ export default function ReportsClient() {
     };
     fetchMetadata();
     
-    // Default dates (current month)
+    // Default dates (Semester Start: August 1, 2026 to current date)
     const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    setStartDate(firstDay.toISOString().split('T')[0]);
-    setEndDate(lastDay.toISOString().split('T')[0]);
+    const formatLocal = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    setStartDate('2026-08-01');
+    setEndDate(formatLocal(today));
   }, []);
 
   // Fetch sections when department changes
@@ -121,28 +125,36 @@ export default function ReportsClient() {
     if (deficitOnly) doc.text(`Showing: Only Deficits (< 75%)`, 40, 140);
 
     const tableData = results.map((s, index) => {
-      const clubPct = s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) + '%' : 'N/A';
-      const centrePct = s.centreTotal > 0 ? Math.round((s.centrePresent / s.centreTotal) * 100) + '%' : 'N/A';
-      const overallPct = s.overallTotal > 0 ? Math.round((s.overallPresent / s.overallTotal) * 100) + '%' : 'N/A';
+      const clubPct = s.clubTotal > 0 ? `${Math.round((s.clubPresent / s.clubTotal) * 100)}% (${s.clubPresent}/${s.clubTotal})` : 'N/A';
+      const centrePct = s.centreTotal > 0 ? `${Math.round((s.centrePresent / s.centreTotal) * 100)}% (${s.centrePresent}/${s.centreTotal})` : 'N/A';
+      const overallPct = s.overallTotal > 0 ? `${Math.round((s.overallPresent / s.overallTotal) * 100)}% (${s.overallPresent}/${s.overallTotal})` : 'N/A';
       return [index + 1, s.register_no, s.name, s.course, s.section || '-', clubPct, centrePct, overallPct];
     });
 
+    // Legend Guide Note for Staff
+    const startYPos = deficitOnly ? 155 : 140;
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(71, 85, 105);
+    doc.text("Guide: [N/A] = No attendance recorded yet. | [0%] = Classes held, student was Absent for all sessions. | [<75%] = Deficit.", 40, startYPos);
+
     autoTable(doc, {
-      startY: deficitOnly ? 155 : 140,
-      head: [['S.No', 'Register No', 'Name', 'Department', 'Sec', 'Club %', 'Centre %', 'Overall %']],
+      startY: startYPos + 8,
+      head: [['S.No', 'Register No', 'Name', 'Department', 'Sec', 'Club % (P/T)', 'Centre % (P/T)', 'Overall % (P/T)']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, 
       styles: { fontSize: 8, cellPadding: 3 },
       didDrawPage: function (data: any) {
-        let str = "Page " + doc.internal.getNumberOfPages();
-        doc.setFontSize(8);
+        let str = "Page " + doc.internal.getNumberOfPages() + " | (P/T: Present / Total Classes Conducted)";
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184); 
         doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 20);
       }
     });
 
-    doc.save(`Attendance_Report_${startDate}.pdf`);
+    doc.save(`Attendance_Report_${startDate}_to_${endDate}.pdf`);
   };
 
   const downloadExcel = () => {
@@ -153,19 +165,22 @@ export default function ReportsClient() {
       'Name': s.name,
       'Department': s.course,
       'Section': s.section || '-',
-      'Club Total Classes': s.clubTotal,
       'Club Present': s.clubPresent,
-      'Club %': s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) : 'N/A',
-      'Centre Total Classes': s.centreTotal,
+      'Club Total Classes': s.clubTotal,
+      'Club %': s.clubTotal > 0 ? `${Math.round((s.clubPresent / s.clubTotal) * 100)}%` : 'N/A',
       'Centre Present': s.centrePresent,
-      'Centre %': s.centreTotal > 0 ? Math.round((s.centrePresent / s.centreTotal) * 100) : 'N/A',
-      'Overall %': s.overallTotal > 0 ? Math.round((s.overallPresent / s.overallTotal) * 100) : 'N/A'
+      'Centre Total Classes': s.centreTotal,
+      'Centre %': s.centreTotal > 0 ? `${Math.round((s.centrePresent / s.centreTotal) * 100)}%` : 'N/A',
+      'Overall Present': s.overallPresent,
+      'Overall Total Classes': s.overallTotal,
+      'Overall %': s.overallTotal > 0 ? `${Math.round((s.overallPresent / s.overallTotal) * 100)}%` : 'N/A',
+      'Remarks': s.overallTotal === 0 ? 'No attendance recorded' : (s.overallPresent === 0 ? '100% Absent' : (Math.round((s.overallPresent / s.overallTotal) * 100) < 75 ? 'Deficit (<75%)' : 'Regular'))
     }));
 
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Attendance Report");
-    XLSX.writeFile(wb, `Attendance_Report_${startDate}.xlsx`);
+    XLSX.writeFile(wb, `Attendance_Report_${startDate}_to_${endDate}.xlsx`);
   };
 
   return (
@@ -290,21 +305,47 @@ export default function ReportsClient() {
                   <th className="p-4">Reg No</th>
                   <th className="p-4">Name</th>
                   <th className="p-4">Department</th>
+                  <th className="p-4">Sec</th>
+                  <th className="p-4">Club %</th>
+                  <th className="p-4">Centre %</th>
                   <th className="p-4">Overall %</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                 {results.slice(0, 10).map((r, i) => {
+                   const clubPct = r.clubTotal > 0 ? Math.round((r.clubPresent / r.clubTotal) * 100) : null;
+                   const centrePct = r.centreTotal > 0 ? Math.round((r.centrePresent / r.centreTotal) * 100) : null;
                    const overallPct = r.overallTotal > 0 ? Math.round((r.overallPresent / r.overallTotal) * 100) : null;
                    return (
                      <tr key={r.register_no} className="hover:bg-slate-50/50">
-                       <td className="p-4">{r.register_no}</td>
-                       <td className="p-4">{r.name}</td>
-                       <td className="p-4">{r.course}</td>
+                       <td className="p-4 font-mono font-bold text-slate-900">{r.register_no}</td>
+                       <td className="p-4 font-semibold text-slate-800">{r.name}</td>
+                       <td className="p-4 text-slate-600">{r.course}</td>
+                       <td className="p-4 text-slate-600">{r.section || '-'}</td>
                        <td className="p-4">
-                         {overallPct === null ? 'N/A' : (
-                           <span className={overallPct < 75 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}>
-                             {overallPct}%
+                         {clubPct === null ? (
+                           <span className="text-slate-400">N/A</span>
+                         ) : (
+                           <span className={clubPct < 75 ? 'text-red-600 font-bold' : 'text-slate-800 font-bold'}>
+                             {clubPct}% <span className="text-xs text-slate-400 font-normal">({r.clubPresent}/{r.clubTotal})</span>
+                           </span>
+                         )}
+                       </td>
+                       <td className="p-4">
+                         {centrePct === null ? (
+                           <span className="text-slate-400">N/A</span>
+                         ) : (
+                           <span className={centrePct < 75 ? 'text-red-600 font-bold' : 'text-slate-800 font-bold'}>
+                             {centrePct}% <span className="text-xs text-slate-400 font-normal">({r.centrePresent}/{r.centreTotal})</span>
+                           </span>
+                         )}
+                       </td>
+                       <td className="p-4">
+                         {overallPct === null ? (
+                           <span className="text-slate-400">N/A</span>
+                         ) : (
+                           <span className={overallPct < 75 ? 'text-red-600 font-bold' : 'text-emerald-600 font-bold'}>
+                             {overallPct}% <span className="text-xs text-slate-400 font-normal">({r.overallPresent}/{r.overallTotal})</span>
                            </span>
                          )}
                        </td>

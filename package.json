@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node node_modules/next/dist/bin/next dev",
+    "build": "node node_modules/next/dist/bin/next build",
+    "start": "node node_modules/next/dist/bin/next start",
     "lint": "next lint"
   },
   "dependencies": {
@@ -18,6 +18,7 @@
     "@types/three": "^0.185.4",
     "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
+    "gsap": "^3.15.0",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",

@@ -128,9 +128,9 @@ export default function MonthlyReportGenerator() {
           currentY += 12;
 
           const tableData = sectionStudents.map((s: any, index: number) => {
-            const clubPct = s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) + '%' : 'N/A';
-            const centrePct = s.centreTotal > 0 ? Math.round((s.centrePresent / s.centreTotal) * 100) + '%' : 'N/A';
-            const overallPct = s.overallTotal > 0 ? Math.round((s.overallPresent / s.overallTotal) * 100) + '%' : 'N/A';
+            const clubPct = s.clubTotal > 0 ? `${Math.round((s.clubPresent / s.clubTotal) * 100)}% (${s.clubPresent}/${s.clubTotal})` : 'N/A';
+            const centrePct = s.centreTotal > 0 ? `${Math.round((s.centrePresent / s.centreTotal) * 100)}% (${s.centrePresent}/${s.centreTotal})` : 'N/A';
+            const overallPct = s.overallTotal > 0 ? `${Math.round((s.overallPresent / s.overallTotal) * 100)}% (${s.overallPresent}/${s.overallTotal})` : 'N/A';
 
             return [
               index + 1,
@@ -142,17 +142,24 @@ export default function MonthlyReportGenerator() {
             ];
           });
 
+          // Guide Note
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(71, 85, 105);
+          doc.text("Guide: [N/A] = No attendance records yet | [0%] = 100% Absent (Classes held, student absent) | (P/T: Present / Total)", 40, currentY);
+
           autoTable(doc, {
-            startY: currentY,
-            head: [['S.No', 'Register No', 'Name', 'Club (%)', 'Centre (%)', 'Overall (%)']],
+            startY: currentY + 6,
+            head: [['S.No', 'Register No', 'Name', 'Club % (P/T)', 'Centre % (P/T)', 'Overall % (P/T)']],
             body: tableData,
             theme: 'grid',
             headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, // slate-100
-            styles: { fontSize: 8.5, cellPadding: 3.5 },
+            styles: { fontSize: 8, cellPadding: 3.5 },
             didDrawPage: function (data: any) {
               // Footer
-              let str = "Page " + doc.internal.getNumberOfPages();
-              doc.setFontSize(8);
+              let str = "Page " + doc.internal.getNumberOfPages() + " | (P/T: Present / Total Classes Conducted)";
+              doc.setFontSize(7.5);
+              doc.setFont('helvetica', 'normal');
               doc.setTextColor(148, 163, 184); // slate-400
               doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 20);
             }
@@ -235,22 +242,28 @@ export default function MonthlyReportGenerator() {
             currentY += 15;
 
             const tableData = sectionStudents.map((s: any, index: number) => {
-              const clubPct = s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) + '%' : 'N/A';
-              const centrePct = s.centreTotal > 0 ? Math.round((s.centrePresent / s.centreTotal) * 100) + '%' : 'N/A';
-              const overallPct = s.overallTotal > 0 ? Math.round((s.overallPresent / s.overallTotal) * 100) + '%' : 'N/A';
+              const clubPct = s.clubTotal > 0 ? `${Math.round((s.clubPresent / s.clubTotal) * 100)}% (${s.clubPresent}/${s.clubTotal})` : 'N/A';
+              const centrePct = s.centreTotal > 0 ? `${Math.round((s.centrePresent / s.centreTotal) * 100)}% (${s.centrePresent}/${s.centreTotal})` : 'N/A';
+              const overallPct = s.overallTotal > 0 ? `${Math.round((s.overallPresent / s.overallTotal) * 100)}% (${s.overallPresent}/${s.overallTotal})` : 'N/A';
               return [index + 1, s.register_no, s.name, clubPct, centrePct, overallPct];
             });
 
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(71, 85, 105);
+            doc.text("Guide: [N/A] = No attendance records | [0%] = 100% Absent | (P/T: Present / Total)", 40, currentY);
+
             autoTable(doc, {
-              startY: currentY,
-              head: [['S.No', 'Register No', 'Name', 'Club (%)', 'Centre (%)', 'Overall (%)']],
+              startY: currentY + 6,
+              head: [['S.No', 'Register No', 'Name', 'Club % (P/T)', 'Centre % (P/T)', 'Overall % (P/T)']],
               body: tableData,
               theme: 'grid',
               headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, 
-              styles: { fontSize: 9, cellPadding: 4 },
+              styles: { fontSize: 8, cellPadding: 3.5 },
               didDrawPage: function (data: any) {
-                let str = "Page " + doc.internal.getNumberOfPages();
-                doc.setFontSize(8);
+                let str = "Page " + doc.internal.getNumberOfPages() + " | (P/T: Present / Total Classes Conducted)";
+                doc.setFontSize(7.5);
+                doc.setFont('helvetica', 'normal');
                 doc.setTextColor(148, 163, 184); 
                 doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 20);
               }
@@ -362,22 +375,28 @@ export default function MonthlyReportGenerator() {
             currentY += 15;
 
             const tableData = sectionStudents.map((s: any, index: number) => {
-              const clubPct = s.clubTotal > 0 ? Math.round((s.clubPresent / s.clubTotal) * 100) + '%' : 'N/A';
-              const centrePct = s.centreTotal > 0 ? Math.round((s.centrePresent / s.centreTotal) * 100) + '%' : 'N/A';
-              const overallPct = s.overallTotal > 0 ? Math.round((s.overallPresent / s.overallTotal) * 100) + '%' : 'N/A';
+              const clubPct = s.clubTotal > 0 ? `${Math.round((s.clubPresent / s.clubTotal) * 100)}% (${s.clubPresent}/${s.clubTotal})` : 'N/A';
+              const centrePct = s.centreTotal > 0 ? `${Math.round((s.centrePresent / s.centreTotal) * 100)}% (${s.centrePresent}/${s.centreTotal})` : 'N/A';
+              const overallPct = s.overallTotal > 0 ? `${Math.round((s.overallPresent / s.overallTotal) * 100)}% (${s.overallPresent}/${s.overallTotal})` : 'N/A';
               return [index + 1, s.register_no, s.name, clubPct, centrePct, overallPct];
             });
 
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(71, 85, 105);
+            doc.text("Guide: [N/A] = No attendance records | [0%] = 100% Absent | (P/T: Present / Total)", 40, currentY);
+
             autoTable(doc, {
-              startY: currentY,
-              head: [['S.No', 'Register No', 'Name', 'Club (%)', 'Centre (%)', 'Overall (%)']],
+              startY: currentY + 6,
+              head: [['S.No', 'Register No', 'Name', 'Club % (P/T)', 'Centre % (P/T)', 'Overall % (P/T)']],
               body: tableData,
               theme: 'grid',
               headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }, 
-              styles: { fontSize: 9, cellPadding: 4 },
+              styles: { fontSize: 8, cellPadding: 3.5 },
               didDrawPage: function (data: any) {
-                let str = "Page " + doc.internal.getNumberOfPages();
-                doc.setFontSize(8);
+                let str = "Page " + doc.internal.getNumberOfPages() + " | (P/T: Present / Total Classes Conducted)";
+                doc.setFontSize(7.5);
+                doc.setFont('helvetica', 'normal');
                 doc.setTextColor(148, 163, 184); 
                 doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 20);
               }

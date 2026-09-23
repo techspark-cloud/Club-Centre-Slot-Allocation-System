@@ -174,19 +174,23 @@ export default function AuditReportsPage() {
       doc.line(margin, y, pageWidth - margin, y);
       y += 8;
 
+      // Detect if Club or Centre
+      const { data: clubData } = await supabase.from('clubs').select('id').ilike('name', filterEntity).maybeSingle();
+      const entityType = clubData ? 'CLUB' : 'CENTRE';
+
       // Executive Title Box
       doc.setFillColor(15, 23, 42); // slate-900
       doc.roundedRect(margin, y, pageWidth - margin * 2, 16, 3, 3, 'F');
       
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 255, 255);
-      doc.text(`AUDIT REPORT & COMPLIANCE SUMMARY: ${filterEntity.toUpperCase()}`, margin + 6, y + 10.5);
+      doc.text(`OVERALL ${entityType === 'CLUB' ? 'CLUBS' : 'CENTRES'} AUDIT REPORT: ${filterEntity.toUpperCase()}`, margin + 6, y + 7);
 
-      doc.setFontSize(8.5);
+      doc.setFontSize(7.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(148, 163, 184);
-      doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin - 6, y + 10.5, { align: 'right' });
+      doc.text(`Managed via Overall ${entityType === 'CLUB' ? 'Club' : 'Centre'} Coordination | Generated: ${new Date().toLocaleDateString('en-GB')}`, margin + 6, y + 12);
 
       y += 22;
 
@@ -821,22 +825,37 @@ export default function AuditReportsPage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-white">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="space-y-6 mb-8">
                 <div>
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Activity Summary</h3>
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Activity Summary</h3>
                   <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
                     <p className="text-sm font-medium text-slate-700 leading-relaxed italic">
                       "{selectedReport.description}"
                     </p>
                   </div>
                 </div>
+
                 <div>
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Photo Evidence</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                      📸 Photographic Evidence & Geo Verification
+                    </h3>
+                    {selectedReport.imageUrl && (
+                      <a 
+                        href={selectedReport.imageUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Open Full Resolution
+                      </a>
+                    )}
+                  </div>
+
                   {selectedReport.imageUrl ? (
-                    <div className="relative group rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 aspect-video flex items-center justify-center">
+                    <div className="relative group rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-900/5 w-full min-h-[340px] md:h-[460px] flex items-center justify-center shadow-inner">
                       {(() => {
                         const url = selectedReport.imageUrl;
-                        // Foolproof regex to extract Google Drive IDs (which are typically 33 chars of letters, numbers, hyphens, underscores)
                         const match = url.match(/[-\w]{25,}/);
                         const driveId = match ? match[0] : null;
                         
@@ -850,29 +869,18 @@ export default function AuditReportsPage() {
                           );
                         } else {
                            return (
-                             <a href={url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-blue-600 transition-colors">
-                               <ImageIcon className="w-12 h-12 mb-2" />
-                               <span className="text-sm font-bold">Open Evidence Link</span>
+                             <a href={url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-blue-600 transition-colors p-8">
+                               <ImageIcon className="w-16 h-16 mb-3 text-blue-500" />
+                               <span className="text-base font-bold text-slate-700">Open High-Resolution Evidence</span>
+                               <span className="text-xs text-slate-400 mt-1">{url}</span>
                              </a>
                            );
                         }
                       })()}
-                      
-                      {/* External Link Overlay Button */}
-                      <div className="absolute top-3 right-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                        <a 
-                          href={selectedReport.imageUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="pointer-events-auto flex items-center gap-2 bg-slate-900/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-600 transition-colors shadow-lg"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" /> Open Full
-                        </a>
-                      </div>
                     </div>
                   ) : (
-                    <div className="h-full min-h-[120px] rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 bg-slate-50">
-                      <p className="text-sm font-bold">No photo attached</p>
+                    <div className="h-40 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 bg-slate-50">
+                      <p className="text-sm font-bold">No photographic evidence attached</p>
                     </div>
                   )}
                 </div>

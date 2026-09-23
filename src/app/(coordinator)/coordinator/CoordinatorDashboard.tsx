@@ -754,9 +754,11 @@ export default function CoordinatorDashboard({
                   .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
                 const totalSessions = entityReports.length;
-                const submittedCount = entityReports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED').length;
-                const missingCount = entityReports.filter(r => r.submitted === false || r.status === 'NOT_SUBMITTED').length;
-                const complianceRate = totalSessions > 0 ? Math.round((submittedCount / totalSessions) * 100) : 0;
+                const submittedCount = entityReports.filter(r => r.submitted !== false && r.status !== 'NOT_SUBMITTED' && r.status !== 'HOLIDAY').length;
+                const holidayCount = entityReports.filter(r => r.status === 'HOLIDAY').length;
+                const missingCount = entityReports.filter(r => r.status === 'NOT_SUBMITTED' || (r.submitted === false && r.status !== 'HOLIDAY' && r.status !== 'REPORT_PENDING')).length;
+                const activeSessions = totalSessions - holidayCount;
+                const complianceRate = activeSessions > 0 ? Math.round((submittedCount / activeSessions) * 100) : (totalSessions > 0 ? 100 : 0);
 
                 return (
                   <div key={entity.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5 sm:p-6 space-y-5">
@@ -789,7 +791,7 @@ export default function CoordinatorDashboard({
                       </div>
 
                       <Link
-                        href={`/admin/audit-reports/print?entity=${encodeURIComponent(entity.name)}`}
+                        href={`/admin/audit-reports/print/${encodeURIComponent(entity.name)}`}
                         target="_blank"
                         className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl transition-all shadow-xs text-xs shrink-0"
                       >
@@ -801,7 +803,7 @@ export default function CoordinatorDashboard({
                     {/* Summary Metrics */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
-                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Timetable Slots</span>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Sessions</span>
                         <span className="block text-xl font-bold text-slate-900 mt-0.5">{totalSessions}</span>
                       </div>
                       <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-center">
@@ -850,25 +852,41 @@ export default function CoordinatorDashboard({
                             </thead>
                             <tbody className="divide-y divide-slate-100 font-medium">
                               {entityReports.map((r, i) => {
-                                const isMissing = r.submitted === false || r.status === 'NOT_SUBMITTED';
+                                const isSubmitted = r.status === 'SUBMITTED';
+                                const isPending = r.status === 'REPORT_PENDING';
+                                const isHoliday = r.status === 'HOLIDAY';
+                                const isMissing = r.status === 'NOT_SUBMITTED' || (!isSubmitted && !isPending && !isHoliday);
+                                
                                 const dObj = r.date ? new Date(r.date) : null;
                                 const dStr = (dObj && !isNaN(dObj.getTime()))
                                   ? dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                                   : r.date || 'N/A';
 
                                 return (
-                                  <tr key={i} className={isMissing ? 'bg-red-50/30' : 'hover:bg-slate-50'}>
+                                  <tr key={i} className={isHoliday ? 'bg-purple-50/40 hover:bg-purple-50/70' : isMissing ? 'bg-red-50/30' : 'hover:bg-slate-50'}>
                                     <td className="p-2.5 text-center font-bold text-slate-400">{i + 1}</td>
                                     <td className="p-2.5 font-bold text-slate-900">{dStr} ({r.day || ''})</td>
                                     <td className="p-2.5 text-slate-700 font-medium">{r.session} ({r.timing || ''})</td>
                                     <td className="p-2.5 font-semibold text-slate-600">{r.venue || 'N/A'}</td>
                                     <td className="p-2.5 text-center font-bold text-slate-700">{r.expected}</td>
-                                    <td className="p-2.5 text-center font-bold">{isMissing ? <span className="text-red-600">0</span> : <span className="text-emerald-700">{r.present}</span>}</td>
-                                    <td className="p-2.5 text-center">
-                                      {isMissing ? (
-                                        <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-bold text-[10px]">NOT MARKED</span>
+                                    <td className="p-2.5 text-center font-bold">
+                                      {isHoliday ? (
+                                        <span className="text-purple-600 font-bold">0 (Holiday)</span>
+                                      ) : isMissing ? (
+                                        <span className="text-red-600">0</span>
                                       ) : (
+                                        <span className="text-emerald-700">{r.present}</span>
+                                      )}
+                                    </td>
+                                    <td className="p-2.5 text-center">
+                                      {isSubmitted ? (
                                         <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold text-[10px]">SUBMITTED</span>
+                                      ) : isPending ? (
+                                        <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-bold text-[10px]">REPORT PENDING</span>
+                                      ) : isHoliday ? (
+                                        <span className="bg-purple-100 text-purple-800 border border-purple-300 px-2 py-0.5 rounded font-bold text-[10px]">🎉 HOLIDAY</span>
+                                      ) : (
+                                        <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-bold text-[10px]">NOT MARKED</span>
                                       )}
                                     </td>
                                     <td className="p-2.5 text-center font-semibold">

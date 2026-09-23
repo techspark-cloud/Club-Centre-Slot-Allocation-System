@@ -21,20 +21,38 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const formattedEmail = identifier.includes('@') ? identifier : `${identifier}@rit.internal`;
+      const cleanIdentifier = identifier.trim();
+      let formattedEmail = cleanIdentifier.includes('@') ? cleanIdentifier : `${cleanIdentifier}@rit.internal`;
 
       // Failsafe timeout for Supabase Auth Hanging
       const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
         setTimeout(() => reject(new Error('Connection timed out. The server took too long to respond.')), 10000)
       );
 
-      const { data, error: authError } = await Promise.race([
+      let authResult = await Promise.race([
         supabase.auth.signInWithPassword({
           email: formattedEmail,
           password: password,
         }),
         timeoutPromise
       ]);
+
+      // If failed and no @ was provided, try faculty domain (@rit.faculty)
+      if (authResult.error && !cleanIdentifier.includes('@')) {
+        const facultyEmail = `${cleanIdentifier}@rit.faculty`;
+        const retryResult = await Promise.race([
+          supabase.auth.signInWithPassword({
+            email: facultyEmail,
+            password: password,
+          }),
+          timeoutPromise
+        ]);
+        if (!retryResult.error && retryResult.data?.user) {
+          authResult = retryResult;
+        }
+      }
+
+      const { data, error: authError } = authResult;
 
       if (authError) {
         setError(authError.message);

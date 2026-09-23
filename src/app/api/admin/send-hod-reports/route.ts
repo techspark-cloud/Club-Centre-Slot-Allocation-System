@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
-import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, VICE_PRINCIPAL_EMAIL, OVERALL_CLUBS_COORDINATOR_EMAIL, OVERALL_CENTRES_COORDINATOR_EMAIL } from '@/config/hod-emails';
+import { HOD_EMAILS, FIRST_YEAR_HOD_EMAIL, VICE_PRINCIPAL_EMAIL, HOD_REPORT_CC_STRING, OVERALL_CLUBS_COORDINATOR_EMAIL, OVERALL_CENTRES_COORDINATOR_EMAIL } from '@/config/hod-emails';
 
 
 
@@ -226,7 +226,7 @@ export async function POST(request: Request) {
 
       emailPayloads.push({
         to: targetEmail,
-        cc: VICE_PRINCIPAL_EMAIL,
+        cc: HOD_REPORT_CC_STRING,
         subject: `[RIT Portal] ${formattedDate} ${session} Attendance Report - ${dept}`,
         htmlBody: generateHtmlTable(records, dept)
       });
@@ -240,7 +240,7 @@ export async function POST(request: Request) {
       
       emailPayloads.push({
         to: FIRST_YEAR_HOD_EMAIL,
-        cc: VICE_PRINCIPAL_EMAIL,
+        cc: HOD_REPORT_CC_STRING,
         subject: `[RIT Portal] ${formattedDate} ${session} Attendance Report - First Year Students`,
         htmlBody: generateHtmlTable(firstYearBucket, 'First Year Students')
       });
