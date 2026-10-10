@@ -14,7 +14,7 @@ export default async function MasterAdminAttendancePage() {
     .eq('id', user.id)
     .single();
 
-  if (!profile || !['SUPER_ADMIN', 'ALLOCATION_ADMIN'].includes(profile.role)) {
+  if (!profile || !['SUPER_ADMIN', 'ALLOCATION_ADMIN', 'DEPARTMENT_ADMIN'].includes(profile.role)) {
     redirect('/');
   }
 

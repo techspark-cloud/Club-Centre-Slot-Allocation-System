@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Users, Upload, Calendar, Building2, Layers, CheckSquare, LayoutDashboard, Menu, X, LogOut, Map, Activity, UserCheck, FileText, Mail, PieChart, Award } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ role }: { role?: string }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -18,7 +18,9 @@ export default function AdminSidebar() {
     return null;
   }
 
-  const navItems = [
+  const isDean = role === 'DEPARTMENT_ADMIN';
+
+  const allNavItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Centre Certificates (Demo)', href: '/admin/centre-certificates', icon: Award },
     { name: 'Executive View', href: '/admin/executive', icon: Activity },
@@ -30,12 +32,14 @@ export default function AdminSidebar() {
     { name: 'Clubs', href: '/admin/clubs', icon: Building2 },
     { name: 'Centres', href: '/admin/centres', icon: Layers },
     { name: 'Activity Slots', href: '/admin/slots', icon: Calendar },
-    { name: 'Allocations Manager', href: '/admin/allocations', icon: CheckSquare },
-    { name: 'Holidays', href: '/admin/holidays', icon: Calendar },
-    { name: 'Email Config', href: '/admin/emails', icon: Mail },
+    { name: 'Allocations Manager', href: '/admin/allocations', icon: CheckSquare, hideForDean: true },
+    { name: 'Holidays', href: '/admin/holidays', icon: Calendar, hideForDean: true },
+    { name: 'Email Config', href: '/admin/emails', icon: Mail, hideForDean: true },
     { name: 'Campus 3D Map', href: '/admin/map', icon: Map },
-    { name: 'Import Master Data', href: '/admin/import', icon: Upload },
+    { name: 'Import Master Data', href: '/admin/import', icon: Upload, hideForDean: true },
   ];
+
+  const navItems = isDean ? allNavItems.filter(item => !item.hideForDean) : allNavItems;
 
   return (
     <>

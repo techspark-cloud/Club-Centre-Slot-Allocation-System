@@ -96,10 +96,19 @@ export default function StudentsPage() {
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'BOOKED'>('ALL');
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (prof?.role) setUserRole(prof.role);
+      }
+    });
     fetchStudents();
   }, []);
+
+  const isDean = userRole === 'DEPARTMENT_ADMIN';
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -210,7 +219,7 @@ export default function StudentsPage() {
   }, [filteredByCourse, selectedSection, searchQuery, statusFilter]);
 
   const handleUpdateSession = async (section: string, newSession: string) => {
-    if (!selectedCourse) return;
+    if (!selectedCourse || isDean) return;
     setUpdatingDay(section);
     
     try {
@@ -239,6 +248,7 @@ export default function StudentsPage() {
   };
 
   const handleRevertIDCard = async (studentId: string) => {
+    if (isDean) return;
     if (!confirm('Are you sure you want to revert the physical ID card verification for this student? They will be forced to scan it again.')) return;
     
     setLoading(true);
@@ -256,6 +266,7 @@ export default function StudentsPage() {
   };
 
   const handleVerifyIDCard = async (studentId: string) => {
+    if (isDean) return;
     setLoading(true);
     const { error } = await supabase
       .from('students')
@@ -271,7 +282,7 @@ export default function StudentsPage() {
   };
 
   const handleUpdateAllowedDay = async (section: string, newDay: string) => {
-    if (!selectedCourse) return;
+    if (!selectedCourse || isDean) return;
     setUpdatingDay(section);
     
     try {
@@ -300,7 +311,7 @@ export default function StudentsPage() {
   };
 
   const handleUpdateRule = async (section: string, day: string, timing: string) => {
-    if (!selectedCourse) return;
+    if (!selectedCourse || isDean) return;
     setUpdatingDay(`${section}-rule`);
     
     // Find existing rule
@@ -466,24 +477,30 @@ export default function StudentsPage() {
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
                     Batch Assignment
                   </label>
-                  <div className="relative">
-                    <select
-                      value={currentSession || ''}
-                      onChange={(e) => handleUpdateSession(section, e.target.value)}
-                      disabled={updatingDay === section}
-                      className="block w-full pl-4 pr-8 py-2.5 text-sm font-bold border-2 border-slate-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-slate-800 disabled:opacity-50 appearance-none cursor-pointer"
-                    >
-                      <option value="">Unmapped</option>
-                      <option value="FORENOON">Morning Batch (1st)</option>
-                      <option value="AFTERNOON">Evening Batch (2nd)</option>
-                    </select>
-                  </div>
+                  {isDean ? (
+                    <div className="px-4 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-700">
+                      {currentSession === 'FORENOON' ? 'Morning Batch (1st)' : currentSession === 'AFTERNOON' ? 'Evening Batch (2nd)' : 'Unmapped'}
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <select
+                        value={currentSession || ''}
+                        onChange={(e) => handleUpdateSession(section, e.target.value)}
+                        disabled={updatingDay === section}
+                        className="block w-full pl-4 pr-8 py-2.5 text-sm font-bold border-2 border-slate-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-slate-800 disabled:opacity-50 appearance-none cursor-pointer"
+                      >
+                        <option value="">Unmapped</option>
+                        <option value="FORENOON">Morning Batch (1st)</option>
+                        <option value="AFTERNOON">Evening Batch (2nd)</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
                     Day Assignment
-                    {updatingDay === section && (
+                    {!isDean && updatingDay === section && (
                       <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                     )}
                   </label>
@@ -493,8 +510,9 @@ export default function StudentsPage() {
                       return (
                         <button
                           key={day}
-                          disabled={updatingDay === section}
+                          disabled={isDean || updatingDay === section}
                           onClick={() => {
+                            if (isDean) return;
                             let newDays = (currentDay && currentDay !== 'ANY' && currentDay !== 'INDEPENDENT') ? currentDay.split(',') : [];
                             if (isSelected) {
                               newDays = newDays.filter((d: string) => d !== day);
@@ -503,24 +521,24 @@ export default function StudentsPage() {
                             }
                             handleUpdateAllowedDay(section, newDays.length > 0 ? newDays.join(',') : '');
                           }}
-                          className={`px-2 py-1 text-[10px] font-bold rounded border ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50'}`}
+                          className={`px-2 py-1 text-[10px] font-bold rounded border ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'} ${isDean ? 'cursor-default opacity-85' : 'hover:border-blue-300 hover:bg-blue-50'}`}
                         >
                           {day.substring(0,3)}
                         </button>
                       )
                     })}
                     <button
-                      disabled={updatingDay === section}
-                      onClick={() => handleUpdateAllowedDay(section, currentDay === 'ANY' ? '' : 'ANY')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded border ${currentDay === 'ANY' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}
+                      disabled={isDean || updatingDay === section}
+                      onClick={() => !isDean && handleUpdateAllowedDay(section, currentDay === 'ANY' ? '' : 'ANY')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded border ${currentDay === 'ANY' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200'} ${isDean ? 'cursor-default opacity-85' : 'hover:bg-purple-50'}`}
                       title="Open Slot (Any Day)"
                     >
                       ANY
                     </button>
                     <button
-                      disabled={updatingDay === section}
-                      onClick={() => handleUpdateAllowedDay(section, currentDay === 'INDEPENDENT' ? '' : 'INDEPENDENT')}
-                      className={`px-2 py-1 text-[10px] font-bold rounded border ${currentDay === 'INDEPENDENT' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
+                      disabled={isDean || updatingDay === section}
+                      onClick={() => !isDean && handleUpdateAllowedDay(section, currentDay === 'INDEPENDENT' ? '' : 'INDEPENDENT')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded border ${currentDay === 'INDEPENDENT' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-600 border-emerald-200'} ${isDean ? 'cursor-default opacity-85' : 'hover:bg-emerald-50'}`}
                       title="Independent (Exempt)"
                     >
                       EXEMPT
@@ -529,22 +547,24 @@ export default function StudentsPage() {
                 </div>
 
                 {/* UNASSIGNED DAYS ACCESS */}
-                <div className="pt-4 border-t-2 border-slate-100">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center justify-between">
-                    Custom Unassigned Day Access
-                    {updatingDay === `${section}-rule` && (
-                      <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                    )}
-                  </label>
-                  <CustomDayAccessGroup 
-                    section={section}
-                    selectedCourse={selectedCourse}
-                    currentDay={currentDay}
-                    bookingRules={bookingRules}
-                    updatingDay={updatingDay}
-                    handleUpdateRule={handleUpdateRule}
-                  />
-                </div>
+                {!isDean && (
+                  <div className="pt-4 border-t-2 border-slate-100">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center justify-between">
+                      Custom Unassigned Day Access
+                      {updatingDay === `${section}-rule` && (
+                        <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                      )}
+                    </label>
+                    <CustomDayAccessGroup 
+                      section={section}
+                      selectedCourse={selectedCourse}
+                      currentDay={currentDay}
+                      bookingRules={bookingRules}
+                      updatingDay={updatingDay}
+                      handleUpdateRule={handleUpdateRule}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -937,13 +957,15 @@ export default function StudentsPage() {
                             <ShieldCheck className="w-3.5 h-3.5" />
                             ID Verified
                           </span>
-                          <button
-                            onClick={() => handleRevertIDCard(student.id)}
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Revert Verification"
-                          >
-                            <Undo2 className="w-4 h-4" />
-                          </button>
+                          {!isDean && (
+                            <button
+                              onClick={() => handleRevertIDCard(student.id)}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Revert Verification"
+                            >
+                              <Undo2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -951,12 +973,14 @@ export default function StudentsPage() {
                             <ShieldAlert className="w-3.5 h-3.5" />
                             Not Verified
                           </span>
-                          <button
-                            onClick={() => handleVerifyIDCard(student.id)}
-                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-colors"
-                          >
-                            Verify Now
-                          </button>
+                          {!isDean && (
+                            <button
+                              onClick={() => handleVerifyIDCard(student.id)}
+                              className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-colors"
+                            >
+                              Verify Now
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

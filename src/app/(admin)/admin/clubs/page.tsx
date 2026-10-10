@@ -22,13 +22,21 @@ export default function ClubsPage() {
   const [membersModalOpen, setMembersModalOpen] = useState(false);
   const [selectedClub, setSelectedClub] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   const supabase = createClient();
 
   useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (prof?.role) setUserRole(prof.role);
+      }
+    });
     fetchClubs();
   }, []);
+
+  const isDean = userRole === 'DEPARTMENT_ADMIN';
 
   const fetchClubs = async () => {
     setLoading(true);
@@ -618,21 +626,27 @@ export default function ClubsPage() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => startEdit(club)}
-                      className="shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-500 transition-colors"
-                      title="Edit coordinator"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                    {!isDean && (
+                      <button
+                        onClick={() => startEdit(club)}
+                        className="shrink-0 p-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-500 transition-colors"
+                        title="Edit coordinator"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  <button
-                    onClick={() => startEdit(club)}
-                    className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-slate-400 hover:text-blue-600 rounded-xl py-3 text-sm font-bold transition-all"
-                  >
-                    <Plus className="w-4 h-4" /> Assign Faculty Coordinator
-                  </button>
+                  !isDean ? (
+                    <button
+                      onClick={() => startEdit(club)}
+                      className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-slate-400 hover:text-blue-600 rounded-xl py-3 text-sm font-bold transition-all"
+                    >
+                      <Plus className="w-4 h-4" /> Assign Faculty Coordinator
+                    </button>
+                  ) : (
+                    <p className="py-2 text-xs text-slate-400 italic">No faculty coordinator assigned.</p>
+                  )
                 )}
                 
                 {/* View Members Button */}

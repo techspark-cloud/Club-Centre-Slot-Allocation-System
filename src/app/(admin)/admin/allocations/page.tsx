@@ -31,6 +31,17 @@ export default function AdminAllocationsPage() {
   
   const supabase = createClient();
 
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (prof?.role === 'DEPARTMENT_ADMIN') {
+          window.location.href = '/admin';
+        }
+      }
+    });
+  }, []);
+
   const fetchStudents = async (query: string = '', dept: string = '', sec: string = '') => {
     if (!query.trim() && !dept.trim() && !sec.trim()) {
       setStudents([]);

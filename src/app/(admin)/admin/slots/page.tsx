@@ -45,11 +45,17 @@ export default function SlotsPage() {
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [selectedEntityId, setSelectedEntityId] = useState<string>('');
   const [updatingEntity, setUpdatingEntity] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   
   const supabase = createClient();
 
   useEffect(() => {
     const fetchEntities = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (prof?.role) setUserRole(prof.role);
+      }
       const { data: clubs } = await supabase.from('clubs').select('id, name').order('name');
       if (clubs) setAllClubs(clubs);
       const { data: centres } = await supabase.from('centres').select('id, name').order('name');
@@ -58,39 +64,63 @@ export default function SlotsPage() {
     fetchEntities();
   }, []);
 
-  const fetchSlots = async () => {
-    const { data, error } = await supabase
-      .from('slots')
-      .select(`
-        id, day, session, capacity, allocated_count, venue,
-        club:clubs(id, name, faculty_name, faculty_mobile), 
-        centre:centres(id, name, faculty_name, faculty_mobile),
-        allocations(
-          id,
-          student_id,
-          student:students(name, register_no, course, semester, academic_year, section, contact_no)
-        )
-      `);
-      
-    if (error) {
-      console.error(error);
-      return;
-    }
-    
-    if (data) {
-      setSlots(data as any[]);
-      
-      const caps: Record<string, number> = {};
-      data.forEach((s: any) => caps[s.id] = s.capacity);
-      setCapacityValues(caps);
+  const isDean = userRole === 'DEPARTMENT_ADMIN';
 
-      const uniqueVenues = Array.from(new Set((data as any[]).map(s => s.venue).filter(Boolean)));
-      setVenues(uniqueVenues.sort());
-      if (uniqueVenues.length > 0 && activeVenue !== 'ALL' && !uniqueVenues.includes(activeVenue)) {
-        setActiveVenue('ALL');
+  const fetchSlots = async () => {
+    try {
+      const res = await fetch('/api/admin/slots');
+      if (res.ok) {
+        const json = await res.json();
+        const data = json.slots || [];
+        setSlots(data as any[]);
+        
+        const caps: Record<string, number> = {};
+        data.forEach((s: any) => caps[s.id] = s.capacity);
+        setCapacityValues(caps);
+
+        const uniqueVenues = Array.from(new Set((data as any[]).map(s => s.venue).filter(Boolean)));
+        setVenues(uniqueVenues.sort());
+        if (uniqueVenues.length > 0 && activeVenue !== 'ALL' && !uniqueVenues.includes(activeVenue)) {
+          setActiveVenue('ALL');
+        }
+      } else {
+        // Fallback to direct supabase query
+        const { data, error } = await supabase
+          .from('slots')
+          .select(`
+            id, day, session, capacity, allocated_count, venue,
+            club:clubs(id, name, faculty_name, faculty_mobile), 
+            centre:centres(id, name, faculty_name, faculty_mobile),
+            allocations(
+              id,
+              student_id,
+              student:students(name, register_no, course, semester, academic_year, section, contact_no)
+            )
+          `);
+          
+        if (error) {
+          console.error('Failed to fetch slots:', error);
+          return;
+        }
+        
+        if (data) {
+          setSlots(data as any[]);
+          const caps: Record<string, number> = {};
+          data.forEach((s: any) => caps[s.id] = s.capacity);
+          setCapacityValues(caps);
+
+          const uniqueVenues = Array.from(new Set((data as any[]).map(s => s.venue).filter(Boolean)));
+          setVenues(uniqueVenues.sort());
+          if (uniqueVenues.length > 0 && activeVenue !== 'ALL' && !uniqueVenues.includes(activeVenue)) {
+            setActiveVenue('ALL');
+          }
+        }
       }
+    } catch (err) {
+      console.error('Error in fetchSlots:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -484,10 +514,12 @@ export default function SlotsPage() {
               ))}
             </select>
           </div>
-          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors flex items-center">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Slot
-          </button>
+          {!isDean && (
+            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors flex items-center">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Slot
+            </button>
+          )}
         </div>
       </div>
 
@@ -560,16 +592,18 @@ export default function SlotsPage() {
                             <h4 className="text-xl font-black text-blue-600">
                               {slot.club ? slot.club.name : slot.centre?.name}
                             </h4>
-                            <button
-                              onClick={() => {
-                                setEditingSlotId(slot.id);
-                                setSelectedEntityId(slot.club ? slot.club.id : (slot.centre ? slot.centre.id : ''));
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit assigned Club/Centre"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            </button>
+                            {!isDean && (
+                              <button
+                                onClick={() => {
+                                  setEditingSlotId(slot.id);
+                                  setSelectedEntityId(slot.club ? slot.club.id : (slot.centre ? slot.centre.id : ''));
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit assigned Club/Centre"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                              </button>
+                            )}
                           </div>
                         )}
                         <p className="text-sm font-semibold text-slate-500 mt-2 flex items-center gap-1">
@@ -602,24 +636,26 @@ export default function SlotsPage() {
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border-2 border-slate-200 shadow-sm">
-                          <label className="text-sm font-bold text-slate-600">Capacity:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={capacityValues[slot.id] || 0}
-                            onChange={(e) => setCapacityValues({...capacityValues, [slot.id]: parseInt(e.target.value)})}
-                            className="w-20 px-2 py-1 border-2 border-slate-200 rounded-lg bg-white text-slate-900 font-bold focus:outline-none focus:border-blue-400"
-                          />
-                          <button
-                            onClick={() => handleUpdateCapacity(slot.id)}
-                            disabled={updatingCapacity === slot.id}
-                            className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors disabled:opacity-50"
-                            title="Save Capacity"
-                          >
-                            {updatingCapacity === slot.id ? <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-                          </button>
-                        </div>
+                        {!isDean && (
+                          <div className="flex items-center gap-2 bg-white p-2 rounded-xl border-2 border-slate-200 shadow-sm">
+                            <label className="text-sm font-bold text-slate-600">Capacity:</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={capacityValues[slot.id] || 0}
+                              onChange={(e) => setCapacityValues({...capacityValues, [slot.id]: parseInt(e.target.value)})}
+                              className="w-20 px-2 py-1 border-2 border-slate-200 rounded-lg bg-white text-slate-900 font-bold focus:outline-none focus:border-blue-400"
+                            />
+                            <button
+                              onClick={() => handleUpdateCapacity(slot.id)}
+                              disabled={updatingCapacity === slot.id}
+                              className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors disabled:opacity-50"
+                              title="Save Capacity"
+                            >
+                              {updatingCapacity === slot.id ? <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        )}
 
                         <button
                           onClick={() => generatePDF(slot)}

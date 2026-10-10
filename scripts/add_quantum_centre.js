@@ -64,9 +64,9 @@ async function addQuantumCentre() {
     console.log('✅ Updated existing centre:', updated);
   }
 
-  console.log('\n--- 2. Creating Slots for Quantum Centre (MONDAY, WEDNESDAY, THURSDAY) ---');
+  console.log('\n--- 2. Creating Slots for Quantum Centre (MONDAY, WEDNESDAY, THURSDAY, FRIDAY) ---');
   
-  const days = ['MONDAY', 'WEDNESDAY', 'THURSDAY'];
+  const days = ['MONDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
   const sessions = [
     { name: 'FORENOON', start_time: '09:40:00', end_time: '10:30:00' },
     { name: 'AFTERNOON', start_time: '13:10:00', end_time: '14:00:00' }

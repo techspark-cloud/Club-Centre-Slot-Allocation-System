@@ -73,7 +73,7 @@ export default function LoginPage() {
           return;
         }
 
-        if (profile.role === 'SUPER_ADMIN' || profile.role === 'ALLOCATION_ADMIN') {
+        if (profile.role === 'SUPER_ADMIN' || profile.role === 'ALLOCATION_ADMIN' || profile.role === 'DEPARTMENT_ADMIN') {
           router.push('/admin');
         } else if (profile.role === 'CLUB_COORDINATOR' || profile.role === 'CENTRE_COORDINATOR') {
           router.push('/coordinator');

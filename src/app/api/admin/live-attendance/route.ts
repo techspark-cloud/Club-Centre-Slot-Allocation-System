@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
-    const allowedRoles = ['SUPER_ADMIN', 'ALLOCATION_ADMIN', 'OVERALL_CLUB_COORDINATOR', 'OVERALL_CENTRE_COORDINATOR'];
+    const allowedRoles = ['SUPER_ADMIN', 'ALLOCATION_ADMIN', 'DEPARTMENT_ADMIN', 'OVERALL_CLUB_COORDINATOR', 'OVERALL_CENTRE_COORDINATOR'];
     if (!profile || !allowedRoles.includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

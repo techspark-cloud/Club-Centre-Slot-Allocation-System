@@ -17,13 +17,14 @@ export default async function AdminLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, full_name')
     .eq('id', user.id)
     .single();
 
   const allowedRoles = [
     'SUPER_ADMIN', 
     'ALLOCATION_ADMIN', 
+    'DEPARTMENT_ADMIN',
     'COORDINATOR', 
     'CLUB_COORDINATOR', 
     'CENTRE_COORDINATOR', 
@@ -48,9 +49,14 @@ export default async function AdminLayout({
             </div>
 
             {/* User Section (Right) */}
-            <div className="flex items-center gap-2 sm:gap-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              {profile.role === 'DEPARTMENT_ADMIN' && (
+                <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-full border border-amber-200 shadow-sm">
+                  Dean (View Only)
+                </span>
+              )}
               <span className="text-sm font-bold text-slate-600 hidden md:block">
-                {user.email}
+                {profile.full_name || user.email}
               </span>
               <form action="/api/auth/signout" method="POST" className="hidden md:block">
                 <button
@@ -66,7 +72,7 @@ export default async function AdminLayout({
       </nav>
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden max-w-full">
-        <AdminSidebar />
+        <AdminSidebar role={profile.role} />
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>

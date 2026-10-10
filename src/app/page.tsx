@@ -15,7 +15,7 @@ export default async function Home() {
     .eq('id', user.id)
     .single();
 
-  if (profile?.role === 'SUPER_ADMIN' || profile?.role === 'ALLOCATION_ADMIN') {
+  if (profile?.role === 'SUPER_ADMIN' || profile?.role === 'ALLOCATION_ADMIN' || profile?.role === 'DEPARTMENT_ADMIN') {
     redirect('/admin');
   } else if (profile?.role === 'CLUB_COORDINATOR' || profile?.role === 'CENTRE_COORDINATOR') {
     redirect('/coordinator');

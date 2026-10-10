@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -12,6 +12,17 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<{ total: number; inserted: number } | null>(null);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (prof?.role === 'DEPARTMENT_ADMIN') {
+          window.location.href = '/admin';
+        }
+      }
+    });
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
