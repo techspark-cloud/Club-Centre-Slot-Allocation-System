@@ -2,13 +2,18 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Clock, MapPin, CheckCircle, AlertCircle, Loader2, Download, Check, CalendarClock, QrCode, Lock } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, AlertCircle, Loader2, Download, Check, CalendarClock, QrCode, Lock, Bell, Timer, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import html2canvas from 'html2canvas';
 import QRCode from 'react-qr-code';
 import CampusMapModal from '@/components/3d/CampusMapModal';
+import DeptAllocationNoticeModal from '@/components/modals/DeptAllocationNoticeModal';
 import { getEntityLogoUrl } from '@/lib/clubLogos';
+import { getDeptFromCourse } from '@/lib/deptCentreRules';
+
+// Official Unlock Timestamp: Today at 12:00:00 PM IST
+const UNLOCK_TIMESTAMP = new Date('2026-10-12T12:00:00+05:30').getTime();
 
 export default function BookingClient({ 
   student,
@@ -18,7 +23,9 @@ export default function BookingClient({
   existingClubBookings, 
   existingCentreBookings,
   customRules = [],
-  attendanceRecords = []
+  attendanceRecords = [],
+  lockedSlotAssignments = {},
+  serverTimestamp
 }: { 
   student: any,
   studentId: string, 
@@ -27,10 +34,38 @@ export default function BookingClient({
   existingClubBookings: any[],
   existingCentreBookings: any[],
   customRules?: any[],
-  attendanceRecords?: any[]
+  attendanceRecords?: any[],
+  lockedSlotAssignments?: Record<string, { slotId: string; centreName: string; day: string; timing: string }>,
+  serverTimestamp?: number
 }) {
+  const initialCentreSelections: Record<string, string> = {};
+  if (lockedSlotAssignments) {
+    Object.entries(lockedSlotAssignments).forEach(([day, info]) => {
+      const alreadyBooked = existingCentreBookings.some(b => b.slot.day === day);
+      if (!alreadyBooked) {
+        initialCentreSelections[day] = info.slotId;
+      }
+    });
+  }
+
   const [selectedClubIds, setSelectedClubIds] = useState<Record<string, string>>({});
-  const [selectedCentreIds, setSelectedCentreIds] = useState<Record<string, string>>({});
+  const [selectedCentreIds, setSelectedCentreIds] = useState<Record<string, string>>(initialCentreSelections);
+
+  useEffect(() => {
+    if (!lockedSlotAssignments) return;
+    setSelectedCentreIds(prev => {
+      const updated = { ...prev };
+      let changed = false;
+      Object.entries(lockedSlotAssignments).forEach(([day, info]) => {
+        const alreadyBooked = existingCentreBookings.some(b => b.slot.day === day);
+        if (!alreadyBooked && updated[day] !== info.slotId) {
+          updated[day] = info.slotId;
+          changed = true;
+        }
+      });
+      return changed ? updated : prev;
+    });
+  }, [lockedSlotAssignments, existingCentreBookings]);
   
   const [showPreview, setShowPreview] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
@@ -44,6 +79,45 @@ export default function BookingClient({
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const [targetVenueName, setTargetVenueName] = useState('');
   const [targetNodeId, setTargetNodeId] = useState('');
+
+  // Department Policy Notice Modal State
+  const [isNoticeOpen, setIsNoticeOpen] = useState(false);
+
+  // 12:00 PM Lock & Real-time Countdown State
+  const [currentTime, setCurrentTime] = useState<number>(() => serverTimestamp || Date.now());
+  const [bypassLock, setBypassLock] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('bypass_lock=true')) {
+      setBypassLock(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const offset = serverTimestamp ? (serverTimestamp - Date.now()) : 0;
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now() + offset);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [serverTimestamp]);
+
+  const isTimeLocked = !bypassLock && currentTime < UNLOCK_TIMESTAMP;
+  const timeRemaining = Math.max(0, UNLOCK_TIMESTAMP - currentTime);
+  const countdownHours = Math.floor(timeRemaining / (1000 * 60 * 60));
+  const countdownMinutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+  const countdownSeconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+
+  useEffect(() => {
+    const seen = localStorage.getItem('rit_dept_policy_notice_seen_v1');
+    if (!seen) {
+      setIsNoticeOpen(true);
+    }
+  }, []);
+
+  const handleCloseNotice = () => {
+    localStorage.setItem('rit_dept_policy_notice_seen_v1', 'true');
+    setIsNoticeOpen(false);
+  };
   
   const router = useRouter();
   const supabase = createClient();
@@ -130,7 +204,7 @@ export default function BookingClient({
     ...Object.keys(selectedCentreIds),
     ...existingClubBookings.map(b => b.slot.day),
     ...existingCentreBookings.map(b => b.slot.day)
-  ]));
+  ])).filter(d => d && d !== 'ANY').sort((a, b) => (dayOrder[a] || 99) - (dayOrder[b] || 99));
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
@@ -156,6 +230,11 @@ export default function BookingClient({
   };
 
   const handleSelectSlot = (slot: any, type: 'CLUB' | 'CENTRE') => {
+    if (isTimeLocked) {
+      alert('Balance slot selection is locked until 12:00 PM IST today. Please check the live countdown timer above!');
+      return;
+    }
+
     const isAny = student.allowed_day === 'ANY';
     const dayKey = isAny ? 'ANY' : slot.day;
     
@@ -169,6 +248,17 @@ export default function BookingClient({
       // Auto-collapse the section after selecting
       setExpandedSections(prev => ({ ...prev, [`CLUB_${slot.day}`]: false }));
     } else {
+      // Check if this day is reserved for a department mandatory centre
+      if (lockedSlotAssignments && lockedSlotAssignments[dayKey]) {
+        if (lockedSlotAssignments[dayKey].slotId === slot.id) {
+          // Mandatory locked slot cannot be unselected
+          return;
+        } else {
+          alert(`This day is reserved for your Department Mandatory Centre (${lockedSlotAssignments[dayKey].centreName}). You cannot change this slot.`);
+          return;
+        }
+      }
+
       setSelectedCentreIds(prev => {
         const newObj = { ...prev };
         if (newObj[dayKey] === slot.id) delete newObj[dayKey];
@@ -181,6 +271,11 @@ export default function BookingClient({
   };
 
   const handleConfirmBooking = async () => {
+    if (isTimeLocked) {
+      alert('Booking will be accepted starting at 12:00 PM IST today.');
+      return;
+    }
+
     if (!isReadyToProceed) return;
     
     setIsQueueing(true);
@@ -284,20 +379,25 @@ export default function BookingClient({
     const isAny = student.allowed_day === 'ANY';
     const dayKey = isAny ? 'ANY' : slot.day;
     const isSelected = type === 'CLUB' ? selectedClubIds[dayKey] === slot.id : selectedCentreIds[dayKey] === slot.id;
+    const isMandatoryLocked = type === 'CENTRE' && lockedSlotAssignments?.[dayKey]?.slotId === slot.id;
+    const isDayLockedByOtherMandatory = type === 'CENTRE' && !!lockedSlotAssignments?.[dayKey] && lockedSlotAssignments[dayKey].slotId !== slot.id;
     
     return (
       <div 
         key={slot.id} 
-        onClick={() => !isBooked && !isFull && handleSelectSlot(slot, type)}
+        onClick={() => !isBooked && !isFull && !isDayLockedByOtherMandatory && handleSelectSlot(slot, type)}
         className={`border rounded-xl sm:rounded-2xl p-3 sm:px-6 sm:py-4 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative overflow-hidden cursor-pointer touch-manipulation active:scale-[0.98] ${
           isBooked ? 'bg-green-50/50 border-green-200 cursor-default active:scale-100' :
+          isMandatoryLocked ? 'bg-indigo-50/40 border-indigo-400 ring-2 ring-indigo-400/20 shadow-indigo-100 cursor-default active:scale-100' :
+          isDayLockedByOtherMandatory ? 'bg-slate-50 border-slate-200 opacity-50 cursor-not-allowed active:scale-100' :
           isFull ? 'bg-slate-50 border-slate-200 opacity-75 cursor-not-allowed active:scale-100' :
           isSelected ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 shadow-blue-100' :
           'bg-white border-slate-200 hover:border-blue-300'
         }`}
       >
         {isBooked && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>}
-        {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>}
+        {isMandatoryLocked && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600"></div>}
+        {!isMandatoryLocked && isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>}
         
         {/* Left Side: Name and Status */}
         <div className="flex flex-col min-w-0 flex-1">
@@ -318,14 +418,30 @@ export default function BookingClient({
             </div>
             
             <div className="flex flex-wrap items-center gap-1.5">
-              {!isBooked && !isFull && !isSelected && (
-                <span className="flex items-center gap-1 bg-red-50 text-red-600 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-widest border border-red-100 shrink-0">
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping absolute opacity-75"></span>
-                  <span className="w-1.5 h-1.5 bg-red-600 rounded-full relative"></span>
-                  LIVE
+              {isMandatoryLocked && (
+                <span className="flex items-center text-indigo-700 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-widest bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 shrink-0">
+                  <Lock className="w-3 h-3 mr-1" /> MANDATORY DEPT CENTRE
                 </span>
               )}
-              {isSelected && (
+              {isDayLockedByOtherMandatory && (
+                <span className="text-slate-400 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest bg-slate-100 px-1.5 py-0.5 rounded-full border border-slate-200 shrink-0">
+                  DEPT LOCKED
+                </span>
+              )}
+              {!isBooked && !isFull && !isSelected && !isMandatoryLocked && !isDayLockedByOtherMandatory && (
+                isTimeLocked ? (
+                  <span className="flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-widest border border-amber-200 shrink-0">
+                    <Lock className="w-2.5 h-2.5" /> OPENS 12 PM
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 bg-red-50 text-red-600 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-widest border border-red-100 shrink-0">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping absolute opacity-75"></span>
+                    <span className="w-1.5 h-1.5 bg-red-600 rounded-full relative"></span>
+                    LIVE
+                  </span>
+                )
+              )}
+              {isSelected && !isMandatoryLocked && (
                 <span className="flex items-center text-blue-700 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-widest bg-blue-100 px-1.5 py-0.5 rounded-full border border-blue-200 shrink-0">
                   <Check className="w-3 h-3 mr-1" /> SELECTED
                 </span>
@@ -335,7 +451,7 @@ export default function BookingClient({
                   <CheckCircle className="w-3 h-3 mr-1" /> BOOKED
                 </span>
               )}
-              {isFull && !isBooked && (
+              {isFull && !isBooked && !isMandatoryLocked && (
                 <span className="text-red-600 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest bg-red-50 px-1.5 py-0.5 rounded-full border border-red-100 shrink-0">FULL</span>
               )}
             </div>
@@ -428,6 +544,36 @@ export default function BookingClient({
 
   return (
     <div className="space-y-12 relative pb-24">
+      {/* POPUP MODAL */}
+      <DeptAllocationNoticeModal 
+        isOpen={isNoticeOpen} 
+        onClose={handleCloseNotice} 
+        deptName={getDeptFromCourse(student?.course)} 
+      />
+
+      {/* POLICY UPDATE TOP BANNER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-3.5 sm:p-4 shadow-sm animate-in fade-in duration-300">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-indigo-900 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Bell className="w-4 h-4 text-amber-300" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+              Centre Slot Allocation &amp; Department Lock Policy
+            </h4>
+            <p className="text-[11px] sm:text-xs text-slate-600 font-medium">
+              Department core centres are locked. Balance days are open for your choice.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsNoticeOpen(true)}
+          className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold shrink-0 transition-all shadow-sm active:scale-95 cursor-pointer"
+        >
+          View Policy Note
+        </button>
+      </div>
+
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-2xl flex items-start shadow-sm animate-in slide-in-from-top-4">
           <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
@@ -463,10 +609,9 @@ export default function BookingClient({
         document.body
       )}
 
-      {/* SUCCESS TIMETABLE */}
+      {/* OFFICIAL TIMETABLE & ATTENDANCE SECTION (Shown when fully booked) */}
       {mounted && isFullyBooked && (
         <div className="animate-in zoom-in duration-500">
-          
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center mb-8 shadow-sm">
             <CheckCircle className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
             <h3 className="text-2xl font-extrabold text-emerald-900 tracking-tight">Booking Confirmed!</h3>
@@ -474,21 +619,23 @@ export default function BookingClient({
           </div>
 
           {/* DIGITAL ID FOR ATTENDANCE */}
-          <div className="bg-white border-2 border-blue-100 rounded-2xl p-6 text-center mb-8 shadow-sm max-w-sm mx-auto relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-2 bg-blue-500"></div>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight mb-2">Digital ID Card</h3>
-            <p className="text-slate-500 text-sm font-medium mb-6">Show this QR code to your coordinator to mark your attendance.</p>
-            <div className="bg-white p-4 rounded-xl inline-block shadow-sm border border-slate-100 mb-4">
-              <QRCode 
-                value={`ATTENDANCE:${studentId}`}
-                size={160} 
-                level="H" 
-              />
+          {(existingClubBookings.length > 0 || existingCentreBookings.length > 0) && (
+            <div className="bg-white border-2 border-blue-100 rounded-2xl p-6 text-center mb-8 shadow-sm max-w-sm mx-auto relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-2 bg-blue-500"></div>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight mb-2">Digital ID Card</h3>
+              <p className="text-slate-500 text-sm font-medium mb-6">Show this QR code to your coordinator to mark your attendance.</p>
+              <div className="bg-white p-4 rounded-xl inline-block shadow-sm border border-slate-100 mb-4">
+                <QRCode 
+                  value={`ATTENDANCE:${studentId}`}
+                  size={160} 
+                  level="H" 
+                />
+              </div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 py-2 rounded-lg border border-slate-100">
+                SCAN TO MARK PRESENT
+              </div>
             </div>
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 py-2 rounded-lg border border-slate-100">
-              SCAN TO MARK PRESENT
-            </div>
-          </div>
+          )}
 
           <div ref={timetableRef} className="bg-white rounded-xl border-2 border-slate-900 shadow-sm overflow-hidden text-slate-900 mx-auto max-w-4xl relative" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             
@@ -547,52 +694,90 @@ export default function BookingClient({
                       const dayClubBookings = existingClubBookings.filter(b => b.slot.day === day || (student.allowed_day === 'ANY' && b.slot.day === day));
                       const dayCentreBookings = existingCentreBookings.filter(b => b.slot.day === day || (student.allowed_day === 'ANY' && b.slot.day === day));
                       
-                      if (dayClubBookings.length === 0 && dayCentreBookings.length === 0) return null;
+                      const hasAnySlot = sortedClubSlots.some(s => s.day === day) || sortedCentreSlots.some(s => s.day === day);
+                      if (!hasAnySlot && dayClubBookings.length === 0 && dayCentreBookings.length === 0) return null;
 
                       const clubBooking = dayClubBookings[0];
                       const centreBooking = dayCentreBookings[0];
 
                       const renderCell = (booking: any, isClub: boolean) => {
-                        if (!booking) return (
-                          <td className="border-2 border-slate-900 p-2 sm:p-4 bg-slate-50/50 align-middle">
-                            <span className="text-slate-400 font-semibold text-xs tracking-wide">-</span>
-                          </td>
-                        );
+                        if (booking) {
+                          const slot = booking.slot;
+                          const name = isClub ? slot.club.name : slot.centre.name;
+                          const typeLabel = isClub ? 'CLUB' : 'CENTRE';
+                          const isMandatory = !isClub && lockedSlotAssignments?.[day]?.slotId === slot.id;
 
-                        const slot = booking.slot;
-                        const name = isClub ? slot.club.name : slot.centre.name;
-                        const typeLabel = isClub ? 'CLUB' : 'CENTRE';
-
-                        return (
-                          <td className="border-2 border-slate-900 p-2 sm:p-4 relative overflow-hidden align-top text-left">
-                            {isClub ? (
-                              <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none"></div>
-                            ) : (
-                              <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-indigo-500/5 rounded-bl-full border-b border-l border-indigo-500/10 pointer-events-none"></div>
-                            )}
-                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-1 mb-1.5 relative z-10">
-                              <span className={`inline-block w-fit px-1.5 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest ${isClub ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                                {typeLabel}
-                              </span>
-                              <span className="text-[8px] sm:text-[10px] font-bold text-slate-700 bg-slate-100 px-1 sm:px-1.5 py-0.5 rounded w-fit whitespace-nowrap">
-                                {slot.start_time.substring(0,5)} - {slot.end_time.substring(0,5)}
-                              </span>
-                            </div>
-                            <h4 className="text-xs sm:text-base font-extrabold mb-1 relative z-10 text-slate-900 leading-tight">{name}</h4>
-                            <div className="text-[10px] sm:text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
-                              <div className="flex items-start sm:items-center gap-1 min-w-0 mt-0.5 sm:mt-0">
-                                <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
-                                <span>{slot.venue}</span>
+                          return (
+                            <td className="border-2 border-slate-900 p-2 sm:p-4 relative overflow-hidden align-top text-left bg-white">
+                              {isClub ? (
+                                <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-blue-500/5 rounded-bl-full border-b border-l border-blue-500/10 pointer-events-none"></div>
+                              ) : (
+                                <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-indigo-500/5 rounded-bl-full border-b border-l border-indigo-500/10 pointer-events-none"></div>
+                              )}
+                              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-1 mb-1.5 relative z-10">
+                                <span className={`inline-block w-fit px-1.5 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest ${
+                                  isMandatory ? 'bg-indigo-100 text-indigo-900 border border-indigo-300 font-extrabold' : isClub ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'
+                                }`}>
+                                  {isMandatory ? 'LOCKED MANDATORY' : typeLabel}
+                                </span>
+                                <span className="text-[8px] sm:text-[10px] font-bold text-slate-700 bg-slate-100 px-1 sm:px-1.5 py-0.5 rounded w-fit whitespace-nowrap">
+                                  {slot.start_time.substring(0,5)} - {slot.end_time.substring(0,5)}
+                                </span>
                               </div>
-                              <button 
-                                data-html2canvas-ignore="true"
-                                onClick={(e) => { e.stopPropagation(); handleNavigateClick(slot.venue); }}
-                                className="flex items-center gap-1 bg-slate-900 text-white hover:bg-slate-800 text-[8px] sm:text-[9px] font-extrabold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md shadow-sm transition-all active:scale-95 shrink-0"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="hidden sm:block"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>
-                                MAP
-                              </button>
-                            </div>
+                              <h4 className="text-xs sm:text-base font-extrabold mb-1 relative z-10 text-slate-900 leading-tight">{name}</h4>
+                              <div className="text-[10px] sm:text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
+                                <div className="flex items-start sm:items-center gap-1 min-w-0 mt-0.5 sm:mt-0">
+                                  <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
+                                  <span>{slot.venue}</span>
+                                </div>
+                                <button 
+                                  data-html2canvas-ignore="true"
+                                  onClick={(e) => { e.stopPropagation(); handleNavigateClick(slot.venue); }}
+                                  className="flex items-center gap-1 bg-slate-900 text-white hover:bg-slate-800 text-[8px] sm:text-[9px] font-extrabold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md shadow-sm transition-all active:scale-95 shrink-0 cursor-pointer"
+                                >
+                                  MAP
+                                </button>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        // Check live selected slot in current session
+                        const selectedSlotId = isClub ? selectedClubIds[day] : selectedCentreIds[day];
+                        const selectedSlot = isClub 
+                          ? sortedClubSlots.find(s => s.id === selectedSlotId)
+                          : sortedCentreSlots.find(s => s.id === selectedSlotId);
+
+                        if (selectedSlot) {
+                          const name = isClub ? selectedSlot.club?.name : selectedSlot.centre?.name;
+                          const isMandatory = !isClub && lockedSlotAssignments?.[day]?.slotId === selectedSlot.id;
+                          return (
+                            <td className="border-2 border-slate-900 p-2 sm:p-4 relative overflow-hidden align-top text-left bg-blue-50/50">
+                              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-1 mb-1.5 relative z-10">
+                                <span className={`inline-block w-fit px-1.5 py-0.5 rounded text-[7px] sm:text-[8px] font-black uppercase tracking-widest ${
+                                  isMandatory ? 'bg-indigo-100 text-indigo-900 border border-indigo-300 font-extrabold' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                }`}>
+                                  {isMandatory ? 'LOCKED MANDATORY' : 'PREVIEW SELECTED'}
+                                </span>
+                                <span className="text-[8px] sm:text-[10px] font-bold text-slate-700 bg-slate-100 px-1 sm:px-1.5 py-0.5 rounded w-fit whitespace-nowrap">
+                                  {selectedSlot.start_time.substring(0,5)} - {selectedSlot.end_time.substring(0,5)}
+                                </span>
+                              </div>
+                              <h4 className="text-xs sm:text-base font-extrabold mb-1 relative z-10 text-slate-900 leading-tight">{name}</h4>
+                              <div className="text-[10px] sm:text-xs font-semibold text-slate-600 relative z-10 flex items-center gap-1.5 mt-1.5">
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{selectedSlot.venue}</span>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        // Pending unselected cell
+                        return (
+                          <td className="border-2 border-slate-900 p-2 sm:p-4 bg-slate-50/70 align-middle text-center">
+                            <span className="text-slate-400 font-extrabold text-[10px] sm:text-xs uppercase tracking-wide bg-slate-100 px-2 py-0.5 rounded border border-slate-200 inline-block">
+                              Pending Choice
+                            </span>
                           </td>
                         );
                       };
@@ -713,8 +898,8 @@ export default function BookingClient({
           {/* Attendance History */}
           <div className="max-w-4xl mx-auto mt-12 pt-8 border-t border-slate-200/60">
             {(() => {
-              const clubRecords = attendanceRecords.filter(r => existingClubBookings.some(b => b.slot_id === r.slot_id));
-              const centreRecords = attendanceRecords.filter(r => existingCentreBookings.some(b => b.slot_id === r.slot_id));
+              const clubRecords = attendanceRecords.filter(r => r.slot?.club || existingClubBookings.some(b => b.slot_id === r.slot_id));
+              const centreRecords = attendanceRecords.filter(r => r.slot?.centre || existingCentreBookings.some(b => b.slot_id === r.slot_id));
               
               const clubPresent = clubRecords.filter(r => r.status === 'PRESENT').length;
               const clubTotal = clubRecords.length;
@@ -774,15 +959,8 @@ export default function BookingClient({
                       const clubBooking = existingClubBookings.find(b => b.slot_id === record.slot_id);
                       const centreBooking = existingCentreBookings.find(b => b.slot_id === record.slot_id);
                       
-                      let activityName = 'Unknown Activity';
-                      let typeLabel = '';
-                      if (clubBooking) {
-                        activityName = clubBooking.slot.club.name;
-                        typeLabel = 'CLUB';
-                      } else if (centreBooking) {
-                        activityName = centreBooking.slot.centre.name;
-                        typeLabel = 'CENTRE';
-                      }
+                      const activityName = record.slot?.club?.name || record.slot?.centre?.name || clubBooking?.slot?.club?.name || centreBooking?.slot?.centre?.name || 'Activity';
+                      const typeLabel = (record.slot?.club || clubBooking) ? 'CLUB' : (record.slot?.centre || centreBooking) ? 'CENTRE' : '';
 
                       return (
                         <tr key={`${record.slot_id}-${record.date}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
@@ -836,7 +1014,85 @@ export default function BookingClient({
 
       {/* SELECTION UI (Only if not fully booked) */}
       {!isFullyBooked && (
-        <>
+        <div className="animate-in fade-in duration-300">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span>⚡ Complete Your Remaining Balance Choices</span>
+              </h2>
+              <p className="text-slate-500 text-xs sm:text-sm font-medium mt-1">
+                Your mandatory department centre is locked below. Please pick your balance club and centre slots to finalize your schedule.
+              </p>
+            </div>
+          </div>
+
+          {/* COUNTDOWN LOCK TIMER BANNER (Opens at 12:00 PM) */}
+          {isTimeLocked ? (
+            <div className="mb-8 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-7 shadow-xl border border-indigo-500/30 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-black uppercase tracking-wider mb-2">
+                    <Lock className="w-3.5 h-3.5 animate-pulse" />
+                    Locked Until 12:00 PM
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    Balance Slot Selection Opens Today at 12:00 PM
+                  </h3>
+                  <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl font-medium leading-relaxed">
+                    Your mandatory department core centre is safely locked. Remaining open slots will automatically unlock in real-time at 12:00 PM. Please browse below and be ready!
+                  </p>
+                </div>
+
+                {/* Real-time Countdown Counter */}
+                <div className="flex items-center gap-2 sm:gap-3 bg-white/10 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-white/15 shrink-0 shadow-inner">
+                  <div className="flex flex-col items-center min-w-[55px] sm:min-w-[65px]">
+                    <span className="text-2xl sm:text-3xl font-black text-white font-mono tracking-wider">
+                      {String(countdownHours).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-indigo-300 mt-0.5">
+                      Hours
+                    </span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-black text-indigo-300/60 pb-3">:</span>
+                  <div className="flex flex-col items-center min-w-[55px] sm:min-w-[65px]">
+                    <span className="text-2xl sm:text-3xl font-black text-white font-mono tracking-wider">
+                      {String(countdownMinutes).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-indigo-300 mt-0.5">
+                      Minutes
+                    </span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-black text-indigo-300/60 pb-3">:</span>
+                  <div className="flex flex-col items-center min-w-[55px] sm:min-w-[65px]">
+                    <span className="text-2xl sm:text-3xl font-black text-amber-400 font-mono tracking-wider animate-pulse">
+                      {String(countdownSeconds).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-amber-300 mt-0.5">
+                      Seconds
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 p-4 sm:p-5 flex items-center justify-between gap-4 animate-in fade-in duration-500">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-emerald-950 font-black text-sm sm:text-base">
+                    🎉 Balance Slot Selection is Now Open!
+                  </h3>
+                  <p className="text-emerald-800 text-xs font-medium">
+                    You can now pick your balance slots and confirm your schedule below.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {/* DYNAMIC INSTRUCTION BOX */}
           <div className="bg-blue-50/50 border border-blue-200 rounded-2xl p-5 mb-8 shadow-sm">
             <div className="flex items-start gap-3">
@@ -1039,7 +1295,7 @@ export default function BookingClient({
               </div>
             )}
           </section>
-        </>
+        </div>
       )}
 
       {/* FLOATING ACTION BAR FOR REVIEW (PORTAL) */}
@@ -1047,15 +1303,24 @@ export default function BookingClient({
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-xl animate-in slide-in-from-bottom-10 fade-in duration-300" style={{ zIndex: 99999 }}>
           <div className="bg-slate-900 rounded-2xl p-4 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)] border border-slate-700 flex items-center justify-between">
             <div className="px-2">
-              <p className="text-slate-300 text-xs font-bold uppercase tracking-widest mb-0.5">Ready to proceed</p>
+              <p className="text-slate-300 text-xs font-bold uppercase tracking-widest mb-0.5">
+                {isTimeLocked ? 'Opens at 12:00 PM' : 'Ready to proceed'}
+              </p>
               <p className="text-white font-extrabold">Club and Centre Selected</p>
             </div>
-            <button
-              onClick={() => setShowPreview(true)}
-              className="bg-blue-500 hover:bg-blue-400 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 touch-manipulation"
-            >
-              Review Selections
-            </button>
+            {isTimeLocked ? (
+              <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 border border-amber-400/30 px-5 py-2.5 rounded-xl font-bold text-xs">
+                <Lock className="w-3.5 h-3.5" />
+                <span>Opens at 12 PM</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowPreview(true)}
+                className="bg-blue-500 hover:bg-blue-400 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 touch-manipulation cursor-pointer"
+              >
+                Review Selections
+              </button>
+            )}
           </div>
         </div>,
         document.body
@@ -1161,6 +1426,7 @@ export default function BookingClient({
         </div>,
         document.body
       )}
+
       {/* 3D MAP MODAL */}
       <CampusMapModal 
         isOpen={isMapModalOpen}

@@ -3,6 +3,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js';
 import { Clock, AlertCircle, CalendarClock, ShieldCheck } from 'lucide-react';
 import BookingClient from './BookingClient';
 import IDVerificationClient from './IDVerificationClient';
+import { isSemiconductorAllowedForStudent, resolveLockedCentreSlots } from '@/lib/deptCentreRules';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -62,10 +63,9 @@ export default async function StudentDashboard() {
       const customDays = customRules.map(r => r.day.trim());
       
       const filteredSlots = slots.filter(s => {
-        // Restrict Semiconductor Centre to ECE and VLSI only
+        // Restrict Semiconductor Centre to VLSI and ECE only
         if (s.centre_id && s.centre?.name === 'Centre for Semiconductor Design') {
-          const isAllowed = student.course === 'B.E. Electronics and Communication Engineering' || 
-                            student.course === 'B.E. Electronics Engineering (VLSI Design and Technology)';
+          const isAllowed = isSemiconductorAllowedForStudent(student.course);
           if (!isAllowed) return false;
         }
 
@@ -96,6 +96,11 @@ export default async function StudentDashboard() {
     }
   }
 
+  // Calculate mandatory department locked centre slots
+  const lockedSlotAssignments = student.activity_session 
+    ? resolveLockedCentreSlots(student, centreSlots, customRules)
+    : {};
+
   // Fetch student's existing allocations
   const { data: allocations } = await supabase
     .from('allocations')
@@ -113,7 +118,7 @@ export default async function StudentDashboard() {
 
   const { data: attendance } = await supabaseAdmin
     .from('attendance')
-    .select('*')
+    .select('*, slot:slots(*, club:clubs(id, name), centre:centres(id, name))')
     .eq('student_id', student.id)
     .order('date', { ascending: false });
 
@@ -299,6 +304,8 @@ export default async function StudentDashboard() {
               existingCentreBookings={existingCentreBookings}
               customRules={customRules}
               attendanceRecords={attendance || []}
+              lockedSlotAssignments={lockedSlotAssignments}
+              serverTimestamp={Date.now()}
             />
           )}
         </div>
