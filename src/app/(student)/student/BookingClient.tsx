@@ -293,12 +293,19 @@ export default function BookingClient({
       
       // 2. TRUE FCFS DB REQUEST: Fire immediately to secure lock position in Postgres!
       const dbPromise = (async () => {
+        const alreadyBookedSlotIds = new Set([
+          ...existingClubBookings.map((b: any) => b.slot_id),
+          ...existingCentreBookings.map((b: any) => b.slot_id),
+        ]);
+
         for (const slotId of Object.values(selectedClubIds)) {
+          if (alreadyBookedSlotIds.has(slotId)) continue;
           const res = await supabase.rpc('book_slot', { p_student_id: studentId, p_slot_id: slotId });
           if (res.error) throw res.error;
           if (!res.data?.success) throw new Error(res.data?.message || 'Club booking failed');
         }
         for (const slotId of Object.values(selectedCentreIds)) {
+          if (alreadyBookedSlotIds.has(slotId)) continue;
           const res = await supabase.rpc('book_slot', { p_student_id: studentId, p_slot_id: slotId });
           if (res.error) throw res.error;
           if (!res.data?.success) throw new Error(res.data?.message || 'Centre booking failed');
@@ -768,6 +775,20 @@ export default function BookingClient({
                                 <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span>{selectedSlot.venue}</span>
                               </div>
+                            </td>
+                          );
+                        }
+
+                        const dayHasSlots = isClub 
+                          ? sortedClubSlots.some(s => s.day === day)
+                          : sortedCentreSlots.some(s => s.day === day);
+
+                        if (!dayHasSlots) {
+                          return (
+                            <td className="border-2 border-slate-900 p-2 sm:p-4 bg-slate-50/50 align-middle text-center">
+                              <span className="text-slate-400 font-extrabold text-[8px] sm:text-[10px] uppercase tracking-wide bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60 inline-block">
+                                — No {isClub ? 'Club' : 'Centre'} Scheduled —
+                              </span>
                             </td>
                           );
                         }
