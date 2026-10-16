@@ -1646,8 +1646,8 @@ export default function CentreTimetableModal({
                                 Full Room Capacity Retained
                               </span>
                               <div className="space-y-1 mt-1">
-                                {item.planA.sections.map((sec: any) => (
-                                  <div key={sec.name} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
+                                {item.planA.sections.map((sec: any, sIdx: number) => (
+                                  <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
                                     <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
                                     <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
                                   </div>
@@ -1671,8 +1671,8 @@ export default function CentreTimetableModal({
                                 </span>
                               )}
                               <div className="space-y-1 mt-1">
-                                {item.planB.sections.map((sec: any) => (
-                                  <div key={sec.name} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                {item.planB.sections.map((sec: any, sIdx: number) => (
+                                  <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
                                     <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
                                     <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
                                   </div>

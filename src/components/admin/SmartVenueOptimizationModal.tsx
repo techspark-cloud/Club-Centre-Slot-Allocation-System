@@ -138,19 +138,33 @@ export default function SmartVenueOptimizationModal({
     setSuggestions(prev => prev.map(s => {
       if (s.id !== slotId) return s;
 
-      let newSectionsA = [...s.planA.sections];
-      let newSectionsB = [...s.planB.sections];
+      let newSectionsA = [...s.planA.sections.map((x: any) => ({ ...x, students: [...(x.students || [])] }))];
+      let newSectionsB = [...s.planB.sections.map((x: any) => ({ ...x, students: [...(x.students || [])] }))];
 
       if (fromLab === 'A') {
         const item = newSectionsA.find(x => x.name === sectionName);
         if (!item) return s;
         newSectionsA = newSectionsA.filter(x => x.name !== sectionName);
-        newSectionsB.push(item);
+
+        const existingB = newSectionsB.find(x => x.name === sectionName);
+        if (existingB) {
+          existingB.count += item.count;
+          existingB.students = [...(existingB.students || []), ...(item.students || [])];
+        } else {
+          newSectionsB.push(item);
+        }
       } else {
         const item = newSectionsB.find(x => x.name === sectionName);
         if (!item) return s;
         newSectionsB = newSectionsB.filter(x => x.name !== sectionName);
-        newSectionsA.push(item);
+
+        const existingA = newSectionsA.find(x => x.name === sectionName);
+        if (existingA) {
+          existingA.count += item.count;
+          existingA.students = [...(existingA.students || []), ...(item.students || [])];
+        } else {
+          newSectionsA.push(item);
+        }
       }
 
       const totalA = newSectionsA.reduce((sum, x) => sum + x.count, 0);
@@ -821,8 +835,8 @@ export default function SmartVenueOptimizationModal({
                               Full Room Capacity Retained
                             </span>
                             <div className="space-y-1 mt-1">
-                              {item.planA.sections.map((sec: any) => (
-                                <div key={sec.name} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
+                              {item.planA.sections.map((sec: any, sIdx: number) => (
+                                <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
                                   <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
                                   <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
                                 </div>
@@ -847,8 +861,8 @@ export default function SmartVenueOptimizationModal({
                               </span>
                             )}
                             <div className="space-y-1 mt-1">
-                              {item.planB.sections.map((sec: any) => (
-                                <div key={sec.name} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                              {item.planB.sections.map((sec: any, sIdx: number) => (
+                                <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
                                   <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
                                   <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
                                 </div>
@@ -1230,9 +1244,9 @@ export default function SmartVenueOptimizationModal({
                               {item.planA.sections.length === 0 ? (
                                 <p className="text-[10px] text-slate-400 italic">No sections assigned</p>
                               ) : (
-                                item.planA.sections.map((sec: any) => (
+                                item.planA.sections.map((sec: any, sIdx: number) => (
                                   <div
-                                    key={sec.name}
+                                    key={`${sec.name}_${sIdx}`}
                                     className="text-[10px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded-lg border border-slate-200 flex items-center justify-between group transition-all"
                                   >
                                     <span className="truncate max-w-[110px]" title={sec.name}>{sec.name}</span>
@@ -1287,9 +1301,9 @@ export default function SmartVenueOptimizationModal({
                               {item.planB.sections.length === 0 ? (
                                 <p className="text-[10px] text-slate-400 italic">No excess sections</p>
                               ) : (
-                                item.planB.sections.map((sec: any) => (
+                                item.planB.sections.map((sec: any, sIdx: number) => (
                                   <div
-                                    key={sec.name}
+                                    key={`${sec.name}_${sIdx}`}
                                     className="text-[10px] font-bold bg-emerald-50/50 hover:bg-emerald-100 text-emerald-950 px-2 py-1 rounded-lg border border-emerald-200 flex items-center justify-between group transition-all"
                                   >
                                     <button
