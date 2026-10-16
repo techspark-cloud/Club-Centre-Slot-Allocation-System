@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { 
   Calendar, Clock, MapPin, Users, Download, FileSpreadsheet, X, Search, 
   Layers, Phone, User, CheckCircle2, AlertTriangle, ChevronRight, Eye,
-  Building2, ArrowUpDown, Filter, Printer, CalendarDays, BookOpen, Sparkles
+  Building2, ArrowUpDown, Filter, Printer, CalendarDays, BookOpen, Sparkles, Zap
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -16,6 +16,7 @@ interface CentreTimetableModalProps {
   onClose: () => void;
   initialCentreId?: string | null;
   centres: any[];
+  onOpenOptimizer?: () => void;
 }
 
 export default function CentreTimetableModal({
@@ -23,6 +24,7 @@ export default function CentreTimetableModal({
   onClose,
   initialCentreId,
   centres,
+  onOpenOptimizer,
 }: CentreTimetableModalProps) {
   // Navigation Mode: 'BY_CENTRE' | 'BY_DAY'
   const [viewMode, setViewMode] = useState<'BY_CENTRE' | 'BY_DAY'>('BY_CENTRE');
@@ -732,6 +734,17 @@ export default function CentreTimetableModal({
                 <span>Entire Day Master</span>
               </button>
             </div>
+
+            {onOpenOptimizer && (
+              <button
+                onClick={onOpenOptimizer}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 transition-all shadow-sm cursor-pointer ml-1"
+                title="View Smart Venue Rebalancing & Room Spillover Suggestions"
+              >
+                <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                <span>Room Optimizer</span>
+              </button>
+            )}
 
             <button
               onClick={onClose}

@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy, FileSpreadsheet, Calendar } from 'lucide-react';
+import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy, FileSpreadsheet, Calendar, Sparkles, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { syncFacultyAuthUser } from '@/app/actions/faculty';
 import CentreTimetableModal from '@/components/admin/CentreTimetableModal';
+import SmartVenueOptimizationModal from '@/components/admin/SmartVenueOptimizationModal';
 
 export default function CentresPage() {
   const [centres, setCentres] = useState<any[]>([]);
@@ -29,6 +30,9 @@ export default function CentresPage() {
   // Centre Timetable Modal State
   const [timetableModalOpen, setTimetableModalOpen] = useState(false);
   const [timetableCentreId, setTimetableCentreId] = useState<string | null>(null);
+
+  // Smart Venue Optimization Modal State
+  const [smartVenueModalOpen, setSmartVenueModalOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -509,6 +513,13 @@ export default function CentresPage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button 
+            onClick={() => setSmartVenueModalOpen(true)}
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 px-5 py-3 rounded-2xl shadow-md font-black text-sm transition-all active:scale-95 cursor-pointer"
+          >
+            <Zap className="w-4 h-4 fill-slate-950" />
+            Smart Venue Optimizer
+          </button>
+          <button 
             onClick={() => {
               setTimetableCentreId(centres[0]?.id || null);
               setTimetableModalOpen(true);
@@ -810,6 +821,16 @@ export default function CentresPage() {
         onClose={() => setTimetableModalOpen(false)}
         initialCentreId={timetableCentreId}
         centres={centres}
+        onOpenOptimizer={() => {
+          setTimetableModalOpen(false);
+          setSmartVenueModalOpen(true);
+        }}
+      />
+
+      {/* Smart Venue Optimization Modal */}
+      <SmartVenueOptimizationModal
+        isOpen={smartVenueModalOpen}
+        onClose={() => setSmartVenueModalOpen(false)}
       />
     </div>
   );
