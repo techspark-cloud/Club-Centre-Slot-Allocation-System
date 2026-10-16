@@ -734,9 +734,20 @@ export default function BookingClient({
                               <h4 className="text-xs sm:text-base font-extrabold mb-1 relative z-10 text-slate-900 leading-tight">{name}</h4>
                               <div className="text-[10px] sm:text-xs font-semibold text-slate-600 relative z-10 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
                                 <div className="flex items-start sm:items-center gap-1 min-w-0 mt-0.5 sm:mt-0">
-                                  <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
-                                  <span>{slot.venue}</span>
+                                  <MapPin className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 mt-0.5 sm:mt-0 ${slot.is_rebalanced ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                  <span className={`font-black ${slot.is_rebalanced ? 'text-emerald-950 font-black' : 'text-slate-800'}`}>
+                                    {slot.venue}
+                                  </span>
                                 </div>
+                                {slot.is_rebalanced && (
+                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${
+                                    slot.rebalanced_lab === 'B'
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-black'
+                                      : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                  }`}>
+                                    {slot.rebalanced_lab === 'B' ? '⚡ Spillover Lab B' : 'Lab A'}
+                                  </span>
+                                )}
                                 <button 
                                   data-html2canvas-ignore="true"
                                   onClick={(e) => { e.stopPropagation(); handleNavigateClick(slot.venue); }}
@@ -745,6 +756,11 @@ export default function BookingClient({
                                   MAP
                                 </button>
                               </div>
+                              {slot.is_rebalanced && slot.rebalanced_lab === 'B' && (
+                                <div className="mt-1.5 p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[8.5px] font-extrabold text-emerald-900 leading-tight">
+                                  ℹ️ <strong>Room Rebalanced:</strong> Capacity overflow moved from {slot.original_venue} to <strong>{slot.venue}</strong>. Please report here.
+                                </div>
+                              )}
                             </td>
                           );
                         }

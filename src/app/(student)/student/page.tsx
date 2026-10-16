@@ -101,20 +101,79 @@ export default async function StudentDashboard() {
     ? resolveLockedCentreSlots(student, centreSlots, customRules)
     : {};
 
-  // Fetch student's existing allocations
-  const { data: allocations } = await supabase
-    .from('allocations')
-    .select(`*, slot:slots(*, club:clubs(id, name, description, faculty_name, faculty_mobile), centre:centres(id, name, description, faculty_name, faculty_mobile))`)
-    .eq('student_id', student.id);
-
-  const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
-  const existingCentreBookings = allocations?.filter(a => a.slot.centre_id !== null) || [];
-
-  // Fetch student's attendance records using admin client to bypass RLS
+  // Fetch student's attendance records and published venue plans using admin client to bypass RLS
   const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  // Fetch active published venue rebalancing plan (if any)
+  let rebalancedVenueMap: Record<string, { venue: string; labType: 'A' | 'B'; spilloverCentreName?: string }> = {};
+  try {
+    const { data: planBlob } = await supabaseAdmin.storage
+      .from('venue_plans')
+      .download('active_rebalanced_plan.json');
+    if (planBlob) {
+      const planText = await planBlob.text();
+      const plan = JSON.parse(planText);
+      if (plan.studentVenueMap && plan.studentVenueMap[student.id]) {
+        // Direct individual student mapping
+        const stMap = plan.studentVenueMap[student.id];
+        rebalancedVenueMap[stMap.slotId] = {
+          venue: stMap.venue,
+          labType: stMap.labType,
+          spilloverCentreName: stMap.spilloverCentreName,
+        };
+      } else if (plan.sectionVenueMap) {
+        // Section level fallback mapping
+        const c = student.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
+        const sec = student.section ? `Sec ${student.section}` : 'General';
+        const secKeyPart = `${c} (${sec})`;
+        Object.entries(plan.sectionVenueMap).forEach(([key, val]: [string, any]) => {
+          if (key.includes(secKeyPart)) {
+            const [slotId] = key.split('__');
+            if (slotId) {
+              rebalancedVenueMap[slotId] = {
+                venue: val.venue,
+                labType: val.labType,
+                spilloverCentreName: val.spilloverCentreName,
+              };
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {
+    // No active published plan
+  }
+
+  // Fetch student's existing allocations
+  const { data: rawAllocations } = await supabase
+    .from('allocations')
+    .select(`*, slot:slots(*, club:clubs(id, name, description, faculty_name, faculty_mobile), centre:centres(id, name, description, faculty_name, faculty_mobile))`)
+    .eq('student_id', student.id);
+
+  // Apply rebalanced venue overrides to allocations if active
+  const allocations = (rawAllocations || []).map(a => {
+    if (a.slot?.centre_id && rebalancedVenueMap[a.slot_id]) {
+      const rev = rebalancedVenueMap[a.slot_id];
+      return {
+        ...a,
+        slot: {
+          ...a.slot,
+          original_venue: a.slot.venue,
+          venue: rev.venue,
+          is_rebalanced: true,
+          rebalanced_lab: rev.labType,
+          spillover_centre_name: rev.spilloverCentreName,
+        }
+      };
+    }
+    return a;
+  });
+
+  const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
+  const existingCentreBookings = allocations?.filter(a => a.slot.centre_id !== null) || [];
 
   const { data: attendance } = await supabaseAdmin
     .from('attendance')

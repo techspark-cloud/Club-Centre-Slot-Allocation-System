@@ -239,9 +239,28 @@ export async function GET() {
       return b.totalEnrolled - a.totalEnrolled;
     });
 
+    // Check if there is an active published rebalancing plan
+    let publishedPlan: any = null;
+    try {
+      const { data: fileBlob } = await supabase.storage
+        .from('venue_plans')
+        .download('active_rebalanced_plan.json');
+      if (fileBlob) {
+        const text = await fileBlob.text();
+        publishedPlan = JSON.parse(text);
+      }
+    } catch (e) {
+      // Storage file not found or empty
+    }
+
+    const isPublished = !!(publishedPlan && publishedPlan.publishedAt && Array.isArray(publishedPlan.suggestions));
+
     return NextResponse.json({
       success: true,
       count: suggestions.length,
+      isPublished,
+      publishedAt: isPublished ? publishedPlan.publishedAt : null,
+      publishedBy: isPublished ? publishedPlan.publishedBy : null,
       suggestions,
     });
   } catch (error: any) {

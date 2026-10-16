@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Sparkles, AlertTriangle, ArrowRight, CheckCircle2, Building2, MapPin, 
   Users, Clock, Calendar, Download, FileSpreadsheet, X, Search, Layers,
-  Printer, ArrowLeftRight, ChevronRight, ShieldCheck, Zap, RefreshCw, FileText
+  Printer, ArrowLeftRight, ChevronRight, ShieldCheck, Zap, RefreshCw, FileText,
+  CalendarDays, Send
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,6 +31,12 @@ export default function SmartVenueOptimizationModal({
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
 
+  // Published State & Timetable View Mode
+  const [isPublished, setIsPublished] = useState(false);
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [modalViewMode, setModalViewMode] = useState<'CARDS' | 'TIMETABLE'>('CARDS');
+
   const daysList = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
 
   // Fetch real-time venue optimization suggestions from backend API
@@ -40,6 +47,8 @@ export default function SmartVenueOptimizationModal({
       const data = await res.json();
       if (data.success && data.suggestions) {
         setSuggestions(data.suggestions);
+        setIsPublished(!!data.isPublished);
+        setPublishedAt(data.publishedAt || null);
       } else {
         console.error('Failed to load venue optimization:', data.error);
       }
@@ -47,6 +56,57 @@ export default function SmartVenueOptimizationModal({
       console.error('Error fetching optimization data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Publish active rebalancing plan to student and faculty timetables
+  const handlePublishPlan = async () => {
+    if (suggestions.length === 0) return;
+    setPublishing(true);
+    try {
+      const res = await fetch('/api/admin/venue-optimization/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suggestions,
+          publishedBy: 'Admin',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsPublished(true);
+        setPublishedAt(data.publishedAt);
+        alert('🎉 Venue Rebalancing Plan Published Successfully!\n\nAll students in overflow sections will now immediately see their new spillover room in their official timetable.');
+      } else {
+        alert('Failed to publish plan: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err: any) {
+      alert('Error publishing plan: ' + err.message);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  // Unpublish and revert to default slot venues
+  const handleUnpublishPlan = async () => {
+    if (!confirm('Are you sure you want to unpublish? All students will revert back to seeing their original slot venue.')) return;
+    setPublishing(true);
+    try {
+      const res = await fetch('/api/admin/venue-optimization/publish', {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsPublished(false);
+        setPublishedAt(null);
+        alert('Plan successfully unpublished. All student timetables reverted to default venues.');
+      } else {
+        alert('Failed to unpublish: ' + data.error);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -481,7 +541,58 @@ export default function SmartVenueOptimizationModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end md:self-auto">
+          <div className="flex items-center gap-2 flex-wrap self-end md:self-auto justify-end">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-white/10 p-1 rounded-xl border border-white/15">
+              <button
+                onClick={() => setModalViewMode('CARDS')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  modalViewMode === 'CARDS'
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Cards</span>
+              </button>
+              <button
+                onClick={() => setModalViewMode('TIMETABLE')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  modalViewMode === 'TIMETABLE'
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                <span>Timetable</span>
+              </button>
+            </div>
+
+            {/* Publish Rebalanced Plan Button */}
+            <button
+              onClick={handlePublishPlan}
+              disabled={publishing || suggestions.length === 0}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer ${
+                isPublished 
+                  ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950' 
+                  : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-500/20 shadow-md ring-2 ring-amber-300/60'
+              }`}
+              title="Publish rebalanced venue split directly to student timetables"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{publishing ? 'Publishing...' : isPublished ? 'Update Live Timetables' : 'Apply & Publish to Timetables'}</span>
+            </button>
+            {isPublished && (
+              <button
+                onClick={handleUnpublishPlan}
+                disabled={publishing}
+                className="px-2.5 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white text-xs font-bold border border-red-500/30 transition-all cursor-pointer"
+                title="Revert all students to original slot venues"
+              >
+                Unpublish
+              </button>
+            )}
+
             <button
               onClick={fetchOptimizationData}
               disabled={loading}
@@ -517,6 +628,38 @@ export default function SmartVenueOptimizationModal({
             </button>
           </div>
         </div>
+
+        {/* PUBLISHED / DRAFT STATUS BANNER */}
+        {isPublished ? (
+          <div className="bg-emerald-950/80 border-b border-emerald-500/30 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-extrabold text-emerald-200">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                Plan is <strong>PUBLISHED LIVE</strong>: All students in overflow sections immediately see their spillover rooms in their official timetables.
+              </span>
+              {publishedAt && (
+                <span className="text-[10px] text-emerald-400/80 font-mono">
+                  (Published: {new Date(publishedAt).toLocaleTimeString()})
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded font-black uppercase tracking-wider self-start sm:self-auto">
+              🟢 Live in Student Timetables
+            </span>
+          </div>
+        ) : (
+          <div className="bg-amber-950/80 border-b border-amber-500/30 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-extrabold text-amber-200">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                Plan in Draft Mode: Click <strong>&quot;Apply &amp; Publish to Timetables&quot;</strong> above to sync these spillover rooms to student timetables.
+              </span>
+            </div>
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded font-black uppercase tracking-wider self-start sm:self-auto">
+              ⚠️ Unpublished Draft
+            </span>
+          </div>
+        )}
 
         {/* STATS & FILTER BAR */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -586,6 +729,183 @@ export default function SmartVenueOptimizationModal({
               <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                 All scheduled centre slots on this day are operating within normal room capacity.
               </p>
+            </div>
+          ) : modalViewMode === 'TIMETABLE' ? (
+            /* COMPREHENSIVE REBALANCED MASTER TIMETABLE VIEW */
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-indigo-400" />
+                      <span>Rebalanced Slot Timetable &amp; Venue Schedule (2026)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Master view showing Primary Venue (Lab A: 70 seats) and Spillover Venue (Lab B: balance overflow) with section assignments.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={downloadOptimizationPDF}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Download PDF</span>
+                    </button>
+                    <button
+                      onClick={downloadOptimizationExcel}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Export Excel</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 font-black text-[10px] uppercase tracking-wider border-b border-slate-200">
+                        <th className="p-3 whitespace-nowrap">Day &amp; Session</th>
+                        <th className="p-3">Centre &amp; Coordinator</th>
+                        <th className="p-3 text-center whitespace-nowrap">Total Students</th>
+                        <th className="p-3 bg-indigo-50/80 border-x border-indigo-100">Lab A (Primary — 70 Seats)</th>
+                        <th className="p-3 bg-emerald-50/80 border-r border-emerald-100">Lab B (Spillover — Overflow)</th>
+                        <th className="p-3 text-center whitespace-nowrap">Student Timetable Status</th>
+                        <th className="p-3 text-right whitespace-nowrap">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {filteredSuggestions.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                          {/* Day & Timing */}
+                          <td className="p-3 align-top whitespace-nowrap">
+                            <span className="font-black text-slate-900 text-xs block">{item.day}</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              {item.session === 'FORENOON' ? 'Morning' : 'Afternoon'}
+                            </span>
+                            <span className="text-[11px] font-mono text-indigo-700 font-extrabold mt-1 inline-block bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                              {item.timing}
+                            </span>
+                          </td>
+
+                          {/* Centre & Coordinator */}
+                          <td className="p-3 align-top min-w-[180px]">
+                            <h4 className="font-black text-slate-900 text-sm leading-tight">{item.centreName}</h4>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Coord: <strong className="text-slate-700">{item.coordinatorName}</strong>
+                            </p>
+                            <p className="text-[10px] text-slate-400">{item.coordinatorMobile}</p>
+                          </td>
+
+                          {/* Total Students */}
+                          <td className="p-3 align-top text-center whitespace-nowrap">
+                            <span className="text-base font-black text-slate-900 block leading-none">{item.totalEnrolled}</span>
+                            <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded inline-block mt-1">
+                              +{item.excessCount} Overcrowded
+                            </span>
+                          </td>
+
+                          {/* Lab A (Primary) */}
+                          <td className="p-3 align-top bg-indigo-50/30 border-x border-indigo-100 min-w-[210px]">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-black text-indigo-950 flex items-center gap-1 text-xs">
+                                <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                {item.planA.venue}
+                              </span>
+                              <span className="text-[10px] font-black bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200">
+                                {item.planA.total} Students
+                              </span>
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                              Full Room Capacity Retained
+                            </span>
+                            <div className="space-y-1 mt-1">
+                              {item.planA.sections.map((sec: any) => (
+                                <div key={sec.name} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
+                                  <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
+                                  <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+
+                          {/* Lab B (Spillover) */}
+                          <td className="p-3 align-top bg-emerald-50/30 border-r border-emerald-100 min-w-[210px]">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-black text-emerald-950 flex items-center gap-1 text-xs">
+                                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                {item.planB.venue}
+                              </span>
+                              <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                                {item.planB.total} Students
+                              </span>
+                            </div>
+                            {item.planB.spilloverCentreName && (
+                              <span className="text-[9.5px] font-extrabold text-emerald-700 block mb-1">
+                                [{item.planB.spilloverCentreName}]
+                              </span>
+                            )}
+                            <div className="space-y-1 mt-1">
+                              {item.planB.sections.map((sec: any) => (
+                                <div key={sec.name} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                  <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
+                                  <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+
+                          {/* Timetable Sync Status */}
+                          <td className="p-3 align-top text-center whitespace-nowrap">
+                            {isPublished ? (
+                              <div className="inline-flex flex-col items-center gap-1">
+                                <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Live in Timetable
+                                </span>
+                                <span className="text-[9px] text-slate-400">Students see {item.planB.venue}</span>
+                              </div>
+                            ) : (
+                              <div className="inline-flex flex-col items-center gap-1">
+                                <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                  <AlertTriangle className="w-3 h-3 text-amber-600" /> Draft (Unpublished)
+                                </span>
+                                <span className="text-[9px] text-slate-400">Click Publish above</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="p-3 align-top text-right whitespace-nowrap">
+                            <div className="flex flex-col gap-1 items-end">
+                              <button
+                                onClick={() => downloadDoorNoticePDF(item)}
+                                className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold border border-slate-300 transition-all cursor-pointer"
+                              >
+                                Door Notice PDF
+                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => downloadLabAttendanceSheet(item, 'A')}
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
+                                >
+                                  Lab A Sheet
+                                </button>
+                                <button
+                                  onClick={() => downloadLabAttendanceSheet(item, 'B')}
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                                >
+                                  Lab B Sheet
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-5">
@@ -1005,16 +1325,30 @@ export default function SmartVenueOptimizationModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-xs text-slate-500 font-medium">
-            💡 Real-time dynamic venue optimizer: Section splits are preserved intact, preventing student fragmentation.
+            💡 When published, all students in overflow sections will automatically see their rebalanced room in their personal timetable.
           </p>
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              onClick={handlePublishPlan}
+              disabled={publishing || suggestions.length === 0}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer ${
+                isPublished 
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              }`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{publishing ? 'Publishing...' : isPublished ? 'Re-Publish / Sync Timetables' : 'Apply & Publish to Timetables'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
 
