@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy, FileSpreadsheet } from 'lucide-react';
+import { Layers, Phone, Pencil, Check, X, Plus, Users, Download, Loader2, Copy, FileSpreadsheet, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { syncFacultyAuthUser } from '@/app/actions/faculty';
+import CentreTimetableModal from '@/components/admin/CentreTimetableModal';
 
 export default function CentresPage() {
   const [centres, setCentres] = useState<any[]>([]);
@@ -22,7 +23,12 @@ export default function CentresPage() {
   const [membersModalOpen, setMembersModalOpen] = useState(false);
   const [selectedCentre, setSelectedCentre] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Centre Timetable Modal State
+  const [timetableModalOpen, setTimetableModalOpen] = useState(false);
+  const [timetableCentreId, setTimetableCentreId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -84,28 +90,38 @@ export default function CentresPage() {
     setMembersModalOpen(true);
     setLoadingMembers(true);
     
-    const { data } = await supabase
-      .from('allocations')
-      .select(`
-        id,
-        student:students (
-          id, name, register_no, course, section, academic_year, hosteler
-        ),
-        slot:slots!inner (
-          id, day, centre_id
-        )
-      `)
-      .eq('slot.centre_id', centre.id);
-      
-    if (data) {
-      const sorted = data
-        .filter(a => a.student) // safety check
-        .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
-      setMembers(sorted);
-    } else {
+    try {
+      const { data, error } = await supabase
+        .from('allocations')
+        .select(`
+          id,
+          student:students (
+            id, name, register_no, course, section, academic_year, hosteler
+          ),
+          slot:slots!inner (
+            id, day, centre_id
+          )
+        `)
+        .eq('slot.centre_id', centre.id);
+        
+      if (error) {
+        console.error("Error fetching members:", error);
+      }
+
+      if (data) {
+        const sorted = data
+          .filter(a => a.student) // safety check
+          .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
+        setMembers(sorted);
+      } else {
+        setMembers([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch members:", err);
       setMembers([]);
+    } finally {
+      setLoadingMembers(false);
     }
-    setLoadingMembers(false);
   };
 
   const downloadPDF = async () => {
@@ -491,7 +507,17 @@ export default function CentresPage() {
             Manage all available centres of excellence and their faculty coordinators.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={() => {
+              setTimetableCentreId(centres[0]?.id || null);
+              setTimetableModalOpen(true);
+            }}
+            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-5 py-3 rounded-2xl shadow-md font-extrabold text-sm transition-all active:scale-95 cursor-pointer"
+          >
+            <Calendar className="w-4 h-4" />
+            Centre Master Timetable
+          </button>
           <button 
             onClick={downloadOverallPDF}
             disabled={downloadingOverall || downloadingExcel}
@@ -649,14 +675,24 @@ export default function CentresPage() {
                   )
                 )}
                 
-                {/* View Members Button */}
-                <div className="mt-4 pt-4 border-t-2 border-slate-100 flex">
+                {/* View Members & Timetable Buttons */}
+                <div className="mt-4 pt-4 border-t-2 border-slate-100 flex flex-col sm:flex-row gap-2">
+                  <button 
+                    onClick={() => {
+                      setTimetableCentreId(centre.id);
+                      setTimetableModalOpen(true);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl font-extrabold text-xs transition-colors shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Timetable &amp; Schedule
+                  </button>
                   <button 
                     onClick={() => viewMembers(centre)}
-                    className="flex-1 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm transition-colors active:scale-95"
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white py-2.5 px-3 rounded-xl font-extrabold text-xs transition-colors shadow-sm active:scale-95 cursor-pointer"
                   >
                     <Users className="w-4 h-4" />
-                    View Enrolled Members 
+                    Enrolled Members
                   </button>
                 </div>
               </div>
@@ -767,6 +803,14 @@ export default function CentresPage() {
           </div>
         </div>
       )}
+
+      {/* Centre Timetable & Schedule Modal */}
+      <CentreTimetableModal
+        isOpen={timetableModalOpen}
+        onClose={() => setTimetableModalOpen(false)}
+        initialCentreId={timetableCentreId}
+        centres={centres}
+      />
     </div>
   );
 }
