@@ -318,7 +318,8 @@ export default function SmartVenueOptimizationModal({
       doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 150, 105);
-      doc.text(`📍 LAB B (SPILLOVER ROOM — EXCESS OVERFLOW ONLY):  ${item.planB.venue}`, 24, labBY + 12);
+      const bCentreLabel = item.planB.spilloverCentreName ? ` [${item.planB.spilloverCentreName}]` : '';
+      doc.text(`📍 LAB B (SPILLOVER ROOM — EXCESS OVERFLOW ONLY):  ${item.planB.venue}${bCentreLabel}`, 24, labBY + 12);
 
       doc.setFontSize(10.5);
       doc.setFont('helvetica', 'bold');
@@ -783,27 +784,47 @@ export default function SmartVenueOptimizationModal({
                         
                         {item.candidateVenues && item.candidateVenues.length > 0 ? (
                           <div className="space-y-2 mt-3">
-                            <label className="text-[11px] font-bold text-slate-700 block">
-                              Available Free Room at {item.timing}:
-                            </label>
+                            <div className="flex items-center justify-between gap-1">
+                              <label className="text-[11px] font-bold text-slate-700 block">
+                                Available Free Room at {item.timing}:
+                              </label>
+                              {(() => {
+                                const selCand = item.candidateVenues?.find((c: any) => c.venue === item.planB.venue);
+                                if (!selCand) return null;
+                                return (
+                                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 truncate max-w-[200px]" title={selCand.centreName}>
+                                    🏢 {selCand.centreName}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                             <select
                               value={item.planB.venue}
                               onChange={(e) => handleSpilloverVenueChange(item.id, e.target.value)}
-                              className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer"
+                              className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer"
                             >
                               {item.candidateVenues.map((c: any) => (
-                                <option key={c.venue} value={c.venue}>
-                                  {c.venue} — Live: {c.currentCount} / {c.capacity} occupied ({c.freeSeats} free seats)
+                                <option key={c.venue} value={c.venue} className="py-1">
+                                  {c.venue} — {c.centreName} (Live: {c.currentCount}/{c.capacity} occupied • {c.freeSeats} free seats)
                                 </option>
                               ))}
                             </select>
 
-                            {/* Live Capacity Meter for Selected Spillover Room */}
+                            {/* Live Capacity Meter for Selected Spillover Room with Clear Centre Name */}
                             {(() => {
                               const selCand = item.candidateVenues?.find((c: any) => c.venue === item.planB.venue);
                               if (!selCand) return null;
                               return (
-                                <div className="mt-2 p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-1 text-[11px]">
+                                <div className="mt-2 p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-1.5 text-[11px]">
+                                  {/* Centre Name Banner */}
+                                  <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
+                                    <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                    <span className="text-slate-500 font-bold">Assigned Centre:</span>
+                                    <strong className="text-indigo-950 font-black truncate" title={selCand.centreName}>
+                                      {selCand.centreName}
+                                    </strong>
+                                  </div>
+
                                   <div className="flex items-center justify-between font-bold">
                                     <span className="text-slate-500">Live Room Capacity:</span>
                                     <span className="text-slate-800 font-black">{selCand.capacity} Seats</span>
@@ -825,7 +846,7 @@ export default function SmartVenueOptimizationModal({
                                   <div className="flex items-center justify-between font-bold">
                                     <span className="text-slate-600">Free Seats After Intake:</span>
                                     <span className="text-emerald-700 font-black">
-                                      {Math.max(0, selCand.freeSeats - item.planB.total)} Seats
+                                      {Math.max(0, selCand.freeSeats - item.planB.total)} Seats Free
                                     </span>
                                   </div>
                                 </div>
@@ -866,7 +887,7 @@ export default function SmartVenueOptimizationModal({
                                 {item.planA.total} Students
                               </span>
                             </div>
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center justify-between mb-1">
                               <p className="text-xs font-black text-slate-800 flex items-center gap-1">
                                 <MapPin className="w-3.5 h-3.5 text-indigo-600" />
                                 {item.planA.venue}
@@ -878,6 +899,9 @@ export default function SmartVenueOptimizationModal({
                                 Sign Sheet
                               </button>
                             </div>
+                            <p className="text-[10px] text-indigo-900 font-extrabold truncate mb-1" title={item.centreName}>
+                              {item.centreName}
+                            </p>
                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
                               Room Capacity Retained
                             </p>
@@ -920,7 +944,7 @@ export default function SmartVenueOptimizationModal({
                                 {item.planB.total} Students
                               </span>
                             </div>
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center justify-between mb-1">
                               <p className="text-xs font-black text-emerald-950 flex items-center gap-1">
                                 <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                                 {item.planB.venue}
@@ -932,6 +956,9 @@ export default function SmartVenueOptimizationModal({
                                 Sign Sheet
                               </button>
                             </div>
+                            <p className="text-[10px] text-emerald-900 font-extrabold truncate mb-1" title={item.planB.spilloverCentreName}>
+                              {item.planB.spilloverCentreName ? `[${item.planB.spilloverCentreName}]` : '[Spillover Room]'}
+                            </p>
                             <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider mb-1.5">
                               Excess Overflow Only
                             </p>
