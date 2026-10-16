@@ -44,11 +44,17 @@ export default function CentreTimetableModal({
   const [selectedSlotForList, setSelectedSlotForList] = useState<any | null>(null);
 
   // By Day Master State
-  const [selectedDay, setSelectedDay] = useState<'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY'>('MONDAY');
+  const [selectedDay, setSelectedDay] = useState<string>('ALL');
   const [dayLoading, setDayLoading] = useState(false);
   const [daySlots, setDaySlots] = useState<any[]>([]);
   const [dayAllocations, setDayAllocations] = useState<any[]>([]);
   const [dayCentreFilter, setDayCentreFilter] = useState<string>('ALL');
+
+  // Rebalanced Full Slots State
+  const [rebalancedAllSlots, setRebalancedAllSlots] = useState<any[]>([]);
+  const [rebalancedScope, setRebalancedScope] = useState<'ALL' | 'OVERCROWDED'>('ALL');
+  const [rebalancedDayFilter, setRebalancedDayFilter] = useState<string>('ALL');
+  const [rebalancedCentreFilter, setRebalancedCentreFilter] = useState<string>('ALL');
 
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [downloadingPDF, setDownloadingPDF] = useState(false);
@@ -140,16 +146,21 @@ export default function CentreTimetableModal({
     async function fetchDayData() {
       setDayLoading(true);
       try {
-        const { data: slotData, error: slotErr } = await supabase
+        let query = supabase
           .from('slots')
           .select('*, centre:centres(id, name, faculty_name, faculty_mobile)')
-          .eq('day', selectedDay)
           .not('centre_id', 'is', null)
+          .order('day')
           .order('session')
           .order('start_time');
 
+        if (selectedDay !== 'ALL') {
+          query = query.eq('day', selectedDay);
+        }
+
+        const { data: slotData, error: slotErr } = await query;
         if (slotErr) throw slotErr;
-        const currentSlots = slotData || [];
+        const currentSlots = (slotData || []).filter(s => s.centre?.name !== 'Sports' && s.capacity > 0);
 
         if (currentSlots.length > 0) {
           const slotIds = currentSlots.map(s => s.id);
@@ -207,6 +218,7 @@ export default function CentreTimetableModal({
         const data = await res.json();
         if (data.success && isMounted) {
           setRebalancedSuggestions(data.suggestions || []);
+          setRebalancedAllSlots(data.allSlots || []);
           setIsRebalancedPublished(!!data.isPublished);
         }
       } catch (err) {
@@ -315,6 +327,16 @@ export default function CentreTimetableModal({
         return (a.student?.register_no || '').localeCompare(b.student?.register_no || '');
       });
   }, [dayAllocations, daySlots, dayCentreFilter, studentSearchQuery]);
+
+  // Filtered rebalanced slots
+  const rebalancedDisplayList = useMemo(() => {
+    const base = rebalancedScope === 'ALL' ? rebalancedAllSlots : rebalancedSuggestions;
+    return base.filter(s => {
+      if (rebalancedDayFilter !== 'ALL' && s.day !== rebalancedDayFilter) return false;
+      if (rebalancedCentreFilter !== 'ALL' && s.centreName !== rebalancedCentreFilter) return false;
+      return true;
+    });
+  }, [rebalancedScope, rebalancedAllSlots, rebalancedSuggestions, rebalancedDayFilter, rebalancedCentreFilter]);
 
   // Export Centre Timetable PDF (Single Centre)
   const downloadTimetablePDF = async () => {
@@ -528,14 +550,15 @@ export default function CentreTimetableModal({
       doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
-      doc.text(`DAY MASTER SCHEDULE: ${selectedDay} (ALL CENTRES)`, pageWidth / 2, 28, { align: 'center' });
+      const titleDay = selectedDay === 'ALL' ? 'ALL DAYS (WEEKLY MASTER SCHEDULE)' : selectedDay;
+      doc.text(`CENTRE MASTER TIMETABLE: ${titleDay}`, pageWidth / 2, 28, { align: 'center' });
 
       const activeCentresCount = new Set(daySlots.map(s => s.centre_id)).size;
       doc.setFontSize(9.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
       doc.text(
-        `Total Active Centres: ${activeCentresCount}   |   Total Enrolled Students: ${dayAllocations.length}   |   Academic Year: 2026-2027`,
+        `Total Active Centres: ${activeCentresCount}   |   Total Slots: ${daySlots.length}   |   Total Enrolled Students: ${dayAllocations.length}   |   Academic Year: 2026-2027`,
         pageWidth / 2,
         34,
         { align: 'center' }
@@ -545,11 +568,16 @@ export default function CentreTimetableModal({
       doc.setLineWidth(0.5);
       doc.line(14, 38, pageWidth - 14, 38);
 
-      const tableHead = [
-        ['Session', 'Timing', 'Centre Name', 'Venue', 'Faculty Coordinator', 'Strength', 'Allocated Departments & Sections']
-      ];
+      const tableHead = selectedDay === 'ALL'
+        ? [['Day', 'Session', 'Timing', 'Centre Name', 'Venue', 'Faculty Coordinator', 'Strength', 'Allocated Departments & Sections']]
+        : [['Session', 'Timing', 'Centre Name', 'Venue', 'Faculty Coordinator', 'Strength', 'Allocated Departments & Sections']];
 
+      const dayOrderMap: Record<string, number> = { MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5 };
       const sortedSlots = [...daySlots].sort((a, b) => {
+        if (selectedDay === 'ALL') {
+          const dDiff = (dayOrderMap[a.day] || 99) - (dayOrderMap[b.day] || 99);
+          if (dDiff !== 0) return dDiff;
+        }
         const sessOrder = (s: string) => (s === 'FORENOON' ? 1 : 2);
         const diff = sessOrder(a.session) - sessOrder(b.session);
         if (diff !== 0) return diff;
@@ -578,7 +606,7 @@ export default function CentreTimetableModal({
           : 'Not Assigned';
         const strength = `${slotAllocs.length} / ${slot.capacity}`;
 
-        return [
+        const row = [
           sessionLabel,
           timing,
           slot.centre?.name || 'Centre',
@@ -587,6 +615,12 @@ export default function CentreTimetableModal({
           strength,
           deptsText || 'General Choice',
         ];
+
+        if (selectedDay === 'ALL') {
+          row.unshift(slot.day);
+        }
+
+        return row;
       });
 
       autoTable(doc, {
@@ -594,9 +628,18 @@ export default function CentreTimetableModal({
         body: tableBody,
         startY: 42,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 2.5, valign: 'top' },
+        styles: { fontSize: 7.5, cellPadding: 2.5, valign: 'top' },
         headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-        columnStyles: {
+        columnStyles: selectedDay === 'ALL' ? {
+          0: { cellWidth: 20, fontStyle: 'bold', halign: 'center' },
+          1: { cellWidth: 18, fontStyle: 'bold', halign: 'center' },
+          2: { cellWidth: 22, fontStyle: 'bold', halign: 'center' },
+          3: { cellWidth: 46, fontStyle: 'bold' },
+          4: { cellWidth: 20, halign: 'center' },
+          5: { cellWidth: 38 },
+          6: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+          7: { cellWidth: 84 },
+        } : {
           0: { cellWidth: 20, fontStyle: 'bold', halign: 'center' },
           1: { cellWidth: 24, fontStyle: 'bold', halign: 'center' },
           2: { cellWidth: 50, fontStyle: 'bold' },
@@ -616,7 +659,7 @@ export default function CentreTimetableModal({
         Math.min(finalY + 8, 202)
       );
 
-      doc.save(`RIT_${selectedDay}_Centre_Master_Schedule.pdf`);
+      doc.save(`RIT_${selectedDay === 'ALL' ? 'Weekly_Overall_All_Days' : selectedDay}_Centre_Master_Schedule.pdf`);
     } catch (err) {
       console.error('Day Master PDF Generation failed:', err);
       alert('Failed to generate day master timetable PDF');
@@ -681,7 +724,7 @@ export default function CentreTimetableModal({
           const slot = slotMap.get(a.slot_id);
           return {
             'S.No': idx + 1,
-            'Day': selectedDay,
+            'Day': slot?.day || selectedDay,
             'Session': slot?.session || '',
             'Timing': slot ? `${slot.start_time?.substring(0, 5)} - ${slot.end_time?.substring(0, 5)}` : '',
             'Centre Name': slot?.centre?.name || '',
@@ -699,10 +742,11 @@ export default function CentreTimetableModal({
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
       const wsRoster = XLSX.utils.json_to_sheet(rosterData);
 
-      XLSX.utils.book_append_sheet(workbook, wsSummary, `${selectedDay} Overview`);
-      XLSX.utils.book_append_sheet(workbook, wsRoster, `${selectedDay} Student Roster`);
+      const titleSheet = selectedDay === 'ALL' ? 'All Days' : selectedDay;
+      XLSX.utils.book_append_sheet(workbook, wsSummary, `${titleSheet} Overview`);
+      XLSX.utils.book_append_sheet(workbook, wsRoster, `${titleSheet} Student Roster`);
 
-      XLSX.writeFile(workbook, `RIT_${selectedDay}_Centre_Master_Schedule_and_Roster.xlsx`);
+      XLSX.writeFile(workbook, `RIT_${selectedDay === 'ALL' ? 'Weekly_Overall_All_Days' : selectedDay}_Centre_Master_Schedule_and_Roster.xlsx`);
     } catch (err) {
       console.error('Day Master Excel Export failed:', err);
       alert('Failed to export Day Master Excel');
@@ -845,8 +889,21 @@ export default function CentreTimetableModal({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-black uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1.5">
                 <CalendarDays className="w-4 h-4 text-amber-600" />
-                Choose Day:
+                Day:
               </span>
+              <button
+                onClick={() => {
+                  setSelectedDay('ALL');
+                  setDayCentreFilter('ALL');
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedDay === 'ALL'
+                    ? 'bg-indigo-600 text-white shadow-md scale-105'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                All Days (Weekly Overall)
+              </button>
               {daysList.map(d => (
                 <button
                   key={d}
@@ -854,7 +911,7 @@ export default function CentreTimetableModal({
                     setSelectedDay(d);
                     setDayCentreFilter('ALL');
                   }}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     selectedDay === d
                       ? 'bg-slate-900 text-white shadow-md scale-105'
                       : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
@@ -863,6 +920,21 @@ export default function CentreTimetableModal({
                   {d}
                 </button>
               ))}
+
+              {/* Centre Filter Dropdown */}
+              <div className="flex items-center gap-1.5 ml-2">
+                <span className="text-xs font-bold text-slate-500">Centre:</span>
+                <select
+                  value={dayCentreFilter}
+                  onChange={e => setDayCentreFilter(e.target.value)}
+                  className="text-xs font-extrabold bg-white text-slate-800 border border-slate-300 rounded-xl px-2.5 py-1.5 focus:outline-indigo-600 cursor-pointer max-w-[190px]"
+                >
+                  <option value="ALL">All Centres ({centres.length})</option>
+                  {centres.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Day Master Download Actions */}
@@ -874,7 +946,7 @@ export default function CentreTimetableModal({
                 title={`Download entire ${selectedDay} schedule PDF`}
               >
                 <Printer className="w-4 h-4 text-amber-300" />
-                <span>{downloadingPDF ? 'Generating...' : `Download ${selectedDay} Master PDF`}</span>
+                <span>{downloadingPDF ? 'Generating...' : `Download ${selectedDay === 'ALL' ? 'All-Days' : selectedDay} Master PDF`}</span>
               </button>
               <button
                 onClick={downloadDayMasterExcel}
@@ -883,7 +955,7 @@ export default function CentreTimetableModal({
                 title={`Export entire ${selectedDay} master roster in Excel`}
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                <span>{downloadingExcel ? 'Exporting...' : `Export ${selectedDay} Excel Roster`}</span>
+                <span>{downloadingExcel ? 'Exporting...' : `Export ${selectedDay === 'ALL' ? 'All-Days' : selectedDay} Excel Roster`}</span>
               </button>
             </div>
           </div>
@@ -891,13 +963,65 @@ export default function CentreTimetableModal({
           // Rebalanced Schedule Control Bar
           <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border-b border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-emerald-600" />
-                Rebalanced Master Timetable:
-              </span>
-              <span className="text-xs font-bold text-slate-600 hidden sm:inline">
-                Lab A (70 Max Capacity) &amp; Lab B (Spillover Room)
-              </span>
+              {/* Scope Switcher */}
+              <div className="flex items-center bg-white/80 p-0.5 rounded-xl border border-emerald-300 mr-1">
+                <button
+                  onClick={() => setRebalancedScope('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    rebalancedScope === 'ALL'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900'
+                  }`}
+                >
+                  🌐 All Centre Slots ({rebalancedAllSlots.length})
+                </button>
+                <button
+                  onClick={() => setRebalancedScope('OVERCROWDED')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    rebalancedScope === 'OVERCROWDED'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900'
+                  }`}
+                >
+                  ⚠️ Overcrowded Only ({rebalancedSuggestions.length})
+                </button>
+              </div>
+
+              {/* Centre Filter */}
+              <select
+                value={rebalancedCentreFilter}
+                onChange={e => setRebalancedCentreFilter(e.target.value)}
+                className="text-xs font-extrabold bg-white text-slate-800 border border-emerald-300 rounded-xl px-2.5 py-1.5 focus:outline-emerald-600 cursor-pointer max-w-[190px]"
+              >
+                <option value="ALL">All Centres</option>
+                {centres.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+
+              {/* Day filter pills */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setRebalancedDayFilter('ALL')}
+                  className={`px-2 py-1 rounded-lg text-xs font-black cursor-pointer ${
+                    rebalancedDayFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  All Days
+                </button>
+                {daysList.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setRebalancedDayFilter(d)}
+                    className={`px-2 py-1 rounded-lg text-xs font-black cursor-pointer ${
+                      rebalancedDayFilter === d ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {d.substring(0, 3)}
+                  </button>
+                ))}
+              </div>
+
               {isRebalancedPublished ? (
                 <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                   🟢 Live in Timetables
@@ -1223,11 +1347,13 @@ export default function CentreTimetableModal({
                   <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 p-4 rounded-2xl border border-indigo-200 shadow-sm flex items-center justify-between">
                     <div>
                       <p className="text-[11px] font-black uppercase tracking-wider text-indigo-500">Day Selected</p>
-                      <h4 className="text-xl font-black text-indigo-950 mt-0.5">{selectedDay}</h4>
+                      <h4 className="text-xl font-black text-indigo-950 mt-0.5">
+                        {selectedDay === 'ALL' ? 'All Days (Weekly Overall)' : selectedDay}
+                      </h4>
                       <p className="text-xs text-indigo-700 font-semibold mt-0.5">Master Schedule</p>
                     </div>
-                    <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-md">
-                      {selectedDay.substring(0, 2)}
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-md text-xs">
+                      {selectedDay === 'ALL' ? 'ALL' : selectedDay.substring(0, 2)}
                     </div>
                   </div>
 
@@ -1250,7 +1376,9 @@ export default function CentreTimetableModal({
                       <h4 className="text-2xl font-black text-emerald-950 mt-0.5">
                         {dayAllocations.length} Students
                       </h4>
-                      <p className="text-xs text-emerald-700 font-semibold mt-0.5">Attending on {selectedDay}</p>
+                      <p className="text-xs text-emerald-700 font-semibold mt-0.5">
+                        {selectedDay === 'ALL' ? 'Across All Days (Mon - Fri)' : `Attending on ${selectedDay}`}
+                      </p>
                     </div>
                     <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md">
                       <Users className="w-5 h-5" />
@@ -1268,13 +1396,13 @@ export default function CentreTimetableModal({
                         Morning Session (09:40 — 10:30 AM)
                       </h4>
                       <span className="text-xs font-bold text-slate-500">
-                        {daySlots.filter(s => s.session === 'FORENOON' || s.start_time?.startsWith('09:40')).length} Centres Running
+                        {daySlots.filter(s => (dayCentreFilter === 'ALL' || s.centre_id === dayCentreFilter) && (s.session === 'FORENOON' || s.start_time?.startsWith('09:40'))).length} Centres Running
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                       {daySlots
-                        .filter(s => s.session === 'FORENOON' || s.start_time?.startsWith('09:40'))
+                        .filter(s => (dayCentreFilter === 'ALL' || s.centre_id === dayCentreFilter) && (s.session === 'FORENOON' || s.start_time?.startsWith('09:40')))
                         .map(slot => {
                           const slotAllocs = dayAllocations.filter(a => a.slot_id === slot.id);
                           const deptMap: Record<string, number> = {};
@@ -1316,7 +1444,12 @@ export default function CentreTimetableModal({
                                 </span>
                               </div>
 
-                              <div className="flex items-center gap-2 mb-2 text-xs">
+                              <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
+                                {selectedDay === 'ALL' && (
+                                  <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">
+                                    {slot.day?.substring(0, 3)}
+                                  </span>
+                                )}
                                 <span className="bg-slate-900 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1">
                                   <MapPin className="w-3 h-3 text-amber-400" />
                                   {slot.venue || 'TBA'}
@@ -1358,13 +1491,13 @@ export default function CentreTimetableModal({
                         Afternoon Session (01:10 — 02:00 PM)
                       </h4>
                       <span className="text-xs font-bold text-slate-500">
-                        {daySlots.filter(s => s.session === 'AFTERNOON' || s.start_time?.startsWith('13:10')).length} Centres Running
+                        {daySlots.filter(s => (dayCentreFilter === 'ALL' || s.centre_id === dayCentreFilter) && (s.session === 'AFTERNOON' || s.start_time?.startsWith('13:10'))).length} Centres Running
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                       {daySlots
-                        .filter(s => s.session === 'AFTERNOON' || s.start_time?.startsWith('13:10'))
+                        .filter(s => (dayCentreFilter === 'ALL' || s.centre_id === dayCentreFilter) && (s.session === 'AFTERNOON' || s.start_time?.startsWith('13:10')))
                         .map(slot => {
                           const slotAllocs = dayAllocations.filter(a => a.slot_id === slot.id);
                           const deptMap: Record<string, number> = {};
@@ -1406,7 +1539,12 @@ export default function CentreTimetableModal({
                                 </span>
                               </div>
 
-                              <div className="flex items-center gap-2 mb-2 text-xs">
+                              <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
+                                {selectedDay === 'ALL' && (
+                                  <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">
+                                    {slot.day?.substring(0, 3)}
+                                  </span>
+                                )}
                                 <span className="bg-slate-900 text-white font-black text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1">
                                   <MapPin className="w-3 h-3 text-indigo-400" />
                                   {slot.venue || 'TBA'}
@@ -1561,12 +1699,18 @@ export default function CentreTimetableModal({
                   Loading Rebalanced Schedule and Section Allocations...
                 </p>
               </div>
-            ) : rebalancedSuggestions.length === 0 ? (
+            ) : rebalancedDisplayList.length === 0 ? (
               <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                <h3 className="text-base font-extrabold text-slate-800">All Centres Operating Within Normal Room Capacity</h3>
+                <h3 className="text-base font-extrabold text-slate-800">
+                  {rebalancedScope === 'OVERCROWDED' && rebalancedDayFilter === 'ALL' && rebalancedCentreFilter === 'ALL'
+                    ? 'All Centres Operating Within Normal Room Capacity'
+                    : 'No Slots Found for the Selected Filters'}
+                </h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  No centres currently exceed standard capacity (&gt; 70 students).
+                  {rebalancedScope === 'OVERCROWDED' && rebalancedDayFilter === 'ALL' && rebalancedCentreFilter === 'ALL'
+                    ? 'No centres currently exceed standard capacity (> 70 students).'
+                    : 'Try changing day/centre filters or switching between "All Centre Slots" and "Overcrowded Only".'}
                 </p>
               </div>
             ) : (
@@ -1579,7 +1723,9 @@ export default function CentreTimetableModal({
                         <span>Rebalanced Slot Timetable &amp; Venue Schedule (2026)</span>
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Master view of Primary Venues (Lab A: 70 seats) and Spillover Venues (Lab B: balance overflow).
+                        {rebalancedScope === 'ALL'
+                          ? `Showing all ${rebalancedDisplayList.length} centre slots across Monday to Friday with venue distribution.`
+                          : 'Master view of Overcrowded Primary Venues (Lab A: 70 seats) and Spillover Venues (Lab B: balance overflow).'}
                       </p>
                     </div>
                     {onOpenOptimizer && (
@@ -1605,7 +1751,7 @@ export default function CentreTimetableModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {rebalancedSuggestions.map((item) => (
+                        {rebalancedDisplayList.map((item) => (
                           <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="p-3 align-top whitespace-nowrap">
                               <span className="font-black text-slate-900 text-xs block">{item.day}</span>
@@ -1627,73 +1773,103 @@ export default function CentreTimetableModal({
 
                             <td className="p-3 align-top text-center whitespace-nowrap">
                               <span className="text-base font-black text-slate-900 block leading-none">{item.totalEnrolled}</span>
-                              <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded inline-block mt-1">
-                                +{item.excessCount} Overcrowded
-                              </span>
+                              {item.isOvercrowded ? (
+                                <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded inline-block mt-1">
+                                  +{item.excessCount} Overcrowded
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-block mt-1">
+                                  ✓ Capacity OK
+                                </span>
+                              )}
                             </td>
 
                             <td className="p-3 align-top bg-indigo-50/30 border-x border-indigo-100 min-w-[210px]">
                               <div className="flex items-center justify-between mb-1.5">
                                 <span className="font-black text-indigo-950 flex items-center gap-1 text-xs">
                                   <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                                  {item.planA.venue}
+                                  {item.planA?.venue || item.currentVenue}
                                 </span>
                                 <span className="text-[10px] font-black bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200">
-                                  {item.planA.total} Students
+                                  {item.planA?.total ?? item.totalEnrolled} Students
                                 </span>
                               </div>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                                Full Room Capacity Retained
+                                {item.isOvercrowded ? 'Room Capacity Retained (70 Seats)' : 'Full Room Capacity Retained'}
                               </span>
                               <div className="space-y-1 mt-1">
-                                {item.planA.sections.map((sec: any, sIdx: number) => (
-                                  <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
-                                    <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
-                                    <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
-                                  </div>
-                                ))}
+                                {(item.planA?.sections || []).length === 0 ? (
+                                  <p className="text-[10px] text-slate-400 italic">No sections enrolled</p>
+                                ) : (
+                                  item.planA.sections.map((sec: any, sIdx: number) => (
+                                    <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
+                                      <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
+                                      <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </td>
 
                             <td className="p-3 align-top bg-emerald-50/30 border-r border-emerald-100 min-w-[210px]">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-black text-emerald-950 flex items-center gap-1 text-xs">
-                                  <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                  {item.planB.venue}
-                                </span>
-                                <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-                                  {item.planB.total} Students
-                                </span>
-                              </div>
-                              {item.planB.spilloverCentreName && (
-                                <span className="text-[9.5px] font-extrabold text-emerald-700 block mb-1">
-                                  [{item.planB.spilloverCentreName}]
-                                </span>
-                              )}
-                              <div className="space-y-1 mt-1">
-                                {item.planB.sections.map((sec: any, sIdx: number) => (
-                                  <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
-                                    <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
-                                    <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                              {item.planB ? (
+                                <>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-black text-emerald-950 flex items-center gap-1 text-xs">
+                                      <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      {item.planB.venue}
+                                    </span>
+                                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                                      {item.planB.total} Students
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
+                                  {item.planB.spilloverCentreName && (
+                                    <span className="text-[9.5px] font-extrabold text-emerald-700 block mb-1">
+                                      [{item.planB.spilloverCentreName}]
+                                    </span>
+                                  )}
+                                  <div className="space-y-1 mt-1">
+                                    {(item.planB.sections || []).map((sec: any, sIdx: number) => (
+                                      <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                        <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
+                                        <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="py-4 text-center">
+                                  <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200 inline-block">
+                                    ✓ Single Room Accommodated
+                                  </span>
+                                  <p className="text-[9px] text-slate-400 mt-1">Within standard room capacity</p>
+                                </div>
+                              )}
                             </td>
 
                             <td className="p-3 align-top text-center whitespace-nowrap">
-                              {isRebalancedPublished ? (
-                                <div className="inline-flex flex-col items-center gap-1">
-                                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Live in Timetable
-                                  </span>
-                                  <span className="text-[9px] text-slate-400">Students see {item.planB.venue}</span>
-                                </div>
+                              {item.isOvercrowded ? (
+                                isRebalancedPublished ? (
+                                  <div className="inline-flex flex-col items-center gap-1">
+                                    <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Live in Timetable
+                                    </span>
+                                    <span className="text-[9px] text-slate-400">Students see {item.planB?.venue}</span>
+                                  </div>
+                                ) : (
+                                  <div className="inline-flex flex-col items-center gap-1">
+                                    <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                      <AlertTriangle className="w-3 h-3 text-amber-600" /> Draft Plan
+                                    </span>
+                                    <span className="text-[9px] text-slate-400">Not published</span>
+                                  </div>
+                                )
                               ) : (
                                 <div className="inline-flex flex-col items-center gap-1">
-                                  <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                    <AlertTriangle className="w-3 h-3 text-amber-600" /> Draft Plan
+                                  <span className="text-[10px] font-black text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Standard Assigned
                                   </span>
-                                  <span className="text-[9px] text-slate-400">Not published</span>
+                                  <span className="text-[9px] text-slate-400">{item.currentVenue}</span>
                                 </div>
                               )}
                             </td>

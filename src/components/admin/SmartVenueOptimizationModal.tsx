@@ -22,7 +22,10 @@ export default function SmartVenueOptimizationModal({
 }: SmartVenueOptimizationModalProps) {
   const [loading, setLoading] = useState(true);
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [allSlots, setAllSlots] = useState<any[]>([]);
   const [selectedDayFilter, setSelectedDayFilter] = useState<string>('ALL');
+  const [selectedCentreFilter, setSelectedCentreFilter] = useState<string>('ALL');
+  const [timetableScope, setTimetableScope] = useState<'ALL_CENTRE_SLOTS' | 'OVERCROWDED_ONLY'>('ALL_CENTRE_SLOTS');
   const [selectedSlotForRoster, setSelectedSlotForRoster] = useState<any | null>(null);
   const [activeRosterTab, setActiveRosterTab] = useState<'A' | 'B'>('A');
   const [rosterSearch, setRosterSearch] = useState('');
@@ -35,7 +38,7 @@ export default function SmartVenueOptimizationModal({
   const [isPublished, setIsPublished] = useState(false);
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
-  const [modalViewMode, setModalViewMode] = useState<'CARDS' | 'TIMETABLE'>('CARDS');
+  const [modalViewMode, setModalViewMode] = useState<'CARDS' | 'TIMETABLE'>('TIMETABLE');
 
   const daysList = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
 
@@ -47,6 +50,7 @@ export default function SmartVenueOptimizationModal({
       const data = await res.json();
       if (data.success && data.suggestions) {
         setSuggestions(data.suggestions);
+        setAllSlots(data.allSlots || []);
         setIsPublished(!!data.isPublished);
         setPublishedAt(data.publishedAt || null);
       } else {
@@ -184,11 +188,33 @@ export default function SmartVenueOptimizationModal({
     }));
   };
 
-  // Filter suggestions by selected day
+  // Unique list of all centres
+  const uniqueCentres = useMemo(() => {
+    const set = new Set<string>();
+    allSlots.forEach(s => {
+      if (s.centreName) set.add(s.centreName);
+    });
+    return Array.from(set).sort();
+  }, [allSlots]);
+
+  // Timetable display slots: when in TIMETABLE mode, can toggle ALL slots or only overcrowded
+  const timetableDisplaySlots = useMemo(() => {
+    const baseList = timetableScope === 'ALL_CENTRE_SLOTS' ? allSlots : suggestions;
+    return baseList.filter(s => {
+      if (selectedDayFilter !== 'ALL' && s.day !== selectedDayFilter) return false;
+      if (selectedCentreFilter !== 'ALL' && s.centreName !== selectedCentreFilter) return false;
+      return true;
+    });
+  }, [timetableScope, allSlots, suggestions, selectedDayFilter, selectedCentreFilter]);
+
+  // Filter suggestions by selected day and centre for CARDS view
   const filteredSuggestions = useMemo(() => {
-    if (selectedDayFilter === 'ALL') return suggestions;
-    return suggestions.filter(s => s.day === selectedDayFilter);
-  }, [suggestions, selectedDayFilter]);
+    return suggestions.filter(s => {
+      if (selectedDayFilter !== 'ALL' && s.day !== selectedDayFilter) return false;
+      if (selectedCentreFilter !== 'ALL' && s.centreName !== selectedCentreFilter) return false;
+      return true;
+    });
+  }, [suggestions, selectedDayFilter, selectedCentreFilter]);
 
   // Overall Statistics
   const totalBenefittedStudents = useMemo(() => {
@@ -244,16 +270,23 @@ export default function SmartVenueOptimizationModal({
         doc.text('RAJALAKSHMI INSTITUTE OF TECHNOLOGY', pageWidth / 2, 14, { align: 'center' });
       }
 
+      const exportList = modalViewMode === 'TIMETABLE' ? timetableDisplaySlots : suggestions;
+      const titleText = modalViewMode === 'TIMETABLE'
+        ? (timetableScope === 'ALL_CENTRE_SLOTS'
+            ? 'RIT CENTRE OVERALL WEEKLY MASTER TIMETABLE & VENUE SCHEDULE'
+            : 'SMART VENUE REBALANCING & ROOM SPILLOVER TIMETABLE')
+        : 'SMART VENUE REBALANCING & ROOM SPILLOVER OPTIMIZATION PLAN';
+
       doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
-      doc.text('SMART VENUE REBALANCING & ROOM SPILLOVER OPTIMIZATION PLAN', pageWidth / 2, 28, { align: 'center' });
+      doc.text(titleText, pageWidth / 2, 28, { align: 'center' });
 
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
       doc.text(
-        `Overcrowded Slots Balanced: ${suggestions.length}   |   Total Benefitted Students: ${totalBenefittedStudents}   |   Academic Year: 2026-2027`,
+        `Total Slots: ${exportList.length}   |   Overcrowded Balanced: ${suggestions.length}   |   Academic Year: 2026-2027`,
         pageWidth / 2,
         34,
         { align: 'center' }
@@ -264,23 +297,23 @@ export default function SmartVenueOptimizationModal({
       doc.line(14, 38, pageWidth - 14, 38);
 
       const tableHead = [
-        ['Day & Timing', 'Overcrowded Centre', 'Current Venue & Total', 'Assigned Spillover Room', 'Lab A (Primary Venue)', 'Lab B (Spillover Venue)']
+        ['Day & Timing', 'Centre & Coordinator', 'Enrolled & Status', 'Lab A (Primary Venue)', 'Lab B (Spillover Venue)']
       ];
 
-      const tableBody = suggestions.map(s => {
+      const tableBody = exportList.map(s => {
         const timeInfo = `${s.day}\n${s.session === 'FORENOON' ? 'Morning' : 'Afternoon'}\n(${s.timing})`;
         const centreInfo = `${s.centreName}\nCoord: ${s.coordinatorName}`;
-        const currentVenueInfo = `Venue: ${s.currentVenue}\nTotal: ${s.totalEnrolled} Students\n(Overcrowded)`;
-
-        const spilloverInfo = `Venue: ${s.planB.venue}\n${s.planB.spilloverCentreName ? `(${s.planB.spilloverCentreName})` : ''}`;
+        const currentVenueInfo = `Venue: ${s.currentVenue || s.planA.venue}\nTotal: ${s.totalEnrolled} Students\n${s.isOvercrowded ? `(+${s.excessCount} Overflow)` : '(Within Capacity)'}`;
 
         const planAText = `Venue: ${s.planA.venue}\nStrength: ${s.planA.total} Students\n\nSections:\n` +
-          s.planA.sections.map((x: any) => `• ${x.name}: ${x.count}`).join('\n');
+          (s.planA.sections || []).map((x: any) => `• ${x.name}: ${x.count}`).join('\n');
 
-        const planBText = `Venue: ${s.planB.venue}\nStrength: ${s.planB.total} Students\n\nSections:\n` +
-          s.planB.sections.map((x: any) => `• ${x.name}: ${x.count}`).join('\n');
+        const planBText = s.planB
+          ? `Venue: ${s.planB.venue} ${s.planB.spilloverCentreName ? `[${s.planB.spilloverCentreName}]` : ''}\nStrength: ${s.planB.total} Students\n\nSections:\n` +
+            (s.planB.sections || []).map((x: any) => `• ${x.name}: ${x.count}`).join('\n')
+          : 'Single Room Accommodated\n(Within 70 Seat Capacity)';
 
-        return [timeInfo, centreInfo, currentVenueInfo, spilloverInfo, planAText, planBText];
+        return [timeInfo, centreInfo, currentVenueInfo, planAText, planBText];
       });
 
       autoTable(doc, {
@@ -495,34 +528,38 @@ export default function SmartVenueOptimizationModal({
 
   // 4. Download Master Proposal Excel
   const downloadOptimizationExcel = () => {
-    if (suggestions.length === 0) return;
+    const exportList = modalViewMode === 'TIMETABLE' ? timetableDisplaySlots : suggestions;
+    if (exportList.length === 0) return;
     setDownloadingExcel(true);
 
     try {
-      const summaryData = suggestions.map((s, idx) => ({
+      const summaryData = exportList.map((s, idx) => ({
         'S.No': idx + 1,
         'Day': s.day,
         'Session': s.session,
         'Timing': s.timing,
         'Centre Name': s.centreName,
         'Coordinator': `${s.coordinatorName} (${s.coordinatorMobile})`,
-        'Original Room': s.currentVenue,
         'Total Enrolled': s.totalEnrolled,
-        'Recommended Lab A Venue': s.planA.venue,
+        'Room Capacity Status': s.isOvercrowded ? `Overcrowded (+${s.excessCount})` : 'Within Normal Capacity',
+        'Lab A Venue': s.planA.venue,
         'Lab A Strength': s.planA.total,
-        'Lab A Sections': s.planA.sections.map((x: any) => `${x.name}: ${x.count}`).join('; '),
-        'Recommended Lab B Venue': s.planB.venue,
-        'Lab B Strength': s.planB.total,
-        'Lab B Sections': s.planB.sections.map((x: any) => `${x.name}: ${x.count}`).join('; '),
+        'Lab A Sections': (s.planA.sections || []).map((x: any) => `${x.name}: ${x.count}`).join('; '),
+        'Lab B Spillover Venue': s.planB ? s.planB.venue : 'None (Single Room)',
+        'Lab B Strength': s.planB ? s.planB.total : 0,
+        'Lab B Sections': s.planB ? (s.planB.sections || []).map((x: any) => `${x.name}: ${x.count}`).join('; ') : 'None',
       }));
 
       const workbook = XLSX.utils.book_new();
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(workbook, wsSummary, 'Venue Optimization Plan');
-      XLSX.writeFile(workbook, 'RIT_Smart_Venue_Optimization_Plan.xlsx');
+      const sheetTitle = modalViewMode === 'TIMETABLE' && timetableScope === 'ALL_CENTRE_SLOTS'
+        ? 'All Days Master Timetable'
+        : 'Venue Optimization Plan';
+      XLSX.utils.book_append_sheet(workbook, wsSummary, sheetTitle);
+      XLSX.writeFile(workbook, `RIT_Centre_Master_Timetable_${modalViewMode.toLowerCase()}.xlsx`);
     } catch (err) {
       console.error('Excel Export failed:', err);
-      alert('Failed to export optimization plan Excel');
+      alert('Failed to export timetable Excel');
     } finally {
       setDownloadingExcel(false);
     }
@@ -677,51 +714,98 @@ export default function SmartVenueOptimizationModal({
 
         {/* STATS & FILTER BAR */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-          {/* Day Filters */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-400 mr-1.5 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" /> Day:
-            </span>
-            <button
-              onClick={() => setSelectedDayFilter('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                selectedDayFilter === 'ALL'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              All Days ({suggestions.length})
-            </button>
-            {daysList.map(d => {
-              const countForDay = suggestions.filter(s => s.day === d).length;
-              return (
+          {/* Day & Scope Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Scope Switcher in Timetable view */}
+            {modalViewMode === 'TIMETABLE' && (
+              <div className="flex items-center bg-slate-200/80 p-0.5 rounded-xl border border-slate-300 mr-1 shrink-0">
                 <button
-                  key={d}
-                  onClick={() => setSelectedDayFilter(d)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                    selectedDayFilter === d
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                  onClick={() => setTimetableScope('ALL_CENTRE_SLOTS')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    timetableScope === 'ALL_CENTRE_SLOTS'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900'
                   }`}
                 >
-                  {d} {countForDay > 0 && <span className="opacity-75">({countForDay})</span>}
+                  🌐 All Days Timetable ({allSlots.length})
                 </button>
-              );
-            })}
+                <button
+                  onClick={() => setTimetableScope('OVERCROWDED_ONLY')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    timetableScope === 'OVERCROWDED_ONLY'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900'
+                  }`}
+                >
+                  ⚠️ Overcrowded ({suggestions.length})
+                </button>
+              </div>
+            )}
+
+            {/* Centre Filter Dropdown */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 text-slate-500" />
+              </span>
+              <select
+                value={selectedCentreFilter}
+                onChange={e => setSelectedCentreFilter(e.target.value)}
+                className="text-xs font-extrabold bg-white text-slate-800 border border-slate-300 rounded-xl px-2.5 py-1.5 focus:outline-indigo-600 shadow-2xs cursor-pointer max-w-[190px]"
+              >
+                <option value="ALL">All Centres ({uniqueCentres.length})</option>
+                {uniqueCentres.map(cName => (
+                  <option key={cName} value={cName}>{cName}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Day Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              </span>
+              <button
+                onClick={() => setSelectedDayFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedDayFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                All Days ({(modalViewMode === 'TIMETABLE' && timetableScope === 'ALL_CENTRE_SLOTS' ? allSlots : suggestions).length})
+              </button>
+              {daysList.map(d => {
+                const base = modalViewMode === 'TIMETABLE' && timetableScope === 'ALL_CENTRE_SLOTS' ? allSlots : suggestions;
+                const countForDay = base.filter(s => s.day === d).length;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setSelectedDayFilter(d)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                      selectedDayFilter === d
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                    }`}
+                  >
+                    {d.substring(0, 3)} {countForDay > 0 && <span className="opacity-75">({countForDay})</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Quick Metrics */}
-          <div className="flex items-center gap-3 text-xs font-semibold">
+          <div className="flex items-center gap-3 text-xs font-semibold shrink-0">
             <div className="bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-amber-800">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
               <span>
-                <strong>{suggestions.length}</strong> Overcrowded Slots Detected
+                <strong>{suggestions.length}</strong> Overcrowded
               </span>
             </div>
             <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-emerald-800">
               <Users className="w-3.5 h-3.5 text-emerald-600" />
               <span>
-                <strong>{totalBenefittedStudents}</strong> Students Balanced
+                <strong>{allSlots.reduce((sum, s) => sum + (s.totalEnrolled || 0), 0)}</strong> Total Enrolled
               </span>
             </div>
           </div>
@@ -736,12 +820,12 @@ export default function SmartVenueOptimizationModal({
                 Scanning All Slots &amp; Mapping Available Empty Venues...
               </p>
             </div>
-          ) : filteredSuggestions.length === 0 ? (
+          ) : (modalViewMode === 'TIMETABLE' ? timetableDisplaySlots.length === 0 : filteredSuggestions.length === 0) ? (
             <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h3 className="text-base font-extrabold text-slate-800">No Overcrowded Venues on {selectedDayFilter}</h3>
+              <h3 className="text-base font-extrabold text-slate-800">No Slots Found</h3>
               <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                All scheduled centre slots on this day are operating within normal room capacity.
+                No centre slots match the selected criteria ({selectedDayFilter !== 'ALL' ? selectedDayFilter : 'All Days'}, {selectedCentreFilter !== 'ALL' ? selectedCentreFilter : 'All Centres'}).
               </p>
             </div>
           ) : modalViewMode === 'TIMETABLE' ? (
@@ -752,10 +836,16 @@ export default function SmartVenueOptimizationModal({
                   <div>
                     <h3 className="text-sm sm:text-base font-black flex items-center gap-2">
                       <CalendarDays className="w-4 h-4 text-indigo-400" />
-                      <span>Rebalanced Slot Timetable &amp; Venue Schedule (2026)</span>
+                      <span>
+                        {timetableScope === 'ALL_CENTRE_SLOTS'
+                          ? 'Overall Centre Master Timetable — All Days (Monday to Friday)'
+                          : 'Rebalanced Overcrowded Slot Timetable & Venue Schedule (2026)'}
+                      </span>
                     </h3>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Master view showing Primary Venue (Lab A: 70 seats) and Spillover Venue (Lab B: balance overflow) with section assignments.
+                      {timetableScope === 'ALL_CENTRE_SLOTS'
+                        ? 'Master schedule of all centre slots across all days showing venue allocations, room capacities, and split rooms.'
+                        : 'Showing Primary Venue (Lab A: 70 seats) and Spillover Venue (Lab B: balance overflow) with section assignments.'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -783,14 +873,14 @@ export default function SmartVenueOptimizationModal({
                         <th className="p-3 whitespace-nowrap">Day &amp; Session</th>
                         <th className="p-3">Centre &amp; Coordinator</th>
                         <th className="p-3 text-center whitespace-nowrap">Total Students</th>
-                        <th className="p-3 bg-indigo-50/80 border-x border-indigo-100">Lab A (Primary — 70 Seats)</th>
-                        <th className="p-3 bg-emerald-50/80 border-r border-emerald-100">Lab B (Spillover — Overflow)</th>
+                        <th className="p-3 bg-indigo-50/80 border-x border-indigo-100">Lab A (Primary Venue)</th>
+                        <th className="p-3 bg-emerald-50/80 border-r border-emerald-100">Lab B (Spillover Room)</th>
                         <th className="p-3 text-center whitespace-nowrap">Student Timetable Status</th>
                         <th className="p-3 text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {filteredSuggestions.map((item) => (
+                      {timetableDisplaySlots.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                           {/* Day & Timing */}
                           <td className="p-3 align-top whitespace-nowrap">
@@ -815,9 +905,15 @@ export default function SmartVenueOptimizationModal({
                           {/* Total Students */}
                           <td className="p-3 align-top text-center whitespace-nowrap">
                             <span className="text-base font-black text-slate-900 block leading-none">{item.totalEnrolled}</span>
-                            <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded inline-block mt-1">
-                              +{item.excessCount} Overcrowded
-                            </span>
+                            {item.isOvercrowded ? (
+                              <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded inline-block mt-1">
+                                +{item.excessCount} Overcrowded
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-block mt-1">
+                                ✓ Capacity OK
+                              </span>
+                            )}
                           </td>
 
                           {/* Lab A (Primary) */}
@@ -832,59 +928,83 @@ export default function SmartVenueOptimizationModal({
                               </span>
                             </div>
                             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                              Full Room Capacity Retained
+                              {item.isOvercrowded ? 'Room Capacity Retained (70 Seats)' : 'Full Room Capacity Retained'}
                             </span>
                             <div className="space-y-1 mt-1">
-                              {item.planA.sections.map((sec: any, sIdx: number) => (
-                                <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
-                                  <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
-                                  <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
-                                </div>
-                              ))}
+                              {(item.planA.sections || []).length === 0 ? (
+                                <p className="text-[10px] text-slate-400 italic">No sections enrolled</p>
+                              ) : (
+                                item.planA.sections.map((sec: any, sIdx: number) => (
+                                  <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-indigo-100 shadow-2xs">
+                                    <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
+                                    <strong className="text-indigo-950 bg-indigo-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                                  </div>
+                                ))
+                              )}
                             </div>
                           </td>
 
                           {/* Lab B (Spillover) */}
                           <td className="p-3 align-top bg-emerald-50/30 border-r border-emerald-100 min-w-[210px]">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-black text-emerald-950 flex items-center gap-1 text-xs">
-                                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                {item.planB.venue}
-                              </span>
-                              <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-                                {item.planB.total} Students
-                              </span>
-                            </div>
-                            {item.planB.spilloverCentreName && (
-                              <span className="text-[9.5px] font-extrabold text-emerald-700 block mb-1">
-                                [{item.planB.spilloverCentreName}]
-                              </span>
-                            )}
-                            <div className="space-y-1 mt-1">
-                              {item.planB.sections.map((sec: any, sIdx: number) => (
-                                <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
-                                  <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
-                                  <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                            {item.planB ? (
+                              <>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-black text-emerald-950 flex items-center gap-1 text-xs">
+                                    <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    {item.planB.venue}
+                                  </span>
+                                  <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                                    {item.planB.total} Students
+                                  </span>
                                 </div>
-                              ))}
-                            </div>
+                                {item.planB.spilloverCentreName && (
+                                  <span className="text-[9.5px] font-extrabold text-emerald-700 block mb-1">
+                                    [{item.planB.spilloverCentreName}]
+                                  </span>
+                                )}
+                                <div className="space-y-1 mt-1">
+                                  {item.planB.sections.map((sec: any, sIdx: number) => (
+                                    <div key={`${sec.name}_${sIdx}`} className="flex items-center justify-between text-[10px] font-semibold bg-white p-1 rounded border border-emerald-100 shadow-2xs">
+                                      <span className="text-slate-700 truncate max-w-[140px]" title={sec.name}>• {sec.name}</span>
+                                      <strong className="text-emerald-950 bg-emerald-50 px-1.5 py-0.2 rounded font-extrabold">{sec.count}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="py-4 text-center">
+                                <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200 inline-block">
+                                  ✓ Single Room Accommodated
+                                </span>
+                                <p className="text-[9px] text-slate-400 mt-1">Within standard room capacity</p>
+                              </div>
+                            )}
                           </td>
 
                           {/* Timetable Sync Status */}
                           <td className="p-3 align-top text-center whitespace-nowrap">
-                            {isPublished ? (
-                              <div className="inline-flex flex-col items-center gap-1">
-                                <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Live in Timetable
-                                </span>
-                                <span className="text-[9px] text-slate-400">Students see {item.planB.venue}</span>
-                              </div>
+                            {item.isOvercrowded ? (
+                              isPublished ? (
+                                <div className="inline-flex flex-col items-center gap-1">
+                                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Live in Timetable
+                                  </span>
+                                  <span className="text-[9px] text-slate-400">Students see {item.planB?.venue}</span>
+                                </div>
+                              ) : (
+                                <div className="inline-flex flex-col items-center gap-1">
+                                  <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                    <AlertTriangle className="w-3 h-3 text-amber-600" /> Draft (Unpublished)
+                                  </span>
+                                  <span className="text-[9px] text-slate-400">Click Publish above</span>
+                                </div>
+                              )
                             ) : (
                               <div className="inline-flex flex-col items-center gap-1">
-                                <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                  <AlertTriangle className="w-3 h-3 text-amber-600" /> Draft (Unpublished)
+                                <span className="text-[10px] font-black text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                  <ShieldCheck className="w-3 h-3 text-indigo-600" /> Standard Timetable
                                 </span>
-                                <span className="text-[9px] text-slate-400">Click Publish above</span>
+                                <span className="text-[9px] text-slate-400">{item.currentVenue}</span>
                               </div>
                             )}
                           </td>
@@ -903,14 +1023,16 @@ export default function SmartVenueOptimizationModal({
                                   onClick={() => downloadLabAttendanceSheet(item, 'A')}
                                   className="px-1.5 py-0.5 rounded text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
                                 >
-                                  Lab A Sheet
+                                  {item.isOvercrowded ? 'Lab A Sheet' : 'Sign Sheet'}
                                 </button>
-                                <button
-                                  onClick={() => downloadLabAttendanceSheet(item, 'B')}
-                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
-                                >
-                                  Lab B Sheet
-                                </button>
+                                {item.isOvercrowded && item.planB && (
+                                  <button
+                                    onClick={() => downloadLabAttendanceSheet(item, 'B')}
+                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                                  >
+                                    Lab B Sheet
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </td>

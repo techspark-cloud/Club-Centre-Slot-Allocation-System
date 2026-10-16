@@ -81,34 +81,33 @@ export async function GET() {
       s => s.centre?.name !== 'Sports' && s.capacity > 0
     );
 
-    // Find all crowded slot IDs (allocated_count > 70)
-    const crowdedSlots = academicSlots.filter(s => (s.allocated_count || 0) > STANDARD_ROOM_CAPACITY);
+    // Fetch allocations for all academic slots in one fast batch query
+    const slotIds = academicSlots.map(s => s.id);
+    const { data: allocData, error: allocErr } = await supabase
+      .from('allocations')
+      .select(`
+        id,
+        slot_id,
+        student:students (
+          id,
+          name,
+          register_no,
+          course,
+          section,
+          contact_no
+        )
+      `)
+      .in('slot_id', slotIds);
 
-    // 2. Fetch allocations for each crowded slot in parallel
+    if (allocErr) throw allocErr;
+
     const allocMap: Record<string, any[]> = {};
-    await Promise.all(
-      crowdedSlots.map(async (cSlot) => {
-        const { data: allocData, error: allocErr } = await supabase
-          .from('allocations')
-          .select(`
-            id,
-            slot_id,
-            student:students (
-              id,
-              name,
-              register_no,
-              course,
-              section,
-              contact_no
-            )
-          `)
-          .eq('slot_id', cSlot.id);
-
-        if (!allocErr && allocData) {
-          allocMap[cSlot.id] = allocData.filter(a => a.student).map(a => a.student);
-        }
-      })
-    );
+    (allocData || []).forEach(a => {
+      if (a.student) {
+        if (!allocMap[a.slot_id]) allocMap[a.slot_id] = [];
+        allocMap[a.slot_id].push(a.student);
+      }
+    });
 
     // 3. Group slots by Day and Time
     const buckets: Record<string, any[]> = {};
@@ -119,8 +118,9 @@ export async function GET() {
     });
 
     const suggestions: any[] = [];
+    const suggestionMap = new Map<string, any>();
 
-    // 4. Process each bucket
+    // 4. Process each bucket for venue optimization
     for (const [key, bSlots] of Object.entries(buckets)) {
       const crowdedInBucket = bSlots
         .filter(s => (s.allocated_count || 0) > STANDARD_ROOM_CAPACITY)
@@ -189,19 +189,21 @@ export async function GET() {
         // Accommodate 70 students in Room A, and ONLY balance (total - 70) students in Room B!
         const { totalA, sectionsA, totalB, sectionsB } = partitionAccommodateCapacity(slotStudents, STANDARD_ROOM_CAPACITY);
 
-        suggestions.push({
+        const suggestionItem = {
           id: cSlot.id,
           day: cSlot.day,
           session: cSlot.session,
           startTime: cSlot.start_time?.substring(0, 5),
           endTime: cSlot.end_time?.substring(0, 5),
           timing: `${cSlot.start_time?.substring(0, 5)} - ${cSlot.end_time?.substring(0, 5)}`,
+          centreId: cSlot.centre_id,
           centreName: cSlot.centre?.name || 'Centre',
           coordinatorName: cSlot.centre?.faculty_name || 'N/A',
           coordinatorMobile: cSlot.centre?.faculty_mobile || 'N/A',
           currentVenue: cSlot.venue || 'Venue TBA',
           totalEnrolled,
           capacity: STANDARD_ROOM_CAPACITY,
+          isOvercrowded: true,
           excessCount: totalB,
           retainedInLabA: totalA,
           spilloverToLabB: totalB,
@@ -225,7 +227,10 @@ export async function GET() {
             spilloverFreeAfter: matched ? Math.max(0, matched.freeSeats - totalB) : Math.max(0, STANDARD_ROOM_CAPACITY - totalB),
             sections: sectionsB,
           },
-        });
+        };
+
+        suggestions.push(suggestionItem);
+        suggestionMap.set(cSlot.id, suggestionItem);
       }
     }
 
@@ -237,6 +242,60 @@ export async function GET() {
       const dDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
       if (dDiff !== 0) return dDiff;
       return b.totalEnrolled - a.totalEnrolled;
+    });
+
+    // Build the Overall Master List of ALL Centre Slots across all 5 days
+    const allSlots = academicSlots.map(slot => {
+      const existing = suggestionMap.get(slot.id);
+      if (existing) {
+        return existing;
+      }
+
+      // Standard non-overcrowded slot
+      const students = allocMap[slot.id] || [];
+      const { sectionsA } = partitionAccommodateCapacity(students, STANDARD_ROOM_CAPACITY);
+      const totalEnrolled = slot.allocated_count || students.length;
+
+      return {
+        id: slot.id,
+        day: slot.day,
+        session: slot.session,
+        startTime: slot.start_time?.substring(0, 5),
+        endTime: slot.end_time?.substring(0, 5),
+        timing: `${slot.start_time?.substring(0, 5)} - ${slot.end_time?.substring(0, 5)}`,
+        centreId: slot.centre_id,
+        centreName: slot.centre?.name || 'Centre',
+        coordinatorName: slot.centre?.faculty_name || 'N/A',
+        coordinatorMobile: slot.centre?.faculty_mobile || 'N/A',
+        currentVenue: slot.venue || 'Venue TBA',
+        totalEnrolled,
+        capacity: slot.capacity || STANDARD_ROOM_CAPACITY,
+        isOvercrowded: false,
+        excessCount: 0,
+        retainedInLabA: totalEnrolled,
+        spilloverToLabB: 0,
+        candidateVenues: [],
+        allVenuesLiveStatus: [],
+        selectedSpilloverVenue: null,
+        matchedSpillover: null,
+        planA: {
+          venue: slot.venue || 'Venue TBA',
+          total: totalEnrolled,
+          capacity: slot.capacity || STANDARD_ROOM_CAPACITY,
+          occupancyPct: Math.round((totalEnrolled / (slot.capacity || STANDARD_ROOM_CAPACITY)) * 100),
+          sections: sectionsA,
+        },
+        planB: null,
+      };
+    });
+
+    // Sort allSlots by Day, Session, and Centre Name
+    allSlots.sort((a, b) => {
+      const dDiff = (dayOrder[a.day] || 99) - (dayOrder[b.day] || 99);
+      if (dDiff !== 0) return dDiff;
+      const sessDiff = (a.session === 'FORENOON' ? 1 : 2) - (b.session === 'FORENOON' ? 1 : 2);
+      if (sessDiff !== 0) return sessDiff;
+      return a.centreName.localeCompare(b.centreName);
     });
 
     // Check if there is an active published rebalancing plan
@@ -258,10 +317,12 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       count: suggestions.length,
+      totalSlotsCount: allSlots.length,
       isPublished,
       publishedAt: isPublished ? publishedPlan.publishedAt : null,
       publishedBy: isPublished ? publishedPlan.publishedBy : null,
       suggestions,
+      allSlots,
     });
   } catch (error: any) {
     console.error('API /api/admin/venue-optimization failed:', error);
