@@ -3,6 +3,61 @@ import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
+const STANDARD_ROOM_CAPACITY = 70;
+
+const ACADEMIC_VENUES = [
+  'B2-02', 'B2-03', 'B2-04', 'B2-05', 'B2-06', 'B2-07',
+  'B3-01', 'B3-02', 'B3-03', 'Green Building Ground floor'
+];
+
+// Partition algorithm:
+// Exactly accommodates the first targetCap (70) students inside the original venue (Room A),
+// and routes ONLY the balance remaining (total - 70) students to the spillover room (Room B)!
+function partitionAccommodateCapacity(students: any[], targetCap = STANDARD_ROOM_CAPACITY) {
+  const sortedStudents = [...students].sort((a, b) => {
+    const cA = (a.course || '') + (a.section || '') + (a.register_no || '');
+    const cB = (b.course || '') + (b.section || '') + (b.register_no || '');
+    return cA.localeCompare(cB);
+  });
+
+  const studentsA = sortedStudents.slice(0, targetCap);
+  const studentsB = sortedStudents.slice(targetCap);
+
+  // Group studentsA by section
+  const secMapA: Record<string, { name: string; count: number; students: any[] }> = {};
+  studentsA.forEach(s => {
+    const c = s.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
+    const sec = s.section ? `Sec ${s.section}` : 'General';
+    const key = `${c} (${sec})`;
+    if (!secMapA[key]) secMapA[key] = { name: key, count: 0, students: [] };
+    secMapA[key].count += 1;
+    secMapA[key].students.push(s);
+  });
+
+  // Group studentsB by section
+  const secMapB: Record<string, { name: string; count: number; students: any[] }> = {};
+  studentsB.forEach(s => {
+    const c = s.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
+    const sec = s.section ? `Sec ${s.section}` : 'General';
+    const key = `${c} (${sec})`;
+    if (!secMapB[key]) secMapB[key] = { name: key, count: 0, students: [] };
+    secMapB[key].count += 1;
+    secMapB[key].students.push(s);
+  });
+
+  const sectionsA = Object.values(secMapA).sort((a, b) => b.count - a.count);
+  const sectionsB = Object.values(secMapB).sort((a, b) => b.count - a.count);
+
+  return {
+    totalA: studentsA.length,
+    sectionsA,
+    studentsA,
+    totalB: studentsB.length,
+    sectionsB,
+    studentsB,
+  };
+}
+
 export async function GET() {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -26,37 +81,34 @@ export async function GET() {
       s => s.centre?.name !== 'Sports' && s.capacity > 0
     );
 
-    // Find all crowded slot IDs (allocated_count >= 70)
-    const crowdedSlots = academicSlots.filter(s => (s.allocated_count || 0) >= 70);
-    const crowdedIds = crowdedSlots.map(s => s.id);
+    // Find all crowded slot IDs (allocated_count > 70)
+    const crowdedSlots = academicSlots.filter(s => (s.allocated_count || 0) > STANDARD_ROOM_CAPACITY);
 
-    // 2. Fetch allocations for all crowded slots in one batch
-    let allocMap: Record<string, any[]> = {};
-    if (crowdedIds.length > 0) {
-      const { data: allocData, error: allocErr } = await supabase
-        .from('allocations')
-        .select(`
-          id,
-          slot_id,
-          student:students (
+    // 2. Fetch allocations for each crowded slot in parallel
+    const allocMap: Record<string, any[]> = {};
+    await Promise.all(
+      crowdedSlots.map(async (cSlot) => {
+        const { data: allocData, error: allocErr } = await supabase
+          .from('allocations')
+          .select(`
             id,
-            name,
-            register_no,
-            course,
-            section,
-            contact_no
-          )
-        `)
-        .in('slot_id', crowdedIds);
+            slot_id,
+            student:students (
+              id,
+              name,
+              register_no,
+              course,
+              section,
+              contact_no
+            )
+          `)
+          .eq('slot_id', cSlot.id);
 
-      if (!allocErr && allocData) {
-        allocData.forEach(a => {
-          if (!a.student) return;
-          if (!allocMap[a.slot_id]) allocMap[a.slot_id] = [];
-          allocMap[a.slot_id].push(a.student);
-        });
-      }
-    }
+        if (!allocErr && allocData) {
+          allocMap[cSlot.id] = allocData.filter(a => a.student).map(a => a.student);
+        }
+      })
+    );
 
     // 3. Group slots by Day and Time
     const buckets: Record<string, any[]> = {};
@@ -71,28 +123,58 @@ export async function GET() {
     // 4. Process each bucket
     for (const [key, bSlots] of Object.entries(buckets)) {
       const crowdedInBucket = bSlots
-        .filter(s => (s.allocated_count || 0) >= 70)
+        .filter(s => (s.allocated_count || 0) > STANDARD_ROOM_CAPACITY)
         .sort((a, b) => (b.allocated_count || 0) - (a.allocated_count || 0));
 
-      const availableInBucket = bSlots
-        .filter(s => (s.allocated_count || 0) <= 25)
-        .sort((a, b) => (a.allocated_count || 0) - (b.allocated_count || 0));
+      // Calculate Live Capacity Status for ALL 10 Academic Venues in this hour
+      const liveVenueStatus = ACADEMIC_VENUES.map(vName => {
+        const matchedSlot = bSlots.find(
+          s => s.venue?.trim().toLowerCase() === vName.toLowerCase()
+        );
+        const occupied = matchedSlot ? (matchedSlot.allocated_count || 0) : 0;
+        const free = Math.max(0, STANDARD_ROOM_CAPACITY - occupied);
+        const occupancyPct = Math.round((occupied / STANDARD_ROOM_CAPACITY) * 100);
+
+        return {
+          venue: vName,
+          slotId: matchedSlot?.id || null,
+          centreName: matchedSlot ? matchedSlot.centre?.name : 'Vacant Room',
+          capacity: STANDARD_ROOM_CAPACITY,
+          currentOccupied: occupied,
+          freeSeats: free,
+          occupancyPercentage: occupancyPct,
+          isOvercrowded: occupied > STANDARD_ROOM_CAPACITY,
+          statusLabel: occupied === 0 
+            ? '100% Vacant' 
+            : occupied <= 25 
+              ? `${free} Free Seats` 
+              : occupied <= 70 
+                ? 'Full' 
+                : `Overcrowded (+${occupied - STANDARD_ROOM_CAPACITY})`
+        };
+      });
+
+      // Filter candidate spillover rooms: Venues with <= 30 occupied, sorted by lowest occupied (most free seats)
+      const availableVenues = liveVenueStatus
+        .filter(v => v.currentOccupied <= 30)
+        .sort((a, b) => a.currentOccupied - b.currentOccupied);
 
       const usedSpilloverVenues = new Set<string>();
 
       for (let i = 0; i < crowdedInBucket.length; i++) {
         const cSlot = crowdedInBucket[i];
 
-        // Available rooms excluding cSlot's own venue
-        const candidateVenues = availableInBucket
-          .filter(a => a.venue !== cSlot.venue)
+        // Available candidate rooms excluding cSlot's own venue
+        const candidateVenues = availableVenues
+          .filter(a => a.venue.toLowerCase() !== cSlot.venue?.trim().toLowerCase())
           .map(a => ({
-            slotId: a.id,
-            venue: a.venue || 'Unknown Room',
-            centreName: a.centre?.name || 'Centre',
-            currentCount: a.allocated_count || 0,
-            capacity: a.capacity || 70,
-            freeSeats: Math.max(0, (a.capacity || 70) - (a.allocated_count || 0)),
+            slotId: a.slotId,
+            venue: a.venue,
+            centreName: a.centreName,
+            currentCount: a.currentOccupied,
+            capacity: a.capacity,
+            freeSeats: a.freeSeats,
+            occupancyPercentage: a.occupancyPercentage,
           }));
 
         // Pick best available room not already assigned in this bucket
@@ -102,37 +184,10 @@ export async function GET() {
         }
 
         const slotStudents = allocMap[cSlot.id] || [];
+        const totalEnrolled = cSlot.allocated_count || slotStudents.length;
 
-        // Group by Section
-        const secMap: Record<string, { name: string; count: number; students: any[] }> = {};
-        slotStudents.forEach(st => {
-          const cleanCourse = st.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
-          const sec = st.section ? `Sec ${st.section}` : 'General';
-          const secKey = `${cleanCourse} (${sec})`;
-
-          if (!secMap[secKey]) {
-            secMap[secKey] = { name: secKey, count: 0, students: [] };
-          }
-          secMap[secKey].count += 1;
-          secMap[secKey].students.push(st);
-        });
-
-        // Greedy 2-way section split
-        const sortedSecEntries = Object.values(secMap).sort((a, b) => b.count - a.count);
-        let countA = 0;
-        let countB = 0;
-        const sectionsA: any[] = [];
-        const sectionsB: any[] = [];
-
-        sortedSecEntries.forEach(item => {
-          if (countA <= countB) {
-            sectionsA.push(item);
-            countA += item.count;
-          } else {
-            sectionsB.push(item);
-            countB += item.count;
-          }
-        });
+        // Accommodate 70 students in Room A, and ONLY balance (total - 70) students in Room B!
+        const { totalA, sectionsA, totalB, sectionsB } = partitionAccommodateCapacity(slotStudents, STANDARD_ROOM_CAPACITY);
 
         suggestions.push({
           id: cSlot.id,
@@ -145,20 +200,29 @@ export async function GET() {
           coordinatorName: cSlot.centre?.faculty_name || 'N/A',
           coordinatorMobile: cSlot.centre?.faculty_mobile || 'N/A',
           currentVenue: cSlot.venue || 'Venue TBA',
-          totalEnrolled: cSlot.allocated_count || slotStudents.length,
-          capacity: cSlot.capacity,
+          totalEnrolled,
+          capacity: STANDARD_ROOM_CAPACITY,
+          excessCount: totalB,
+          retainedInLabA: totalA,
+          spilloverToLabB: totalB,
           candidateVenues,
+          allVenuesLiveStatus: liveVenueStatus,
           selectedSpilloverVenue: matched ? matched.venue : 'Spillover Lab',
           matchedSpillover: matched,
           planA: {
             venue: cSlot.venue || 'Room A',
-            total: countA,
+            total: totalA,
+            capacity: STANDARD_ROOM_CAPACITY,
+            occupancyPct: Math.round((totalA / STANDARD_ROOM_CAPACITY) * 100),
             sections: sectionsA,
           },
           planB: {
             venue: matched ? matched.venue : 'Spillover Lab',
             spilloverCentreName: matched ? matched.centreName : '',
-            total: countB,
+            total: totalB,
+            originalCapacity: STANDARD_ROOM_CAPACITY,
+            spilloverFreeBefore: matched ? matched.freeSeats : STANDARD_ROOM_CAPACITY,
+            spilloverFreeAfter: matched ? Math.max(0, matched.freeSeats - totalB) : Math.max(0, STANDARD_ROOM_CAPACITY - totalB),
             sections: sectionsB,
           },
         });

@@ -25,6 +25,7 @@ export default function SmartVenueOptimizationModal({
   const [selectedSlotForRoster, setSelectedSlotForRoster] = useState<any | null>(null);
   const [activeRosterTab, setActiveRosterTab] = useState<'A' | 'B'>('A');
   const [rosterSearch, setRosterSearch] = useState('');
+  const [expandedRadarSlotId, setExpandedRadarSlotId] = useState<string | null>(null);
 
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
@@ -287,21 +288,21 @@ export default function SmartVenueOptimizationModal({
       doc.setDrawColor(199, 210, 254);
       doc.roundedRect(16, 86, pageWidth - 32, 60, 4, 4, 'FD');
 
-      doc.setFontSize(14);
+      doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(67, 56, 202);
-      doc.text(`📍 LAB A (PRIMARY ROOM):  ${item.planA.venue}`, 24, 98);
+      doc.text(`📍 LAB A (ORIGINAL ROOM — CAPACITY RETAINED):  ${item.planA.venue}`, 24, 98);
 
-      doc.setFontSize(11);
+      doc.setFontSize(10.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 41, 59);
-      doc.text(`Student Capacity: ${item.planA.total} Students`, 24, 106);
+      doc.text(`Strength: ${item.planA.total} Students (Full Room Capacity Utilized Here)`, 24, 106);
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(51, 65, 85);
       let curY = 114;
-      doc.text('The following sections are assigned to attend here:', 24, curY);
+      doc.text('The following sections must attend in this original venue:', 24, curY);
       curY += 7;
       item.planA.sections.forEach((sec: any) => {
         doc.text(`• ${sec.name}  —  [ ${sec.count} Students ]`, 28, curY);
@@ -314,21 +315,21 @@ export default function SmartVenueOptimizationModal({
       doc.setDrawColor(167, 243, 208);
       doc.roundedRect(16, labBY, pageWidth - 32, 60, 4, 4, 'FD');
 
-      doc.setFontSize(14);
+      doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 150, 105);
-      doc.text(`📍 LAB B (SPILLOVER ROOM):  ${item.planB.venue}`, 24, labBY + 12);
+      doc.text(`📍 LAB B (SPILLOVER ROOM — EXCESS OVERFLOW ONLY):  ${item.planB.venue}`, 24, labBY + 12);
 
-      doc.setFontSize(11);
+      doc.setFontSize(10.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 41, 59);
-      doc.text(`Student Capacity: ${item.planB.total} Students`, 24, labBY + 20);
+      doc.text(`Strength: ${item.planB.total} Students (Sections Exceeding Room Capacity)`, 24, labBY + 20);
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(51, 65, 85);
       let curYB = labBY + 28;
-      doc.text('The following sections are assigned to attend here:', 24, curYB);
+      doc.text('The following excess sections must report to this spillover lab:', 24, curYB);
       curYB += 7;
       item.planB.sections.forEach((sec: any) => {
         doc.text(`• ${sec.name}  —  [ ${sec.count} Students ]`, 28, curYB);
@@ -606,7 +607,19 @@ export default function SmartVenueOptimizationModal({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setExpandedRadarSlotId(expandedRadarSlotId === item.id ? null : item.id)}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                          expandedRadarSlotId === item.id
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                        }`}
+                        title="View Live Capacity Status of All 10 Campus Venues at this hour"
+                      >
+                        <Building2 className="w-3.5 h-3.5" />
+                        <span>{expandedRadarSlotId === item.id ? 'Hide Venue Radar' : 'Live Venue Capacities'}</span>
+                      </button>
                       <button
                         onClick={() => downloadDoorNoticePDF(item)}
                         className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all border border-slate-300 cursor-pointer"
@@ -626,60 +639,198 @@ export default function SmartVenueOptimizationModal({
                     </div>
                   </div>
 
-                  {/* 3-Column Layout: Left (Current) -> Middle (Spillover Mapping Selector) -> Right (Dual Plan) */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-                    
-                    {/* Left: Current State */}
-                    <div className="lg:col-span-3 bg-red-50/50 border border-red-200 rounded-2xl p-4">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-red-600 block mb-1">
-                        Current Overcrowded State:
-                      </span>
-                      <h4 className="text-base font-black text-slate-900 leading-tight">
-                        {item.centreName}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-                        Coord: {item.coordinatorName}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-sm">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {item.currentVenue}
-                        </span>
-                        <span className="text-xs font-extrabold text-red-800 bg-red-100 px-2 py-1 rounded-lg border border-red-200">
-                          🔥 {item.totalEnrolled} Students
+                  {/* EXPANDABLE LIVE VENUE CAPACITIES RADAR */}
+                  {expandedRadarSlotId === item.id && (
+                    <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white shadow-lg border border-slate-700 animate-in fade-in slide-in-from-top-2 duration-150">
+                      <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-amber-400" />
+                          <h5 className="text-xs font-black tracking-wide uppercase text-slate-200">
+                            Live Campus Venue Capacities — {item.day} ({item.timing})
+                          </h5>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          All 10 Academic Block Venues Real-Time Occupancy
                         </span>
                       </div>
-                      <p className="text-[11px] text-red-600 font-medium mt-2 leading-relaxed">
-                        Classroom capacity (~70) cannot fit all {item.totalEnrolled} students comfortably.
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+                        {item.allVenuesLiveStatus?.map((vStat: any) => {
+                          const isThisVenue = vStat.venue.toLowerCase() === item.currentVenue?.toLowerCase();
+                          const isSpillover = vStat.venue.toLowerCase() === item.planB.venue?.toLowerCase();
+                          return (
+                            <div
+                              key={vStat.venue}
+                              className={`p-2.5 rounded-xl border text-xs transition-all ${
+                                isThisVenue
+                                  ? 'bg-red-500/20 border-red-400 text-white ring-1 ring-red-400'
+                                  : isSpillover
+                                    ? 'bg-emerald-500/20 border-emerald-400 text-white ring-1 ring-emerald-400'
+                                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between font-black mb-1">
+                                <span>{vStat.venue}</span>
+                                {isThisVenue && <span className="text-[9px] bg-red-500 text-white px-1 py-0.2 rounded font-black">CURRENT</span>}
+                                {isSpillover && <span className="text-[9px] bg-emerald-500 text-white px-1 py-0.2 rounded font-black">SPILLOVER</span>}
+                              </div>
+                              <div className="text-[10px] text-slate-400 truncate mb-1" title={vStat.centreName}>
+                                {vStat.centreName}
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] font-bold">
+                                <span>Live:</span>
+                                <span className={vStat.isOvercrowded ? 'text-red-400 font-black' : vStat.currentOccupied === 0 ? 'text-emerald-400 font-black' : 'text-amber-300 font-black'}>
+                                  {vStat.currentOccupied} / {vStat.capacity}
+                                </span>
+                              </div>
+                              <div className="w-full bg-white/10 rounded-full h-1.5 mt-1 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    vStat.isOvercrowded
+                                      ? 'bg-red-500'
+                                      : vStat.currentOccupied === 0
+                                        ? 'bg-emerald-400'
+                                        : 'bg-amber-400'
+                                  }`}
+                                  style={{ width: `${Math.min(100, vStat.occupancyPercentage)}%` }}
+                                />
+                              </div>
+                              <div className="text-[9px] font-bold text-right mt-1 text-slate-400">
+                                {vStat.freeSeats} free seats
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3-Column Layout: Left (Original Venue Details) -> Middle (Spillover Mapping Selector) -> Right (Dual Plan) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+                    
+                    {/* Left: Original Conducting Venue Details */}
+                    <div className="lg:col-span-4 bg-gradient-to-br from-amber-50/60 to-red-50/60 border border-amber-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200">
+                            Original Conducting Venue
+                          </span>
+                          <span className="text-[10px] font-extrabold text-red-700 bg-red-100 px-2 py-0.5 rounded border border-red-200">
+                            Exceeds by +{item.excessCount || Math.max(0, item.totalEnrolled - (item.capacity || 70))}
+                          </span>
+                        </div>
+
+                        <h4 className="text-base font-black text-slate-900 leading-tight">
+                          {item.centreName}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                          Coord: {item.coordinatorName} • {item.coordinatorMobile}
+                        </p>
+
+                        {/* Venue & Capacity Metric Grid */}
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs">
+                            <span className="text-[9px] font-black uppercase text-slate-400 block">Original Room</span>
+                            <span className="text-xs font-black text-slate-800 flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                              {item.currentVenue}
+                            </span>
+                          </div>
+                          <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs">
+                            <span className="text-[9px] font-black uppercase text-slate-400 block">Room Capacity</span>
+                            <span className="text-xs font-black text-slate-800 mt-0.5 block">
+                              {item.capacity || 70} Seats
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-2.5 p-2.5 rounded-xl bg-white/90 border border-amber-200/80 space-y-1.5 text-[11px]">
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="text-slate-600">Total Enrolled Strength:</span>
+                            <span className="text-red-700 font-black">{item.totalEnrolled} Students</span>
+                          </div>
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="text-indigo-700">Retained in Room A ({item.currentVenue}):</span>
+                            <span className="text-indigo-800 font-black">{item.planA.total} / {item.capacity} Seats (Full)</span>
+                          </div>
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="text-amber-800">Excess Overflow to Move:</span>
+                            <span className="text-amber-900 font-black">⚡ {item.planB.total} Students</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-slate-600 font-medium mt-3 pt-2 border-t border-amber-200/60 leading-relaxed">
+                        💡 <strong>Capacity Retained:</strong> {item.planA.total} students remain in original room ({item.currentVenue}). Only the excess {item.planB.total} students are routed to spillover.
                       </p>
                     </div>
 
                     {/* Middle: Spillover Venue Mapping Dropdown */}
-                    <div className="lg:col-span-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-full">
+                    <div className="lg:col-span-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between">
                       <div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-1">
-                          Mapped Spillover Lab:
-                        </span>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                            Spillover Venue (Overflow)
+                          </span>
+                          <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
+                            Excess Only
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-slate-600 font-medium leading-snug">
+                          Suggested room strictly for the <strong>{item.planB.total} students</strong> exceeding {item.currentVenue}&apos;s capacity:
+                        </p>
                         
                         {item.candidateVenues && item.candidateVenues.length > 0 ? (
-                          <div className="space-y-2 mt-2">
+                          <div className="space-y-2 mt-3">
                             <label className="text-[11px] font-bold text-slate-700 block">
-                              Select Available Room at {item.timing}:
+                              Available Free Room at {item.timing}:
                             </label>
                             <select
                               value={item.planB.venue}
                               onChange={(e) => handleSpilloverVenueChange(item.id, e.target.value)}
-                              className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm cursor-pointer"
+                              className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer"
                             >
                               {item.candidateVenues.map((c: any) => (
                                 <option key={c.venue} value={c.venue}>
-                                  {c.venue} ({c.centreName} — {c.currentCount} active / {c.freeSeats} free)
+                                  {c.venue} — Live: {c.currentCount} / {c.capacity} occupied ({c.freeSeats} free seats)
                                 </option>
                               ))}
                             </select>
-                            <p className="text-[10px] text-slate-500">
-                              💡 You can switch to any other free venue at this hour.
-                            </p>
+
+                            {/* Live Capacity Meter for Selected Spillover Room */}
+                            {(() => {
+                              const selCand = item.candidateVenues?.find((c: any) => c.venue === item.planB.venue);
+                              if (!selCand) return null;
+                              return (
+                                <div className="mt-2 p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-1 text-[11px]">
+                                  <div className="flex items-center justify-between font-bold">
+                                    <span className="text-slate-500">Live Room Capacity:</span>
+                                    <span className="text-slate-800 font-black">{selCand.capacity} Seats</span>
+                                  </div>
+                                  <div className="flex items-center justify-between font-bold">
+                                    <span className="text-slate-500">Current Occupancy:</span>
+                                    <span className="text-emerald-700 font-black">{selCand.currentCount} / {selCand.capacity} Occupied</span>
+                                  </div>
+                                  <div className="flex items-center justify-between font-bold">
+                                    <span className="text-slate-500">Free Seats Available:</span>
+                                    <span className="text-emerald-800 font-black bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                      🟢 {selCand.freeSeats} Free Seats
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between font-bold pt-1 border-t border-slate-100">
+                                    <span className="text-indigo-700">Excess Students to Absorb:</span>
+                                    <span className="text-indigo-900 font-black">+{item.planB.total} Students</span>
+                                  </div>
+                                  <div className="flex items-center justify-between font-bold">
+                                    <span className="text-slate-600">Free Seats After Intake:</span>
+                                    <span className="text-emerald-700 font-black">
+                                      {Math.max(0, selCand.freeSeats - item.planB.total)} Seats
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : (
                           <p className="text-xs font-bold text-slate-600 mt-2">
@@ -689,122 +840,134 @@ export default function SmartVenueOptimizationModal({
                       </div>
 
                       <div className="pt-3 border-t border-slate-200 mt-3 text-[10px] font-bold text-emerald-700 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <span>Zero collision with other classes</span>
                       </div>
                     </div>
 
                     {/* Right: Smart Section Split Plan with Interactive Rebalancer */}
-                    <div className="lg:col-span-6 bg-indigo-50/40 border border-indigo-200 rounded-2xl p-4">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-indigo-600" /> Section Distribution (Click arrow to move section):
-                        </span>
-                      </div>
+                    <div className="lg:col-span-5 bg-indigo-50/40 border border-indigo-200 rounded-2xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-indigo-600" /> Section Allocation Plan:
+                          </span>
+                        </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2.5">
-                        
-                        {/* Lab A Box */}
-                        <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-sm">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                              Lab A (Primary)
-                            </span>
-                            <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                              {item.planA.total} Students
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-black text-slate-800 flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                              {item.planA.venue}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2.5">
+                          
+                          {/* Lab A Box */}
+                          <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-xs">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Lab A (Original)
+                              </span>
+                              <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                {item.planA.total} Students
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-black text-slate-800 flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                                {item.planA.venue}
+                              </p>
+                              <button
+                                onClick={() => downloadLabAttendanceSheet(item, 'A')}
+                                className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                              >
+                                Sign Sheet
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">
+                              Room Capacity Retained
                             </p>
-                            <button
-                              onClick={() => downloadLabAttendanceSheet(item, 'A')}
-                              className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                            >
-                              Sign Sheet
-                            </button>
+
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                              {item.planA.sections.length === 0 ? (
+                                <p className="text-[10px] text-slate-400 italic">No sections assigned</p>
+                              ) : (
+                                item.planA.sections.map((sec: any) => (
+                                  <div
+                                    key={sec.name}
+                                    className="text-[10px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded-lg border border-slate-200 flex items-center justify-between group transition-all"
+                                  >
+                                    <span className="truncate max-w-[110px]" title={sec.name}>{sec.name}</span>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <strong className="text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
+                                        {sec.count}
+                                      </strong>
+                                      <button
+                                        onClick={() => handleMoveSection(item.id, sec.name, 'A')}
+                                        className="w-5 h-5 rounded bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Move this section to Lab B"
+                                      >
+                                        <ArrowRight className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
 
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {item.planA.sections.length === 0 ? (
-                              <p className="text-[10px] text-slate-400 italic">No sections assigned</p>
-                            ) : (
-                              item.planA.sections.map((sec: any) => (
-                                <div
-                                  key={sec.name}
-                                  className="text-[10px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 px-2 py-1 rounded-lg border border-slate-200 flex items-center justify-between group transition-all"
-                                >
-                                  <span className="truncate max-w-[130px]" title={sec.name}>{sec.name}</span>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <strong className="text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
+                          {/* Lab B Box */}
+                          <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-xs">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                                Lab B (Spillover)
+                              </span>
+                              <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                {item.planB.total} Students
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-black text-emerald-950 flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                                {item.planB.venue}
+                              </p>
+                              <button
+                                onClick={() => downloadLabAttendanceSheet(item, 'B')}
+                                className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 underline cursor-pointer"
+                              >
+                                Sign Sheet
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider mb-1.5">
+                              Excess Overflow Only
+                            </p>
+
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                              {item.planB.sections.length === 0 ? (
+                                <p className="text-[10px] text-slate-400 italic">No excess sections</p>
+                              ) : (
+                                item.planB.sections.map((sec: any) => (
+                                  <div
+                                    key={sec.name}
+                                    className="text-[10px] font-bold bg-emerald-50/50 hover:bg-emerald-100 text-emerald-950 px-2 py-1 rounded-lg border border-emerald-200 flex items-center justify-between group transition-all"
+                                  >
+                                    <button
+                                      onClick={() => handleMoveSection(item.id, sec.name, 'B')}
+                                      className="w-5 h-5 rounded bg-emerald-100 hover:bg-emerald-700 hover:text-white text-emerald-800 flex items-center justify-center transition-colors cursor-pointer mr-1 shrink-0"
+                                      title="Move this section back to Lab A"
+                                    >
+                                      <ArrowRight className="w-3 h-3 rotate-180" />
+                                    </button>
+                                    <span className="truncate max-w-[105px]" title={sec.name}>{sec.name}</span>
+                                    <strong className="text-emerald-900 bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] shrink-0">
                                       {sec.count}
                                     </strong>
-                                    <button
-                                      onClick={() => handleMoveSection(item.id, sec.name, 'A')}
-                                      className="w-5 h-5 rounded bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 flex items-center justify-center transition-colors cursor-pointer"
-                                      title="Move this section to Lab B"
-                                    >
-                                      <ArrowRight className="w-3 h-3" />
-                                    </button>
                                   </div>
-                                </div>
-                              ))
-                            )}
+                                ))
+                              )}
+                            </div>
                           </div>
+
                         </div>
-
-                        {/* Lab B Box */}
-                        <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-sm">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                              Lab B (Spillover)
-                            </span>
-                            <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              {item.planB.total} Students
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-black text-emerald-950 flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                              {item.planB.venue}
-                            </p>
-                            <button
-                              onClick={() => downloadLabAttendanceSheet(item, 'B')}
-                              className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 underline cursor-pointer"
-                            >
-                              Sign Sheet
-                            </button>
-                          </div>
-
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {item.planB.sections.length === 0 ? (
-                              <p className="text-[10px] text-slate-400 italic">No sections assigned</p>
-                            ) : (
-                              item.planB.sections.map((sec: any) => (
-                                <div
-                                  key={sec.name}
-                                  className="text-[10px] font-bold bg-emerald-50/50 hover:bg-emerald-100 text-emerald-950 px-2 py-1 rounded-lg border border-emerald-200 flex items-center justify-between group transition-all"
-                                >
-                                  <button
-                                    onClick={() => handleMoveSection(item.id, sec.name, 'B')}
-                                    className="w-5 h-5 rounded bg-emerald-100 hover:bg-emerald-700 hover:text-white text-emerald-800 flex items-center justify-center transition-colors cursor-pointer mr-1 shrink-0"
-                                    title="Move this section back to Lab A"
-                                  >
-                                    <ArrowRight className="w-3 h-3 rotate-180" />
-                                  </button>
-                                  <span className="truncate max-w-[125px]" title={sec.name}>{sec.name}</span>
-                                  <strong className="text-emerald-900 bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] shrink-0">
-                                    {sec.count}
-                                  </strong>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
                       </div>
+
+                      <p className="text-[10px] text-slate-500 font-medium mt-3 pt-2 border-t border-indigo-100">
+                        🔄 Click section arrows (→ / ←) to adjust section allocation between rooms if needed.
+                      </p>
                     </div>
 
                   </div>
