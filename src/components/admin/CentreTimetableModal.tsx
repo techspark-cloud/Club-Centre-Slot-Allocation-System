@@ -164,30 +164,45 @@ export default function CentreTimetableModal({
 
         if (currentSlots.length > 0) {
           const slotIds = currentSlots.map(s => s.id);
-          const { data: allocData, error: allocErr } = await supabase
+          const PAGE_SIZE = 1000;
+
+          const { count: totalAllocCount } = await supabase
             .from('allocations')
-            .select(`
-              id,
-              slot_id,
-              created_at,
-              student:students (
-                id,
-                name,
-                register_no,
-                course,
-                section,
-                contact_no,
-                hosteler,
-                activity_session
-              )
-            `)
+            .select('*', { count: 'exact', head: true })
             .in('slot_id', slotIds);
 
-          if (allocErr) throw allocErr;
+          const numPages = Math.ceil((totalAllocCount || 0) / PAGE_SIZE) || 1;
+          const pagePromises = Array.from({ length: numPages }, (_, i) =>
+            supabase
+              .from('allocations')
+              .select(`
+                id,
+                slot_id,
+                created_at,
+                student:students (
+                  id,
+                  name,
+                  register_no,
+                  course,
+                  section,
+                  contact_no,
+                  hosteler,
+                  activity_session
+                )
+              `)
+              .in('slot_id', slotIds)
+              .range(i * PAGE_SIZE, (i + 1) * PAGE_SIZE - 1)
+          );
+
+          const pageResults = await Promise.all(pagePromises);
+          const allDayAllocs: any[] = [];
+          pageResults.forEach(res => {
+            if (res.data) allDayAllocs.push(...res.data);
+          });
 
           if (isMounted) {
             setDaySlots(currentSlots);
-            setDayAllocations(allocData || []);
+            setDayAllocations(allDayAllocs);
           }
         } else {
           if (isMounted) {

@@ -81,32 +81,47 @@ export async function GET() {
       s => s.centre?.name !== 'Sports' && s.capacity > 0
     );
 
-    // Fetch allocations for all academic slots in one fast batch query
+    // Fetch allocations for all academic slots in parallel batches (bypassing Supabase 1,000 limit with zero lag)
     const slotIds = academicSlots.map(s => s.id);
-    const { data: allocData, error: allocErr } = await supabase
+    const allocMap: Record<string, any[]> = {};
+    const PAGE_SIZE = 1000;
+
+    const { count: totalAllocCount, error: countErr } = await supabase
       .from('allocations')
-      .select(`
-        id,
-        slot_id,
-        student:students (
-          id,
-          name,
-          register_no,
-          course,
-          section,
-          contact_no
-        )
-      `)
+      .select('*', { count: 'exact', head: true })
       .in('slot_id', slotIds);
 
-    if (allocErr) throw allocErr;
+    if (countErr) throw countErr;
 
-    const allocMap: Record<string, any[]> = {};
-    (allocData || []).forEach(a => {
-      if (a.student) {
-        if (!allocMap[a.slot_id]) allocMap[a.slot_id] = [];
-        allocMap[a.slot_id].push(a.student);
-      }
+    const numPages = Math.ceil((totalAllocCount || 0) / PAGE_SIZE) || 1;
+    const pagePromises = Array.from({ length: numPages }, (_, i) => 
+      supabase
+        .from('allocations')
+        .select(`
+          id,
+          slot_id,
+          student:students (
+            id,
+            name,
+            register_no,
+            course,
+            section,
+            contact_no
+          )
+        `)
+        .in('slot_id', slotIds)
+        .range(i * PAGE_SIZE, (i + 1) * PAGE_SIZE - 1)
+    );
+
+    const pageResults = await Promise.all(pagePromises);
+    pageResults.forEach(res => {
+      if (res.error) throw res.error;
+      (res.data || []).forEach(a => {
+        if (a.student) {
+          if (!allocMap[a.slot_id]) allocMap[a.slot_id] = [];
+          allocMap[a.slot_id].push(a.student);
+        }
+      });
     });
 
     // 3. Group slots by Day and Time
@@ -184,10 +199,14 @@ export async function GET() {
         }
 
         const slotStudents = allocMap[cSlot.id] || [];
-        const totalEnrolled = cSlot.allocated_count || slotStudents.length;
+        const totalEnrolled = Math.max(cSlot.allocated_count || 0, slotStudents.length);
 
         // Accommodate 70 students in Room A, and ONLY balance (total - 70) students in Room B!
         const { totalA, sectionsA, totalB, sectionsB } = partitionAccommodateCapacity(slotStudents, STANDARD_ROOM_CAPACITY);
+
+        const excessCount = Math.max(totalB, totalEnrolled - STANDARD_ROOM_CAPACITY);
+        const effectiveTotalA = totalA || Math.min(totalEnrolled, STANDARD_ROOM_CAPACITY);
+        const effectiveTotalB = totalB || excessCount;
 
         const suggestionItem = {
           id: cSlot.id,
@@ -204,27 +223,27 @@ export async function GET() {
           totalEnrolled,
           capacity: STANDARD_ROOM_CAPACITY,
           isOvercrowded: true,
-          excessCount: totalB,
-          retainedInLabA: totalA,
-          spilloverToLabB: totalB,
+          excessCount: effectiveTotalB,
+          retainedInLabA: effectiveTotalA,
+          spilloverToLabB: effectiveTotalB,
           candidateVenues,
           allVenuesLiveStatus: liveVenueStatus,
           selectedSpilloverVenue: matched ? matched.venue : 'Spillover Lab',
           matchedSpillover: matched,
           planA: {
             venue: cSlot.venue || 'Room A',
-            total: totalA,
+            total: effectiveTotalA,
             capacity: STANDARD_ROOM_CAPACITY,
-            occupancyPct: Math.round((totalA / STANDARD_ROOM_CAPACITY) * 100),
+            occupancyPct: Math.round((effectiveTotalA / STANDARD_ROOM_CAPACITY) * 100),
             sections: sectionsA,
           },
           planB: {
             venue: matched ? matched.venue : 'Spillover Lab',
             spilloverCentreName: matched ? matched.centreName : '',
-            total: totalB,
+            total: effectiveTotalB,
             originalCapacity: STANDARD_ROOM_CAPACITY,
             spilloverFreeBefore: matched ? matched.freeSeats : STANDARD_ROOM_CAPACITY,
-            spilloverFreeAfter: matched ? Math.max(0, matched.freeSeats - totalB) : Math.max(0, STANDARD_ROOM_CAPACITY - totalB),
+            spilloverFreeAfter: matched ? Math.max(0, matched.freeSeats - effectiveTotalB) : Math.max(0, STANDARD_ROOM_CAPACITY - effectiveTotalB),
             sections: sectionsB,
           },
         };
