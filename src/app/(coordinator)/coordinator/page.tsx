@@ -29,8 +29,8 @@ export default async function CoordinatorPage() {
     .select('centre:centres(*)')
     .eq('profile_id', user.id);
 
-  const assignedClubs = clubAssignments?.map(a => a.club).filter(Boolean) || [];
-  const assignedCentres = centreAssignments?.map(a => a.centre).filter(Boolean) || [];
+  const assignedClubs: any[] = clubAssignments?.map(a => a.club).filter(Boolean) || [];
+  const assignedCentres: any[] = centreAssignments?.map(a => a.centre).filter(Boolean) || [];
 
   if (assignedClubs.length === 0 && assignedCentres.length === 0) {
     return (
@@ -109,6 +109,20 @@ export default async function CoordinatorPage() {
 
   const holidaysList = holidaysData || [];
 
+  // Fetch active published venue rebalancing plan (if any)
+  let publishedVenuePlan: any = null;
+  try {
+    const { data: planBlob } = await supabaseAdmin.storage
+      .from('venue_plans')
+      .download('active_rebalanced_plan.json');
+    if (planBlob) {
+      const planText = await planBlob.text();
+      publishedVenuePlan = JSON.parse(planText);
+    }
+  } catch (err) {
+    console.warn('No active published venue plan found:', err);
+  }
+
   const coordinatorName = profile?.full_name || profile?.name || assignedClubs[0]?.faculty_name || assignedCentres[0]?.faculty_name || 'Faculty Coordinator';
 
   return (
@@ -121,6 +135,7 @@ export default async function CoordinatorPage() {
       centreAllocations={centreAllocations}
       holidaysList={holidaysList}
       coordinatorName={coordinatorName}
+      publishedVenuePlan={publishedVenuePlan}
     />
   );
 }

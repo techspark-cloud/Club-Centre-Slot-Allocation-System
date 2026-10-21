@@ -7,7 +7,7 @@ import {
   Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, 
   CheckCircle2, XCircle, AlertCircle, FileText, QrCode, Search, Filter,
   CheckCheck, UserX, Sparkles, Phone, ShieldCheck, RefreshCw, ChevronRight,
-  BarChart3, Sun, Moon, Activity, Check, FileSpreadsheet, Eye
+  BarChart3, Sun, Moon, Activity, Check, FileSpreadsheet, Eye, Zap
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -26,6 +26,7 @@ interface CoordinatorDashboardProps {
   centreAllocations: any[];
   holidaysList: any[];
   coordinatorName?: string;
+  publishedVenuePlan?: any;
 }
 
 export default function CoordinatorDashboard({
@@ -37,6 +38,7 @@ export default function CoordinatorDashboard({
   centreAllocations,
   holidaysList,
   coordinatorName,
+  publishedVenuePlan,
 }: CoordinatorDashboardProps) {
   const [activeTab, setActiveTab] = useState<'clubs' | 'centres' | 'reports'>(
     assignedClubs.length > 0 ? 'clubs' : (assignedCentres.length > 0 ? 'centres' : 'reports')
@@ -69,6 +71,67 @@ export default function CoordinatorDashboard({
   const [cumulativeData, setCumulativeData] = useState<any>(null);
   const [isCumulativeLoading, setIsCumulativeLoading] = useState(false);
   const [riskFilter, setRiskFilter] = useState<'ALL' | 'DEFAULTER' | 'WARNING' | 'GOOD'>('ALL');
+
+  // Venue Optimization Multi-Lab Switcher State
+  const [selectedVenueTab, setSelectedVenueTab] = useState<'ALL' | 'A' | 'B'>('ALL');
+
+  // Helper: Get venue optimization plan for a slot
+  const getSlotPlan = (slotId: string) => {
+    if (!publishedVenuePlan?.suggestions) return null;
+    return publishedVenuePlan.suggestions.find((s: any) => s.id === slotId && s.isRebalanced);
+  };
+
+  // Helper: Determine Lab A vs Lab B allocation for student
+  const getStudentLab = (student: any, slotId: string) => {
+    if (!publishedVenuePlan || !slotId || !student) return null;
+
+    // 1. Direct student ID match
+    const stMatch = publishedVenuePlan.studentVenueMap?.[student.id];
+    if (stMatch && stMatch.slotId === slotId) {
+      return {
+        labType: stMatch.labType as 'A' | 'B',
+        venue: stMatch.venue as string,
+        spilloverCentreName: stMatch.spilloverCentreName as string | undefined
+      };
+    }
+
+    // 2. Find slot suggestion
+    const slotSuggestion = publishedVenuePlan.suggestions?.find((s: any) => s.id === slotId && s.isRebalanced);
+    if (!slotSuggestion) return null;
+
+    const venueA = slotSuggestion.planA?.venue || slotSuggestion.currentVenue;
+    const venueB = slotSuggestion.planB?.venue;
+    const spilloverCentre = slotSuggestion.planB?.spilloverCentreName || '';
+
+    // Match by section list
+    const c = student.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
+    const sec = student.section ? `Sec ${student.section}` : 'General';
+    const secKey = `${c} (${sec})`;
+
+    const inPlanB = (slotSuggestion.planB?.sections || []).some((s: any) => s.name === secKey);
+    const inPlanA = (slotSuggestion.planA?.sections || []).some((s: any) => s.name === secKey);
+
+    if (inPlanB && !inPlanA) {
+      return { labType: 'B' as const, venue: venueB, spilloverCentreName: spilloverCentre };
+    }
+    if (inPlanA && !inPlanB) {
+      return { labType: 'A' as const, venue: venueA };
+    }
+
+    // Direct student array match in sections
+    const inAStudents = (slotSuggestion.planA?.sections || []).some((s: any) => 
+      (s.students || []).some((st: any) => st.id === student.id || st.register_no === student.register_no)
+    );
+    if (inAStudents) return { labType: 'A' as const, venue: venueA };
+
+    const inBStudents = (slotSuggestion.planB?.sections || []).some((s: any) => 
+      (s.students || []).some((st: any) => st.id === student.id || st.register_no === student.register_no)
+    );
+    if (inBStudents) return { labType: 'B' as const, venue: venueB, spilloverCentreName: spilloverCentre };
+
+    // Default fallback
+    return { labType: 'A' as const, venue: venueA };
+  };
 
   useEffect(() => {
     if (activeTab === 'reports') {
@@ -202,23 +265,39 @@ export default function CoordinatorDashboard({
   // Bulk Action: Mark All Present
   const markAllAsPresent = async () => {
     if (!selectedSlotId || isDateLocked || isHoliday) return;
-    const enrolledStudents = allocationsForSlot(selectedSlotId);
-    if (enrolledStudents.length === 0) return;
+    const allEnrolled = allocationsForSlot(selectedSlotId);
+    if (allEnrolled.length === 0) return;
 
-    if (!confirm(`Mark ALL ${enrolledStudents.length} enrolled students as PRESENT for ${selectedDate}?`)) {
+    const activeSlotPlan = getSlotPlan(selectedSlotId);
+    const targetStudents = (activeSlotPlan && selectedVenueTab !== 'ALL')
+      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === selectedVenueTab)
+      : allEnrolled;
+
+    if (targetStudents.length === 0) return;
+
+    const roomLabel = (activeSlotPlan && selectedVenueTab !== 'ALL')
+      ? (selectedVenueTab === 'A' 
+          ? `Lab A (${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue})` 
+          : `Lab B (${activeSlotPlan.planB?.venue})`)
+      : 'All Rooms';
+
+    if (!confirm(`Mark ALL ${targetStudents.length} enrolled students in ${roomLabel} as PRESENT for ${selectedDate}?`)) {
       return;
     }
 
     setIsBulkProcessing(true);
     try {
-      const updatedAttendance = enrolledStudents.map(m => ({
-        student_id: m.student.id,
-        status: 'PRESENT' as const,
-        date: selectedDate
-      }));
-      setAttendanceData(updatedAttendance);
+      const targetIds = new Set(targetStudents.map(m => m.student.id));
+      setAttendanceData(prev => [
+        ...prev.filter(a => !targetIds.has(a.student_id)),
+        ...targetStudents.map(m => ({
+          student_id: m.student.id,
+          status: 'PRESENT' as const,
+          date: selectedDate
+        }))
+      ]);
 
-      const promises = enrolledStudents.map(m => 
+      const promises = targetStudents.map(m => 
         fetch('/api/coordinator/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -242,23 +321,39 @@ export default function CoordinatorDashboard({
   // Bulk Action: Mark All Absent
   const markAllAsAbsent = async () => {
     if (!selectedSlotId || isDateLocked || isHoliday) return;
-    const enrolledStudents = allocationsForSlot(selectedSlotId);
-    if (enrolledStudents.length === 0) return;
+    const allEnrolled = allocationsForSlot(selectedSlotId);
+    if (allEnrolled.length === 0) return;
 
-    if (!confirm(`Mark ALL ${enrolledStudents.length} enrolled students as ABSENT for ${selectedDate}?`)) {
+    const activeSlotPlan = getSlotPlan(selectedSlotId);
+    const targetStudents = (activeSlotPlan && selectedVenueTab !== 'ALL')
+      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === selectedVenueTab)
+      : allEnrolled;
+
+    if (targetStudents.length === 0) return;
+
+    const roomLabel = (activeSlotPlan && selectedVenueTab !== 'ALL')
+      ? (selectedVenueTab === 'A' 
+          ? `Lab A (${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue})` 
+          : `Lab B (${activeSlotPlan.planB?.venue})`)
+      : 'All Rooms';
+
+    if (!confirm(`Mark ALL ${targetStudents.length} enrolled students in ${roomLabel} as ABSENT for ${selectedDate}?`)) {
       return;
     }
 
     setIsBulkProcessing(true);
     try {
-      const updatedAttendance = enrolledStudents.map(m => ({
-        student_id: m.student.id,
-        status: 'ABSENT' as const,
-        date: selectedDate
-      }));
-      setAttendanceData(updatedAttendance);
+      const targetIds = new Set(targetStudents.map(m => m.student.id));
+      setAttendanceData(prev => [
+        ...prev.filter(a => !targetIds.has(a.student_id)),
+        ...targetStudents.map(m => ({
+          student_id: m.student.id,
+          status: 'ABSENT' as const,
+          date: selectedDate
+        }))
+      ]);
 
-      const promises = enrolledStudents.map(m => 
+      const promises = targetStudents.map(m => 
         fetch('/api/coordinator/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -352,12 +447,26 @@ export default function CoordinatorDashboard({
       .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
   };
 
-  const downloadPDF = async (slotId: string, entityName: string, day: string) => {
-    const students = allocationsForSlot(slotId);
-    if (students.length === 0) {
+  const downloadPDF = async (slotId: string, entityName: string, day: string, venueTab: 'ALL' | 'A' | 'B' = selectedVenueTab) => {
+    const allStudents = allocationsForSlot(slotId);
+    if (allStudents.length === 0) {
       alert("No students enrolled in this slot yet.");
       return;
     }
+
+    const activeSlotPlan = getSlotPlan(slotId);
+    const students = (activeSlotPlan && venueTab !== 'ALL')
+      ? allStudents.filter(m => getStudentLab(m.student, slotId)?.labType === venueTab)
+      : allStudents;
+
+    if (students.length === 0) {
+      alert(`No students found allocated to Lab ${venueTab}.`);
+      return;
+    }
+
+    const labVenueName = (activeSlotPlan && venueTab !== 'ALL')
+      ? (venueTab === 'A' ? (activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue) : activeSlotPlan.planB?.venue)
+      : (activeSlotPlan ? `${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue} & ${activeSlotPlan.planB?.venue}` : '');
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
@@ -406,7 +515,10 @@ export default function CoordinatorDashboard({
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(37, 99, 235);
-    doc.text("OFFICIAL ATTENDANCE REPORT", pageWidth / 2, 45, { align: "center" });
+    const reportHeading = (activeSlotPlan && venueTab !== 'ALL')
+      ? `OFFICIAL ATTENDANCE REPORT — LAB ${venueTab} (${labVenueName})`
+      : "OFFICIAL ATTENDANCE REPORT";
+    doc.text(reportHeading, pageWidth / 2, 45, { align: "center" });
 
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.5);
@@ -420,19 +532,26 @@ export default function CoordinatorDashboard({
     doc.setFont("helvetica", "normal");
     doc.text(entityName, 37, 62);
 
+    if (labVenueName) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Venue Room :", 110, 62);
+      doc.setFont("helvetica", "normal");
+      doc.text(labVenueName, 134, 62);
+    }
+
     doc.setFont("helvetica", "bold");
     doc.text("Date :", 14, 69);
     doc.setFont("helvetica", "normal");
     doc.text(selectedDate, 25, 69);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Day :", 130, 69);
+    doc.text("Day :", 110, 69);
     doc.setFont("helvetica", "normal");
-    doc.text(day, 140, 69);
+    doc.text(day, 120, 69);
 
     const totalRegistered = students.length;
-    const totalPresent = attendanceData.filter(a => a.status === 'PRESENT').length;
-    const totalAbsent = attendanceData.filter(a => a.status === 'ABSENT').length;
+    const totalPresent = attendanceData.filter(a => a.status === 'PRESENT' && students.some(s => s.student?.id === a.student_id)).length;
+    const totalAbsent = attendanceData.filter(a => a.status === 'ABSENT' && students.some(s => s.student?.id === a.student_id)).length;
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(51, 65, 85);
@@ -452,16 +571,19 @@ export default function CoordinatorDashboard({
     doc.setFont("helvetica", "normal");
     doc.text(totalAbsent.toString(), 145, 76);
 
-    const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Status"];
+    const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Allocated Venue", "Status"];
     const tableRows = students.map((m, i) => {
       const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
       const status = studentAttendance?.status === 'PRESENT' ? 'Present' : (studentAttendance?.status === 'ABSENT' ? 'Absent' : 'Unmarked');
+      const alloc = activeSlotPlan ? getStudentLab(m.student, slotId) : null;
+      const venueStr = alloc ? `Lab ${alloc.labType}: ${alloc.venue}` : '-';
       
       return [
         i + 1,
         m.student?.register_no || '',
         m.student?.name || '',
         `${m.student?.course || ''} - ${m.student?.section || ''}`,
+        venueStr,
         status
       ];
     });
@@ -471,14 +593,14 @@ export default function CoordinatorDashboard({
       body: tableRows,
       startY: 82,
       theme: 'grid',
-      styles: { fontSize: 9, cellPadding: 3 },
+      styles: { fontSize: 8.5, cellPadding: 2.8 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
-        4: { fontStyle: 'bold' }
+        5: { fontStyle: 'bold' }
       },
       didParseCell: function (data: any) {
-        if (data.section === 'body' && data.column.index === 4) {
+        if (data.section === 'body' && data.column.index === 5) {
           if (data.cell.raw === 'Present') {
             data.cell.styles.textColor = [22, 163, 74];
           } else if (data.cell.raw === 'Absent') {
@@ -490,19 +612,32 @@ export default function CoordinatorDashboard({
       }
     });
 
-    doc.save(`${entityName.replace(/\s+/g, '_')}_Attendance_${selectedDate}.pdf`);
+    const fileSuffix = (activeSlotPlan && venueTab !== 'ALL') ? `_Lab_${venueTab}` : '';
+    doc.save(`${entityName.replace(/\s+/g, '_')}${fileSuffix}_Attendance_${selectedDate}.pdf`);
   };
 
-  const downloadExcel = (slotId: string, entityName: string, day: string) => {
-    const students = allocationsForSlot(slotId);
-    if (students.length === 0) {
+  const downloadExcel = (slotId: string, entityName: string, day: string, venueTab: 'ALL' | 'A' | 'B' = selectedVenueTab) => {
+    const allStudents = allocationsForSlot(slotId);
+    if (allStudents.length === 0) {
       alert("No students enrolled in this slot yet.");
+      return;
+    }
+
+    const activeSlotPlan = getSlotPlan(slotId);
+    const students = (activeSlotPlan && venueTab !== 'ALL')
+      ? allStudents.filter(m => getStudentLab(m.student, slotId)?.labType === venueTab)
+      : allStudents;
+
+    if (students.length === 0) {
+      alert(`No students found allocated to Lab ${venueTab}.`);
       return;
     }
 
     const rows = students.map((m, i) => {
       const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
       const status = studentAttendance?.status === 'PRESENT' ? 'Present' : (studentAttendance?.status === 'ABSENT' ? 'Absent' : 'Unmarked');
+      const alloc = activeSlotPlan ? getStudentLab(m.student, slotId) : null;
+      const venueStr = alloc ? `Lab ${alloc.labType} (${alloc.venue})` : 'Primary Room';
 
       return {
         'S.No': i + 1,
@@ -510,6 +645,7 @@ export default function CoordinatorDashboard({
         'Student Name': m.student?.name || '',
         'Course / Department': m.student?.course || '',
         'Section': m.student?.section || '',
+        'Allocated Room / Venue': venueStr,
         'Academic Year': m.student?.academic_year || 'N/A',
         'Hosteler': m.student?.hosteler ? 'Yes' : 'No',
         'Contact Number': m.student?.contact_no || 'N/A',
@@ -525,6 +661,7 @@ export default function CoordinatorDashboard({
       { wch: 25 }, // Student Name
       { wch: 15 }, // Course
       { wch: 10 }, // Section
+      { wch: 20 }, // Allocated Room
       { wch: 14 }, // Academic Year
       { wch: 10 }, // Hosteler
       { wch: 15 }, // Contact
@@ -533,9 +670,11 @@ export default function CoordinatorDashboard({
     ];
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Live Attendance');
+    const sheetTitle = (activeSlotPlan && venueTab !== 'ALL') ? `Lab ${venueTab} Attendance` : 'Live Attendance';
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetTitle);
     
-    const fileName = `${entityName.replace(/\s+/g, '_')}_Attendance_${selectedDate}.xlsx`;
+    const fileSuffix = (activeSlotPlan && venueTab !== 'ALL') ? `_Lab_${venueTab}` : '';
+    const fileName = `${entityName.replace(/\s+/g, '_')}${fileSuffix}_Attendance_${selectedDate}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -914,7 +1053,16 @@ export default function CoordinatorDashboard({
           currentEntities.map((entity) => {
             const entitySlots = slotsByEntity(entity.id);
             const selectedSlot = entitySlots.find(s => s.id === selectedSlotId);
-            const enrolledStudents = selectedSlot ? allocationsForSlot(selectedSlot.id) : [];
+            const allSlotStudents = selectedSlot ? allocationsForSlot(selectedSlot.id) : [];
+            const activeSlotPlan = selectedSlot ? getSlotPlan(selectedSlot.id) : null;
+            const labAStudents = activeSlotPlan ? allSlotStudents.filter(m => getStudentLab(m.student, selectedSlot.id)?.labType === 'A') : allSlotStudents;
+            const labBStudents = activeSlotPlan ? allSlotStudents.filter(m => getStudentLab(m.student, selectedSlot.id)?.labType === 'B') : [];
+
+            // Filter enrolled students by selected venue tab
+            const enrolledStudents = selectedSlot ? allSlotStudents.filter(m => {
+              if (!activeSlotPlan || selectedVenueTab === 'ALL') return true;
+              return getStudentLab(m.student, selectedSlot.id)?.labType === selectedVenueTab;
+            }) : [];
 
             // Filter enrolled students by search query and status filter
             const filteredStudents = enrolledStudents.filter(m => {
@@ -931,9 +1079,9 @@ export default function CoordinatorDashboard({
               return true;
             });
 
-            // Metrics for selected slot
-            const presentCount = attendanceData.filter(a => a.status === 'PRESENT').length;
-            const absentCount = attendanceData.filter(a => a.status === 'ABSENT').length;
+            // Metrics for selected slot (strictly matching enrolledStudents)
+            const presentCount = attendanceData.filter(a => a.status === 'PRESENT' && enrolledStudents.some(e => e.student?.id === a.student_id)).length;
+            const absentCount = attendanceData.filter(a => a.status === 'ABSENT' && enrolledStudents.some(e => e.student?.id === a.student_id)).length;
             const unmarkedCount = Math.max(0, enrolledStudents.length - (presentCount + absentCount));
             const attendancePercent = enrolledStudents.length > 0 ? Math.round((presentCount / enrolledStudents.length) * 100) : 0;
 
@@ -1011,11 +1159,15 @@ export default function CoordinatorDashboard({
                                             {cellSlots.map(slot => {
                                               const isSelected = selectedSlotId === slot.id;
                                               const enrolledCount = allocationsForSlot(slot.id).length;
+                                              const slotPlan = getSlotPlan(slot.id);
                                               
                                               return (
                                                 <div 
                                                   key={slot.id}
-                                                  onClick={() => setSelectedSlotId(isSelected ? null : slot.id)}
+                                                  onClick={() => {
+                                                    setSelectedSlotId(isSelected ? null : slot.id);
+                                                    setSelectedVenueTab('ALL');
+                                                  }}
                                                   className={`p-3 rounded-xl border cursor-pointer transition-all duration-150 ${
                                                     isSelected 
                                                       ? 'border-blue-600 bg-blue-50/90 shadow-sm ring-2 ring-blue-500/20' 
@@ -1023,19 +1175,43 @@ export default function CoordinatorDashboard({
                                                   }`}
                                                 >
                                                   <div className="flex items-start justify-between gap-2">
-                                                    <div className="flex flex-col gap-1">
-                                                      <span className="flex items-center gap-1 font-bold text-slate-800 text-xs">
-                                                        <Clock className="w-3 h-3 text-blue-600" /> {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
-                                                      </span>
-                                                      {slot.venue && (
-                                                        <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                                                          <MapPin className="w-3 h-3 text-slate-400" /> {slot.venue}
+                                                    <div className="flex flex-col gap-1 min-w-0">
+                                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="flex items-center gap-1 font-bold text-slate-800 text-xs">
+                                                          <Clock className="w-3 h-3 text-blue-600 shrink-0" /> {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
                                                         </span>
+                                                        {slotPlan && (
+                                                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
+                                                            <Zap className="w-2.5 h-2.5" /> 2 Venues
+                                                          </span>
+                                                        )}
+                                                      </div>
+
+                                                      {slotPlan ? (
+                                                        <div className="space-y-1 mt-0.5">
+                                                          <div className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded w-fit">
+                                                            <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
+                                                            <span>Lab A: {slotPlan.planA?.venue || slot.venue}</span>
+                                                            <span className="text-[10px] text-blue-500 font-normal">({slotPlan.planA?.studentCount || slotPlan.planA?.capacity || slot.capacity})</span>
+                                                          </div>
+                                                          <div className="flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-100/70 px-1.5 py-0.5 rounded w-fit">
+                                                            <Zap className="w-3 h-3 text-purple-600 shrink-0" />
+                                                            <span>Lab B: {slotPlan.planB?.venue}</span>
+                                                            <span className="text-[10px] text-purple-500 font-normal">({slotPlan.planB?.studentCount || slotPlan.planB?.capacity || 'Spillover'})</span>
+                                                          </div>
+                                                        </div>
+                                                      ) : (
+                                                        slot.venue && (
+                                                          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                                                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" /> {slot.venue}
+                                                          </span>
+                                                        )
                                                       )}
                                                     </div>
+
                                                     <div className="text-right shrink-0">
                                                       <div className="text-xs font-bold text-slate-900">
-                                                        {enrolledCount} <span className="text-[10px] font-normal text-slate-400">/ {slot.capacity}</span>
+                                                        {enrolledCount} <span className="text-[10px] font-normal text-slate-400">/ {slotPlan ? ((slotPlan.planA?.capacity || slot.capacity) + (slotPlan.planB?.capacity || 0)) : slot.capacity}</span>
                                                       </div>
                                                       <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mt-1 inline-block ${
                                                         isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
@@ -1087,31 +1263,56 @@ export default function CoordinatorDashboard({
                                           {sessionSlots.map(slot => {
                                             const isSelected = selectedSlotId === slot.id;
                                             const enrolledCount = allocationsForSlot(slot.id).length;
+                                            const slotPlan = getSlotPlan(slot.id);
                                             
                                             return (
                                               <div 
                                                 key={slot.id}
-                                                onClick={() => setSelectedSlotId(isSelected ? null : slot.id)}
+                                                onClick={() => {
+                                                  setSelectedSlotId(isSelected ? null : slot.id);
+                                                  setSelectedVenueTab('ALL');
+                                                }}
                                                 className={`p-3 rounded-xl border cursor-pointer transition-all ${
                                                   isSelected 
-                                                    ? 'border-blue-600 bg-blue-50 shadow-xs' 
+                                                    ? 'border-blue-600 bg-blue-50 shadow-xs ring-1 ring-blue-500/20' 
                                                     : 'border-slate-200 hover:border-blue-300'
                                                 }`}
                                               >
                                                 <div className="flex items-start justify-between gap-3">
-                                                  <div className="flex flex-col gap-1">
-                                                    <span className="flex items-center gap-1 text-xs font-bold text-slate-800">
-                                                      <Clock className="w-3.5 h-3.5 text-blue-600" /> {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
-                                                    </span>
-                                                    {slot.venue && (
-                                                      <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
-                                                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> {slot.venue}
+                                                  <div className="flex flex-col gap-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                      <span className="flex items-center gap-1 text-xs font-bold text-slate-800">
+                                                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" /> {slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}
                                                       </span>
+                                                      {slotPlan && (
+                                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
+                                                          <Zap className="w-2.5 h-2.5" /> 2 Venues
+                                                        </span>
+                                                      )}
+                                                    </div>
+
+                                                    {slotPlan ? (
+                                                      <div className="space-y-1 mt-0.5 text-xs">
+                                                        <div className="flex items-center gap-1 text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
+                                                          <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
+                                                          <span>Lab A: {slotPlan.planA?.venue || slot.venue} ({slotPlan.planA?.studentCount || slotPlan.planA?.capacity || slot.capacity})</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
+                                                          <Zap className="w-3 h-3 text-purple-600 shrink-0" />
+                                                          <span>Lab B: {slotPlan.planB?.venue} ({slotPlan.planB?.studentCount || slotPlan.planB?.capacity || 'Spillover'})</span>
+                                                        </div>
+                                                      </div>
+                                                    ) : (
+                                                      slot.venue && (
+                                                        <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
+                                                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {slot.venue}
+                                                        </span>
+                                                      )
                                                     )}
                                                   </div>
                                                   <div className="text-right shrink-0">
                                                     <div className="text-sm font-bold text-slate-900">
-                                                      {enrolledCount} <span className="text-xs font-normal text-slate-400">/ {slot.capacity}</span>
+                                                      {enrolledCount} <span className="text-xs font-normal text-slate-400">/ {slotPlan ? ((slotPlan.planA?.capacity || slot.capacity) + (slotPlan.planB?.capacity || 0)) : slot.capacity}</span>
                                                     </div>
                                                     <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mt-0.5">
                                                       {isSelected ? 'Selected' : 'Select'}
@@ -1208,14 +1409,14 @@ export default function CoordinatorDashboard({
                             </button>
 
                             <button 
-                              onClick={() => downloadPDF(selectedSlot.id, entity.name, selectedSlot.day)}
+                              onClick={() => downloadPDF(selectedSlot.id, entity.name, selectedSlot.day, selectedVenueTab)}
                               className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg transition-colors"
                             >
                               <Download className="w-3.5 h-3.5" /> Export PDF
                             </button>
 
                             <button 
-                              onClick={() => downloadExcel(selectedSlot.id, entity.name, selectedSlot.day)}
+                              onClick={() => downloadExcel(selectedSlot.id, entity.name, selectedSlot.day, selectedVenueTab)}
                               className="flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg transition-colors shadow-xs"
                             >
                               <FileSpreadsheet className="w-3.5 h-3.5" /> Export Excel
@@ -1232,6 +1433,80 @@ export default function CoordinatorDashboard({
                           </div>
                         )}
                       </div>
+
+                      {/* Rebalanced Room Switcher Bar (Venue Optimization) */}
+                      {activeSlotPlan && (
+                        <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/90 to-purple-50/90 p-3 sm:p-4 border-b border-indigo-100">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs">
+                                  <Zap className="w-3 h-3" /> Venue Optimization Active
+                                </span>
+                                <span className="text-xs font-bold text-slate-800">
+                                  {allSlotStudents.length} Students Allocated Across 2 Venues
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-600">
+                                Click a venue tab below to mark attendance, filter student list, or download reports for that room.
+                              </p>
+                            </div>
+
+                            {/* Segmented Room Selector Tabs */}
+                            <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-xl border border-indigo-200 shadow-xs">
+                              <button
+                                onClick={() => setSelectedVenueTab('ALL')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                  selectedVenueTab === 'ALL'
+                                    ? 'bg-slate-900 text-white shadow-xs'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                }`}
+                              >
+                                <span>All Rooms</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                  selectedVenueTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {allSlotStudents.length}
+                                </span>
+                              </button>
+
+                              <button
+                                onClick={() => setSelectedVenueTab('A')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                  selectedVenueTab === 'A'
+                                    ? 'bg-blue-600 text-white shadow-xs'
+                                    : 'text-blue-900 hover:bg-blue-50'
+                                }`}
+                              >
+                                <Building2 className="w-3.5 h-3.5" />
+                                <span>Lab A: {activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue}</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                  selectedVenueTab === 'A' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {labAStudents.length}
+                                </span>
+                              </button>
+
+                              <button
+                                onClick={() => setSelectedVenueTab('B')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                  selectedVenueTab === 'B'
+                                    ? 'bg-purple-600 text-white shadow-xs'
+                                    : 'text-purple-900 hover:bg-purple-50'
+                                }`}
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>Lab B: {activeSlotPlan.planB?.venue}</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                  selectedVenueTab === 'B' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800'
+                                }`}>
+                                  {labBStudents.length}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* CUMULATIVE MATRIX VIEW */}
                       {slotViewMode === 'CUMULATIVE' ? (
@@ -1536,6 +1811,7 @@ export default function CoordinatorDashboard({
                                         <th className="px-4 py-2.5 font-bold uppercase tracking-wider text-slate-400 sticky top-0 bg-slate-50 z-10">Register No</th>
                                         <th className="px-4 py-2.5 font-bold uppercase tracking-wider text-slate-400 sticky top-0 bg-slate-50 z-10">Student Details</th>
                                         <th className="px-4 py-2.5 font-bold uppercase tracking-wider text-slate-400 sticky top-0 bg-slate-50 z-10">Course & Section</th>
+                                          <th className="px-4 py-2.5 font-bold uppercase tracking-wider text-slate-400 sticky top-0 bg-slate-50 z-10">Allocated Room</th>
                                         <th className="px-4 py-2.5 font-bold uppercase tracking-wider text-slate-400 sticky top-0 bg-slate-50 z-10 text-right">Attendance Action</th>
                                       </tr>
                                     </thead>
@@ -1566,6 +1842,27 @@ export default function CoordinatorDashboard({
                                             </td>
                                             <td className="px-4 py-3 font-semibold text-slate-700">
                                               {m.student?.course} - <span className="text-blue-700 font-bold">{m.student?.section}</span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              {activeSlotPlan ? (
+                                                (() => {
+                                                  const alloc = getStudentLab(m.student, selectedSlot.id);
+                                                  if (alloc?.labType === "B") {
+                                                    return (
+                                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs">
+                                                        <Zap className="w-3 h-3 text-purple-600 shrink-0" /> Lab B: {alloc.venue}
+                                                      </span>
+                                                    );
+                                                  }
+                                                  return (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs">
+                                                      <Building2 className="w-3 h-3 text-blue-600 shrink-0" /> Lab A: {alloc?.venue || activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue}
+                                                    </span>
+                                                  );
+                                                })()
+                                              ) : (
+                                                <span className="text-slate-500 font-semibold text-xs">{selectedSlot.venue || "Primary Room"}</span>
+                                              )}
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                               <div className="flex items-center justify-end gap-1.5">
@@ -1634,6 +1931,25 @@ export default function CoordinatorDashboard({
                                               <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
                                                 {m.student?.course} - <span className="text-blue-700 font-bold">{m.student?.section}</span>
                                               </p>
+                                                {activeSlotPlan && (
+                                                  <div className="mt-1">
+                                                    {(() => {
+                                                      const alloc = getStudentLab(m.student, selectedSlot.id);
+                                                      if (alloc?.labType === "B") {
+                                                        return (
+                                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                                            <Zap className="w-2.5 h-2.5 text-purple-600" /> Lab B: {alloc.venue}
+                                                          </span>
+                                                        );
+                                                      }
+                                                      return (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                                          <Building2 className="w-2.5 h-2.5 text-blue-600" /> Lab A: {alloc?.venue || activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue}
+                                                        </span>
+                                                      );
+                                                    })()}
+                                                  </div>
+                                                )}
                                             </div>
                                           </div>
                                           <button 
