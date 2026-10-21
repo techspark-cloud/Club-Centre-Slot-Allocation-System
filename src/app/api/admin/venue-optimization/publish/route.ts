@@ -87,14 +87,16 @@ export async function POST(req: Request) {
         };
         (sec.students || []).forEach((st: any) => {
           if (st.id) {
-            studentVenueMap[st.id] = {
+            const entry = {
               slotId,
               venue: venueA,
-              labType: 'A',
+              labType: 'A' as const,
               centreName: item.centreName,
               day: item.day,
               timing: item.timing,
             };
+            studentVenueMap[`${st.id}__${slotId}`] = entry;
+            studentVenueMap[st.id] = entry;
           }
         });
       });
@@ -108,15 +110,17 @@ export async function POST(req: Request) {
         };
         (sec.students || []).forEach((st: any) => {
           if (st.id) {
-            studentVenueMap[st.id] = {
+            const entry = {
               slotId,
               venue: venueB,
-              labType: 'B',
+              labType: 'B' as const,
               centreName: item.centreName,
               day: item.day,
               timing: item.timing,
               spilloverCentreName: spilloverCentre,
             };
+            studentVenueMap[`${st.id}__${slotId}`] = entry;
+            studentVenueMap[st.id] = entry;
           }
         });
       });
@@ -126,7 +130,10 @@ export async function POST(req: Request) {
       publishedAt: new Date().toISOString(),
       publishedBy: publishedBy || 'Admin',
       totalSlotsRebalanced: suggestions.length,
-      suggestions,
+      suggestions: suggestions.map((s: any) => ({
+        ...s,
+        isRebalanced: Boolean(s.planB && s.planB.venue)
+      })),
       studentVenueMap,
       sectionVenueMap,
     };

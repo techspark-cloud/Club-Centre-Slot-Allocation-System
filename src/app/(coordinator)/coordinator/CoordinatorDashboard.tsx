@@ -7,7 +7,7 @@ import {
   Users, Calendar, MapPin, Download, BookOpen, Clock, Building2, User, 
   CheckCircle2, XCircle, AlertCircle, FileText, QrCode, Search, Filter,
   CheckCheck, UserX, Sparkles, Phone, ShieldCheck, RefreshCw, ChevronRight,
-  BarChart3, Sun, Moon, Activity, Check, FileSpreadsheet, Eye, Zap
+  BarChart3, Sun, Moon, Activity, Check, FileSpreadsheet, Eye, Zap, UserPlus
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 import QRScannerModal from './QRScannerModal';
 import ActivityReportModal from './ActivityReportModal';
 import StudentAttendanceModal from './StudentAttendanceModal';
+import AssignLabStaffModal from './AssignLabStaffModal';
 import { getEntityLogoUrl } from '@/lib/clubLogos';
 
 interface CoordinatorDashboardProps {
@@ -27,6 +28,8 @@ interface CoordinatorDashboardProps {
   holidaysList: any[];
   coordinatorName?: string;
   publishedVenuePlan?: any;
+  isSubstitute?: boolean;
+  substituteStaffInfo?: any;
 }
 
 export default function CoordinatorDashboard({
@@ -39,6 +42,8 @@ export default function CoordinatorDashboard({
   holidaysList,
   coordinatorName,
   publishedVenuePlan,
+  isSubstitute = false,
+  substituteStaffInfo,
 }: CoordinatorDashboardProps) {
   const [activeTab, setActiveTab] = useState<'clubs' | 'centres' | 'reports'>(
     assignedClubs.length > 0 ? 'clubs' : (assignedCentres.length > 0 ? 'centres' : 'reports')
@@ -73,20 +78,80 @@ export default function CoordinatorDashboard({
   const [riskFilter, setRiskFilter] = useState<'ALL' | 'DEFAULTER' | 'WARNING' | 'GOOD'>('ALL');
 
   // Venue Optimization Multi-Lab Switcher State
-  const [selectedVenueTab, setSelectedVenueTab] = useState<'ALL' | 'A' | 'B'>('ALL');
+  const [selectedVenueTab, setSelectedVenueTab] = useState<'ALL' | 'A' | 'B'>(isSubstitute ? 'B' : 'ALL');
+  const [venuePlan, setVenuePlan] = useState<any>(publishedVenuePlan);
+
+  useEffect(() => {
+    setVenuePlan(publishedVenuePlan);
+  }, [publishedVenuePlan]);
+
+  // Auto-select assigned slot on mount for substitute faculty
+  useEffect(() => {
+    if (isSubstitute && centreSlots.length > 0 && !selectedSlotId) {
+      setSelectedSlotId(centreSlots[0].id);
+      setSelectedVenueTab('B');
+    }
+  }, [isSubstitute, centreSlots, selectedSlotId]);
+
+  // Assign Faculty for Lab B Modal State
+  const [isAssignStaffModalOpen, setIsAssignStaffModalOpen] = useState(false);
+  const [slotPlanForAssign, setSlotPlanForAssign] = useState<any>(null);
+
+  const handleOpenAssignModal = (plan: any) => {
+    setSlotPlanForAssign(plan);
+    setIsAssignStaffModalOpen(true);
+  };
+
+  const handleStaffAssigned = (slotId: string, assignedStaff: any, updatedPlan?: any) => {
+    if (updatedPlan) {
+      setVenuePlan(updatedPlan);
+    } else {
+      setVenuePlan((prev: any) => {
+        if (!prev?.suggestions) return prev;
+        return {
+          ...prev,
+          suggestions: prev.suggestions.map((s: any) => {
+            if (s.id === slotId && s.planB) {
+              return {
+                ...s,
+                planB: {
+                  ...s.planB,
+                  assignedStaff,
+                }
+              };
+            }
+            return s;
+          })
+        };
+      });
+    }
+  };
 
   // Helper: Get venue optimization plan for a slot
   const getSlotPlan = (slotId: string) => {
-    if (!publishedVenuePlan?.suggestions) return null;
-    return publishedVenuePlan.suggestions.find((s: any) => s.id === slotId && s.isRebalanced);
+    if (!venuePlan?.suggestions) return null;
+    return venuePlan.suggestions.find((s: any) => 
+      s.id === slotId && (s.isRebalanced || (s.planB && s.planB.venue))
+    );
   };
 
   // Helper: Determine Lab A vs Lab B allocation for student
   const getStudentLab = (student: any, slotId: string) => {
-    if (!publishedVenuePlan || !slotId || !student) return null;
+    if (!venuePlan || !slotId || !student) return null;
 
-    // 1. Direct student ID match
-    const stMatch = publishedVenuePlan.studentVenueMap?.[student.id];
+    // 1. Direct composite key match: studentId__slotId
+    const compositeKey = `${student.id}__${slotId}`;
+    const stCompositeMatch = venuePlan.studentVenueMap?.[compositeKey];
+    if (stCompositeMatch) {
+      return {
+        labType: stCompositeMatch.labType as 'A' | 'B',
+        venue: stCompositeMatch.venue as string,
+        spilloverCentreName: stCompositeMatch.spilloverCentreName as string | undefined
+      };
+    }
+
+    // Direct student ID match where slotId matches
+    const stMatch = venuePlan.studentVenueMap?.[student.id];
     if (stMatch && stMatch.slotId === slotId) {
       return {
         labType: stMatch.labType as 'A' | 'B',
@@ -96,12 +161,26 @@ export default function CoordinatorDashboard({
     }
 
     // 2. Find slot suggestion
-    const slotSuggestion = publishedVenuePlan.suggestions?.find((s: any) => s.id === slotId && s.isRebalanced);
+    const slotSuggestion = venuePlan.suggestions?.find((s: any) => 
+      s.id === slotId && (s.isRebalanced || (s.planB && s.planB.venue))
+    );
     if (!slotSuggestion) return null;
 
     const venueA = slotSuggestion.planA?.venue || slotSuggestion.currentVenue;
     const venueB = slotSuggestion.planB?.venue;
     const spilloverCentre = slotSuggestion.planB?.spilloverCentreName || '';
+
+    // Direct match in planB student array
+    const inBStudents = (slotSuggestion.planB?.sections || []).some((s: any) => 
+      (s.students || []).some((st: any) => st.id === student.id || (st.register_no && st.register_no === student.register_no))
+    );
+    if (inBStudents) return { labType: 'B' as const, venue: venueB, spilloverCentreName: spilloverCentre };
+
+    // Direct match in planA student array
+    const inAStudents = (slotSuggestion.planA?.sections || []).some((s: any) => 
+      (s.students || []).some((st: any) => st.id === student.id || (st.register_no && st.register_no === student.register_no))
+    );
+    if (inAStudents) return { labType: 'A' as const, venue: venueA };
 
     // Match by section list
     const c = student.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
@@ -117,17 +196,6 @@ export default function CoordinatorDashboard({
     if (inPlanA && !inPlanB) {
       return { labType: 'A' as const, venue: venueA };
     }
-
-    // Direct student array match in sections
-    const inAStudents = (slotSuggestion.planA?.sections || []).some((s: any) => 
-      (s.students || []).some((st: any) => st.id === student.id || st.register_no === student.register_no)
-    );
-    if (inAStudents) return { labType: 'A' as const, venue: venueA };
-
-    const inBStudents = (slotSuggestion.planB?.sections || []).some((s: any) => 
-      (s.students || []).some((st: any) => st.id === student.id || st.register_no === student.register_no)
-    );
-    if (inBStudents) return { labType: 'B' as const, venue: venueB, spilloverCentreName: spilloverCentre };
 
     // Default fallback
     return { labType: 'A' as const, venue: venueA };
@@ -269,17 +337,20 @@ export default function CoordinatorDashboard({
     if (allEnrolled.length === 0) return;
 
     const activeSlotPlan = getSlotPlan(selectedSlotId);
-    const targetStudents = (activeSlotPlan && selectedVenueTab !== 'ALL')
-      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === selectedVenueTab)
+    const targetLab = isSubstitute ? 'B' : selectedVenueTab;
+    const targetStudents = (activeSlotPlan && (isSubstitute || selectedVenueTab !== 'ALL'))
+      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === targetLab)
       : allEnrolled;
 
     if (targetStudents.length === 0) return;
 
-    const roomLabel = (activeSlotPlan && selectedVenueTab !== 'ALL')
-      ? (selectedVenueTab === 'A' 
-          ? `Lab A (${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue})` 
-          : `Lab B (${activeSlotPlan.planB?.venue})`)
-      : 'All Rooms';
+    const roomLabel = isSubstitute
+      ? `Lab B (${activeSlotPlan?.planB?.venue})`
+      : (activeSlotPlan && selectedVenueTab !== 'ALL'
+          ? (selectedVenueTab === 'A' 
+              ? `Lab A (${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue})` 
+              : `Lab B (${activeSlotPlan.planB?.venue})`)
+          : 'All Rooms');
 
     if (!confirm(`Mark ALL ${targetStudents.length} enrolled students in ${roomLabel} as PRESENT for ${selectedDate}?`)) {
       return;
@@ -325,17 +396,20 @@ export default function CoordinatorDashboard({
     if (allEnrolled.length === 0) return;
 
     const activeSlotPlan = getSlotPlan(selectedSlotId);
-    const targetStudents = (activeSlotPlan && selectedVenueTab !== 'ALL')
-      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === selectedVenueTab)
+    const targetLab = isSubstitute ? 'B' : selectedVenueTab;
+    const targetStudents = (activeSlotPlan && (isSubstitute || selectedVenueTab !== 'ALL'))
+      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === targetLab)
       : allEnrolled;
 
     if (targetStudents.length === 0) return;
 
-    const roomLabel = (activeSlotPlan && selectedVenueTab !== 'ALL')
-      ? (selectedVenueTab === 'A' 
-          ? `Lab A (${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue})` 
-          : `Lab B (${activeSlotPlan.planB?.venue})`)
-      : 'All Rooms';
+    const roomLabel = isSubstitute
+      ? `Lab B (${activeSlotPlan?.planB?.venue})`
+      : (activeSlotPlan && selectedVenueTab !== 'ALL'
+          ? (selectedVenueTab === 'A' 
+              ? `Lab A (${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue})` 
+              : `Lab B (${activeSlotPlan.planB?.venue})`)
+          : 'All Rooms');
 
     if (!confirm(`Mark ALL ${targetStudents.length} enrolled students in ${roomLabel} as ABSENT for ${selectedDate}?`)) {
       return;
@@ -377,7 +451,13 @@ export default function CoordinatorDashboard({
   const handleOpenReportModal = async () => {
     if (!selectedSlotId || isDateLocked || isHoliday) return;
     
-    const enrolledStudents = allocationsForSlot(selectedSlotId);
+    const activeSlotPlan = getSlotPlan(selectedSlotId);
+    const allEnrolled = allocationsForSlot(selectedSlotId);
+    const targetLab = isSubstitute ? 'B' : selectedVenueTab;
+    const enrolledStudents = (activeSlotPlan && (isSubstitute || selectedVenueTab !== 'ALL'))
+      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === targetLab)
+      : allEnrolled;
+
     const unmarkedStudents = enrolledStudents.filter(m => {
       if (!m.student) return false;
       const att = attendanceData.find(a => a.student_id === m.student?.id);
@@ -389,7 +469,8 @@ export default function CoordinatorDashboard({
       return;
     }
 
-    if (!confirm(`You have ${unmarkedStudents.length} unmarked students. Do you want to automatically mark them as ABSENT and proceed to the report?`)) {
+    const roomText = isSubstitute ? 'Lab B' : (selectedVenueTab === 'ALL' ? 'this slot' : `Lab ${selectedVenueTab}`);
+    if (!confirm(`You have ${unmarkedStudents.length} unmarked students in ${roomText}. Do you want to automatically mark them as ABSENT and proceed to the report?`)) {
       return;
     }
 
@@ -427,10 +508,21 @@ export default function CoordinatorDashboard({
 
   const handleQRScanSuccess = async (studentId: string) => {
     if (!selectedSlotId) return false;
-    const enrolledStudents = allocationsForSlot(selectedSlotId);
+    const activeSlotPlan = getSlotPlan(selectedSlotId);
+    const allEnrolled = allocationsForSlot(selectedSlotId);
+    const targetLab = isSubstitute ? 'B' : selectedVenueTab;
+    const enrolledStudents = (activeSlotPlan && (isSubstitute || selectedVenueTab !== 'ALL'))
+      ? allEnrolled.filter(m => getStudentLab(m.student, selectedSlotId)?.labType === targetLab)
+      : allEnrolled;
+
     const exists = enrolledStudents.find(a => a.student?.id === studentId);
     
-    if (!exists) return false;
+    if (!exists) {
+      if (isSubstitute) {
+        alert("This student is not assigned to your venue (Lab B). Please check with Primary Coordinator for Lab A.");
+      }
+      return false;
+    }
 
     return await markAttendance(studentId, 'PRESENT') ?? false;
   };
@@ -440,14 +532,23 @@ export default function CoordinatorDashboard({
     return currentSlots.filter(s => (activeTab === 'clubs' ? s.club_id : s.centre_id) === entityId);
   };
 
-  // Get allocations for a specific slot
+  // Get allocations for a specific slot (strictly filtering to Lab B for substitute faculty)
   const allocationsForSlot = (slotId: string) => {
-    return currentAllocations
+    const list = currentAllocations
       .filter(a => a.slot_id === slotId && a.student)
       .sort((a, b) => (a.student?.register_no || '').localeCompare(b.student?.register_no || ''));
+
+    if (isSubstitute) {
+      const activeSlotPlan = getSlotPlan(slotId);
+      if (activeSlotPlan) {
+        return list.filter(m => getStudentLab(m.student, slotId)?.labType === 'B');
+      }
+    }
+    return list;
   };
 
   const downloadPDF = async (slotId: string, entityName: string, day: string, venueTab: 'ALL' | 'A' | 'B' = selectedVenueTab) => {
+    const effectiveVenueTab = isSubstitute ? 'B' : venueTab;
     const allStudents = allocationsForSlot(slotId);
     if (allStudents.length === 0) {
       alert("No students enrolled in this slot yet.");
@@ -455,17 +556,17 @@ export default function CoordinatorDashboard({
     }
 
     const activeSlotPlan = getSlotPlan(slotId);
-    const students = (activeSlotPlan && venueTab !== 'ALL')
-      ? allStudents.filter(m => getStudentLab(m.student, slotId)?.labType === venueTab)
+    const students = (activeSlotPlan && effectiveVenueTab !== 'ALL')
+      ? allStudents.filter(m => getStudentLab(m.student, slotId)?.labType === effectiveVenueTab)
       : allStudents;
 
     if (students.length === 0) {
-      alert(`No students found allocated to Lab ${venueTab}.`);
+      alert(`No students found allocated to Lab ${effectiveVenueTab}.`);
       return;
     }
 
-    const labVenueName = (activeSlotPlan && venueTab !== 'ALL')
-      ? (venueTab === 'A' ? (activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue) : activeSlotPlan.planB?.venue)
+    const labVenueName = (activeSlotPlan && effectiveVenueTab !== 'ALL')
+      ? (effectiveVenueTab === 'A' ? (activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue) : activeSlotPlan.planB?.venue)
       : (activeSlotPlan ? `${activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue} & ${activeSlotPlan.planB?.venue}` : '');
 
     const doc = new jsPDF();
@@ -549,27 +650,47 @@ export default function CoordinatorDashboard({
     doc.setFont("helvetica", "normal");
     doc.text(day, 120, 69);
 
+    const currentEntity = currentEntities.find(e => e.id === (activeSlot?.club_id || activeSlot?.centre_id));
+    const primaryCoordinatorName = currentEntity?.faculty_name || 'Primary Coordinator';
+    const subStaffName = substituteStaffInfo?.name || activeSlotPlan?.planB?.assignedStaff?.name || (isSubstitute ? coordinatorName : null);
+    const isLabBReport = venueTab === 'B' || isSubstitute;
+
+    let statsY = 76;
+    if (isLabBReport && subStaffName) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Coordinator :", 14, 76);
+      doc.setFont("helvetica", "normal");
+      doc.text(primaryCoordinatorName, 37, 76);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(109, 40, 217);
+      doc.text("Substitute Faculty :", 110, 76);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${subStaffName} (In-Charge)`, 145, 76);
+      statsY = 83;
+    }
+
     const totalRegistered = students.length;
     const totalPresent = attendanceData.filter(a => a.status === 'PRESENT' && students.some(s => s.student?.id === a.student_id)).length;
     const totalAbsent = attendanceData.filter(a => a.status === 'ABSENT' && students.some(s => s.student?.id === a.student_id)).length;
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(51, 65, 85);
-    doc.text("Total Enrolled :", 14, 76);
+    doc.text("Total Enrolled :", 14, statsY);
     doc.setFont("helvetica", "normal");
-    doc.text(totalRegistered.toString(), 40, 76);
+    doc.text(totalRegistered.toString(), 40, statsY);
     
     doc.setFont("helvetica", "bold");
     doc.setTextColor(22, 163, 74);
-    doc.text("Present :", 75, 76);
+    doc.text("Present :", 75, statsY);
     doc.setFont("helvetica", "normal");
-    doc.text(totalPresent.toString(), 92, 76);
+    doc.text(totalPresent.toString(), 92, statsY);
     
     doc.setFont("helvetica", "bold");
     doc.setTextColor(220, 38, 38);
-    doc.text("Absent :", 130, 76);
+    doc.text("Absent :", 130, statsY);
     doc.setFont("helvetica", "normal");
-    doc.text(totalAbsent.toString(), 145, 76);
+    doc.text(totalAbsent.toString(), 145, statsY);
 
     const tableColumn = ["S.No", "Register No", "Student Name", "Course & Sec", "Allocated Venue", "Status"];
     const tableRows = students.map((m, i) => {
@@ -591,7 +712,7 @@ export default function CoordinatorDashboard({
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 82,
+      startY: statsY + 6,
       theme: 'grid',
       styles: { fontSize: 8.5, cellPadding: 2.8 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
@@ -617,6 +738,7 @@ export default function CoordinatorDashboard({
   };
 
   const downloadExcel = (slotId: string, entityName: string, day: string, venueTab: 'ALL' | 'A' | 'B' = selectedVenueTab) => {
+    const effectiveVenueTab = isSubstitute ? 'B' : venueTab;
     const allStudents = allocationsForSlot(slotId);
     if (allStudents.length === 0) {
       alert("No students enrolled in this slot yet.");
@@ -624,14 +746,19 @@ export default function CoordinatorDashboard({
     }
 
     const activeSlotPlan = getSlotPlan(slotId);
-    const students = (activeSlotPlan && venueTab !== 'ALL')
-      ? allStudents.filter(m => getStudentLab(m.student, slotId)?.labType === venueTab)
+    const students = (activeSlotPlan && effectiveVenueTab !== 'ALL')
+      ? allStudents.filter(m => getStudentLab(m.student, slotId)?.labType === effectiveVenueTab)
       : allStudents;
 
     if (students.length === 0) {
-      alert(`No students found allocated to Lab ${venueTab}.`);
+      alert(`No students found allocated to Lab ${effectiveVenueTab}.`);
       return;
     }
+
+    const currentEntity = currentEntities.find(e => e.id === (activeSlot?.club_id || activeSlot?.centre_id));
+    const primaryCoordinatorName = currentEntity?.faculty_name || 'Primary Coordinator';
+    const subStaffName = substituteStaffInfo?.name || activeSlotPlan?.planB?.assignedStaff?.name || (isSubstitute ? coordinatorName : null);
+    const isLabBReport = effectiveVenueTab === 'B' || isSubstitute;
 
     const rows = students.map((m, i) => {
       const studentAttendance = attendanceData.find(a => a.student_id === m.student?.id);
@@ -646,6 +773,8 @@ export default function CoordinatorDashboard({
         'Course / Department': m.student?.course || '',
         'Section': m.student?.section || '',
         'Allocated Room / Venue': venueStr,
+        'Primary Coordinator': primaryCoordinatorName,
+        'Conducted By': (isLabBReport && subStaffName) ? `${subStaffName} (Substitute Faculty)` : primaryCoordinatorName,
         'Academic Year': m.student?.academic_year || 'N/A',
         'Hosteler': m.student?.hosteler ? 'Yes' : 'No',
         'Contact Number': m.student?.contact_no || 'N/A',
@@ -662,6 +791,8 @@ export default function CoordinatorDashboard({
       { wch: 15 }, // Course
       { wch: 10 }, // Section
       { wch: 20 }, // Allocated Room
+      { wch: 22 }, // Primary Coordinator
+      { wch: 25 }, // Conducted By
       { wch: 14 }, // Academic Year
       { wch: 10 }, // Hosteler
       { wch: 15 }, // Contact
@@ -670,10 +801,10 @@ export default function CoordinatorDashboard({
     ];
 
     const workbook = XLSX.utils.book_new();
-    const sheetTitle = (activeSlotPlan && venueTab !== 'ALL') ? `Lab ${venueTab} Attendance` : 'Live Attendance';
+    const sheetTitle = (activeSlotPlan && effectiveVenueTab !== 'ALL') ? `Lab ${effectiveVenueTab} Attendance` : 'Live Attendance';
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetTitle);
     
-    const fileSuffix = (activeSlotPlan && venueTab !== 'ALL') ? `_Lab_${venueTab}` : '';
+    const fileSuffix = (activeSlotPlan && effectiveVenueTab !== 'ALL') ? `_Lab_${effectiveVenueTab}` : '';
     const fileName = `${entityName.replace(/\s+/g, '_')}${fileSuffix}_Attendance_${selectedDate}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
@@ -684,7 +815,16 @@ export default function CoordinatorDashboard({
       return;
     }
 
-    const rows = cumulativeData.students.map((item: any, i: number) => ({
+    const targetStudents = (isSubstitute && selectedSlotId)
+      ? cumulativeData.students.filter((item: any) => getStudentLab(item.student, selectedSlotId)?.labType === 'B')
+      : cumulativeData.students;
+
+    if (targetStudents.length === 0) {
+      alert("No cumulative data available for your assigned room (Lab B).");
+      return;
+    }
+
+    const rows = targetStudents.map((item: any, i: number) => ({
       'S.No': i + 1,
       'Register Number': item.student?.register_no || '',
       'Student Name': item.student?.name || '',
@@ -750,7 +890,8 @@ export default function CoordinatorDashboard({
 
               {/* Portal Type Pill */}
               <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-300 border border-blue-400/20 shadow-xs backdrop-blur-md">
-                <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-400" /> Faculty Coordinator Portal
+                <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-400" />
+                {isSubstitute ? 'Substitute Faculty In-Charge (Lab B)' : 'Faculty Coordinator Portal'}
               </span>
 
               {/* Verified Account Pill */}
@@ -772,7 +913,9 @@ export default function CoordinatorDashboard({
                   {timeGreeting}, {displayName}
                 </h1>
                 <p className="text-slate-300 text-xs sm:text-sm font-normal mt-1 leading-relaxed">
-                  Manage your assigned extracurricular entities, record live student attendance, and submit official activity reports seamlessly.
+                  {isSubstitute 
+                    ? 'You are assigned as the Substitute Faculty for Lab B. Record live student attendance and submit activity reports on behalf of the Primary Coordinator.'
+                    : 'Manage your assigned extracurricular entities, record live student attendance, and submit official activity reports seamlessly.'}
                 </p>
               </div>
             </div>
@@ -1060,6 +1203,9 @@ export default function CoordinatorDashboard({
 
             // Filter enrolled students by selected venue tab
             const enrolledStudents = selectedSlot ? allSlotStudents.filter(m => {
+              if (isSubstitute) {
+                return getStudentLab(m.student, selectedSlot.id)?.labType === 'B';
+              }
               if (!activeSlotPlan || selectedVenueTab === 'ALL') return true;
               return getStudentLab(m.student, selectedSlot.id)?.labType === selectedVenueTab;
             }) : [];
@@ -1158,15 +1304,20 @@ export default function CoordinatorDashboard({
                                           <div className="space-y-2">
                                             {cellSlots.map(slot => {
                                               const isSelected = selectedSlotId === slot.id;
-                                              const enrolledCount = allocationsForSlot(slot.id).length;
                                               const slotPlan = getSlotPlan(slot.id);
+                                              const enrolledCount = (isSubstitute && slotPlan)
+                                                ? allocationsForSlot(slot.id).filter(m => getStudentLab(m.student, slot.id)?.labType === 'B').length
+                                                : allocationsForSlot(slot.id).length;
+                                              const totalCapacity = (isSubstitute && slotPlan)
+                                                ? (slotPlan.planB?.studentCount || slotPlan.planB?.capacity || 'Spillover')
+                                                : (slotPlan ? ((slotPlan.planA?.capacity || slot.capacity) + (slotPlan.planB?.capacity || 0)) : slot.capacity);
                                               
                                               return (
                                                 <div 
                                                   key={slot.id}
                                                   onClick={() => {
                                                     setSelectedSlotId(isSelected ? null : slot.id);
-                                                    setSelectedVenueTab('ALL');
+                                                    setSelectedVenueTab(isSubstitute ? 'B' : 'ALL');
                                                   }}
                                                   className={`p-3 rounded-xl border cursor-pointer transition-all duration-150 ${
                                                     isSelected 
@@ -1188,18 +1339,31 @@ export default function CoordinatorDashboard({
                                                       </div>
 
                                                       {slotPlan ? (
-                                                        <div className="space-y-1 mt-0.5">
-                                                          <div className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded w-fit">
-                                                            <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
-                                                            <span>Lab A: {slotPlan.planA?.venue || slot.venue}</span>
-                                                            <span className="text-[10px] text-blue-500 font-normal">({slotPlan.planA?.studentCount || slotPlan.planA?.capacity || slot.capacity})</span>
-                                                          </div>
-                                                          <div className="flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-100/70 px-1.5 py-0.5 rounded w-fit">
+                                                        isSubstitute ? (
+                                                          <div className="flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-100/70 px-1.5 py-0.5 rounded w-fit mt-0.5">
                                                             <Zap className="w-3 h-3 text-purple-600 shrink-0" />
                                                             <span>Lab B: {slotPlan.planB?.venue}</span>
-                                                            <span className="text-[10px] text-purple-500 font-normal">({slotPlan.planB?.studentCount || slotPlan.planB?.capacity || 'Spillover'})</span>
+                                                            <span className="text-[10px] text-purple-500 font-normal">({enrolledCount} Students)</span>
                                                           </div>
-                                                        </div>
+                                                        ) : (
+                                                          <div className="space-y-1 mt-0.5">
+                                                            <div className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded w-fit">
+                                                              <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
+                                                              <span>Lab A: {slotPlan.planA?.venue || slot.venue}</span>
+                                                              <span className="text-[10px] text-blue-500 font-normal">({slotPlan.planA?.studentCount || slotPlan.planA?.capacity || slot.capacity})</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-100/70 px-1.5 py-0.5 rounded w-fit">
+                                                              <Zap className="w-3 h-3 text-purple-600 shrink-0" />
+                                                              <span>Lab B: {slotPlan.planB?.venue}</span>
+                                                              <span className="text-[10px] text-purple-500 font-normal">({slotPlan.planB?.studentCount || slotPlan.planB?.capacity || 'Spillover'})</span>
+                                                              {slotPlan.planB?.assignedStaff && (
+                                                                <span className="text-[9px] font-bold text-purple-900 ml-1 bg-purple-200/90 px-1 py-0.2 rounded">
+                                                                  {slotPlan.planB.assignedStaff.name}
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                                                        )
                                                       ) : (
                                                         slot.venue && (
                                                           <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
@@ -1211,7 +1375,7 @@ export default function CoordinatorDashboard({
 
                                                     <div className="text-right shrink-0">
                                                       <div className="text-xs font-bold text-slate-900">
-                                                        {enrolledCount} <span className="text-[10px] font-normal text-slate-400">/ {slotPlan ? ((slotPlan.planA?.capacity || slot.capacity) + (slotPlan.planB?.capacity || 0)) : slot.capacity}</span>
+                                                        {enrolledCount} <span className="text-[10px] font-normal text-slate-400">/ {totalCapacity}</span>
                                                       </div>
                                                       <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mt-1 inline-block ${
                                                         isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
@@ -1262,15 +1426,20 @@ export default function CoordinatorDashboard({
                                         <div className="space-y-2">
                                           {sessionSlots.map(slot => {
                                             const isSelected = selectedSlotId === slot.id;
-                                            const enrolledCount = allocationsForSlot(slot.id).length;
                                             const slotPlan = getSlotPlan(slot.id);
+                                            const enrolledCount = (isSubstitute && slotPlan)
+                                              ? allocationsForSlot(slot.id).filter(m => getStudentLab(m.student, slot.id)?.labType === 'B').length
+                                              : allocationsForSlot(slot.id).length;
+                                            const totalCapacity = (isSubstitute && slotPlan)
+                                              ? (slotPlan.planB?.studentCount || slotPlan.planB?.capacity || 'Spillover')
+                                              : (slotPlan ? ((slotPlan.planA?.capacity || slot.capacity) + (slotPlan.planB?.capacity || 0)) : slot.capacity);
                                             
                                             return (
                                               <div 
                                                 key={slot.id}
                                                 onClick={() => {
                                                   setSelectedSlotId(isSelected ? null : slot.id);
-                                                  setSelectedVenueTab('ALL');
+                                                  setSelectedVenueTab(isSubstitute ? 'B' : 'ALL');
                                                 }}
                                                 className={`p-3 rounded-xl border cursor-pointer transition-all ${
                                                   isSelected 
@@ -1312,7 +1481,7 @@ export default function CoordinatorDashboard({
                                                   </div>
                                                   <div className="text-right shrink-0">
                                                     <div className="text-sm font-bold text-slate-900">
-                                                      {enrolledCount} <span className="text-xs font-normal text-slate-400">/ {slotPlan ? ((slotPlan.planA?.capacity || slot.capacity) + (slotPlan.planB?.capacity || 0)) : slot.capacity}</span>
+                                                      {enrolledCount} <span className="text-xs font-normal text-slate-400">/ {totalCapacity}</span>
                                                     </div>
                                                     <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mt-0.5">
                                                       {isSelected ? 'Selected' : 'Select'}
@@ -1453,63 +1622,144 @@ export default function CoordinatorDashboard({
                             </div>
 
                             {/* Segmented Room Selector Tabs */}
-                            <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-xl border border-indigo-200 shadow-xs">
-                              <button
-                                onClick={() => setSelectedVenueTab('ALL')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                  selectedVenueTab === 'ALL'
-                                    ? 'bg-slate-900 text-white shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                                }`}
-                              >
-                                <span>All Rooms</span>
-                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                                  selectedVenueTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {allSlotStudents.length}
+                            {isSubstitute ? (
+                              <div className="flex items-center gap-2 bg-gradient-to-r from-purple-700 to-indigo-700 text-white px-3.5 py-2 rounded-xl shadow-xs">
+                                <Zap className="w-4 h-4 text-purple-200" />
+                                <span className="text-xs font-bold uppercase tracking-wider">
+                                  Your Assigned Room: Lab B ({activeSlotPlan.planB?.venue})
                                 </span>
-                              </button>
+                                <span className="text-xs font-mono font-black bg-white/20 px-2 py-0.5 rounded-md">
+                                  {labBStudents.length} Students
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-xl border border-indigo-200 shadow-xs">
+                                <button
+                                  onClick={() => setSelectedVenueTab('ALL')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    selectedVenueTab === 'ALL'
+                                      ? 'bg-slate-900 text-white shadow-xs'
+                                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <span>All Rooms</span>
+                                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                    selectedVenueTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {allSlotStudents.length}
+                                  </span>
+                                </button>
+
+                                <button
+                                  onClick={() => setSelectedVenueTab('A')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    selectedVenueTab === 'A'
+                                      ? 'bg-blue-600 text-white shadow-xs'
+                                      : 'text-blue-900 hover:bg-blue-50'
+                                  }`}
+                                >
+                                  <Building2 className="w-3.5 h-3.5" />
+                                  <span>Lab A: {activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                    selectedVenueTab === 'A' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {labAStudents.length}
+                                  </span>
+                                </button>
+
+                                <button
+                                  onClick={() => setSelectedVenueTab('B')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    selectedVenueTab === 'B'
+                                      ? 'bg-purple-600 text-white shadow-xs'
+                                      : 'text-purple-900 hover:bg-purple-50'
+                                  }`}
+                                >
+                                  <Zap className="w-3.5 h-3.5" />
+                                  <span>Lab B: {activeSlotPlan.planB?.venue}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                    selectedVenueTab === 'B' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800'
+                                  }`}>
+                                    {labBStudents.length}
+                                  </span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Lab B Faculty In-Charge Assignment Banner */}
+                          {isSubstitute ? (
+                            <div className="mt-3 pt-3 border-t border-indigo-200/60 flex items-center justify-between gap-3 text-xs">
+                              <div className="flex items-center gap-2 text-purple-950 font-bold">
+                                <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
+                                <span>
+                                  Strictly displaying students assigned to <strong>Lab B ({activeSlotPlan.planB?.venue})</strong>.
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-bold bg-purple-100 text-purple-800 px-2.5 py-1 rounded-lg border border-purple-200">
+                                Assigned Faculty: {coordinatorName}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="mt-3 pt-3 border-t border-indigo-200/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+                              {activeSlotPlan.planB?.assignedStaff ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-purple-600" />
+                                    Lab B Faculty In-Charge:
+                                  </span>
+                                  <span className="font-bold text-purple-900 bg-purple-100/90 px-2.5 py-0.5 rounded-lg border border-purple-200">
+                                    {activeSlotPlan.planB.assignedStaff.name}
+                                  </span>
+                                  <span className="text-slate-600 font-mono text-[11px] flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <Phone className="w-3 h-3 text-slate-400" />
+                                    {activeSlotPlan.planB.assignedStaff.mobile}
+                                  </span>
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    Dashboard Login Active
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 text-amber-800">
+                                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                  <span className="text-xs font-semibold">
+                                    No faculty assigned to Lab B ({activeSlotPlan.planB?.venue}) yet.
+                                  </span>
+                                </div>
+                              )}
 
                               <button
-                                onClick={() => setSelectedVenueTab('A')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                  selectedVenueTab === 'A'
-                                    ? 'bg-blue-600 text-white shadow-xs'
-                                    : 'text-blue-900 hover:bg-blue-50'
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenAssignModal(activeSlotPlan);
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer ${
+                                  activeSlotPlan.planB?.assignedStaff
+                                    ? 'bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200'
+                                    : 'bg-purple-600 hover:bg-purple-700 text-white hover:shadow-md'
                                 }`}
                               >
-                                <Building2 className="w-3.5 h-3.5" />
-                                <span>Lab A: {activeSlotPlan.planA?.venue || activeSlotPlan.currentVenue}</span>
-                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                                  selectedVenueTab === 'A' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800'
-                                }`}>
-                                  {labAStudents.length}
-                                </span>
-                              </button>
-
-                              <button
-                                onClick={() => setSelectedVenueTab('B')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                  selectedVenueTab === 'B'
-                                    ? 'bg-purple-600 text-white shadow-xs'
-                                    : 'text-purple-900 hover:bg-purple-50'
-                                }`}
-                              >
-                                <Zap className="w-3.5 h-3.5" />
-                                <span>Lab B: {activeSlotPlan.planB?.venue}</span>
-                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                                  selectedVenueTab === 'B' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800'
-                                }`}>
-                                  {labBStudents.length}
-                                </span>
+                                <UserPlus className="w-3.5 h-3.5" />
+                                {activeSlotPlan.planB?.assignedStaff ? 'Change Lab B Faculty' : `Assign Faculty for Lab B (${activeSlotPlan.planB?.venue})`}
                               </button>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
 
                       {/* CUMULATIVE MATRIX VIEW */}
-                      {slotViewMode === 'CUMULATIVE' ? (
+                      {slotViewMode === 'CUMULATIVE' ? (() => {
+                        const baseCumulativeStudents = (cumulativeData?.students || []).filter((item: any) => {
+                          if (!item.student) return false;
+                          if (isSubstitute && selectedSlot) {
+                            return getStudentLab(item.student, selectedSlot.id)?.labType === 'B';
+                          }
+                          return true;
+                        });
+
+                        return (
                         <div>
                           {/* Cumulative Metrics Bar */}
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-3 bg-slate-50 border-b border-slate-200 text-center">
@@ -1519,24 +1769,24 @@ export default function CoordinatorDashboard({
                             </div>
                             <div className="bg-white p-2.5 rounded-lg border border-slate-200">
                               <span className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Total Enrolled</span>
-                              <span className="block text-base font-bold text-slate-900 mt-0.5">{cumulativeData?.students?.length || 0}</span>
+                              <span className="block text-base font-bold text-slate-900 mt-0.5">{baseCumulativeStudents.length}</span>
                             </div>
                             <div className="bg-red-50 p-2.5 rounded-lg border border-red-200">
                               <span className="block text-[10px] font-bold uppercase text-red-700 tracking-wider">Defaulters (&lt;75%)</span>
                               <span className="block text-base font-bold text-red-700 mt-0.5">
-                                {cumulativeData?.students?.filter((s: any) => s.riskCategory === 'DEFAULTER').length || 0}
+                                {baseCumulativeStudents.filter((s: any) => s.riskCategory === 'DEFAULTER').length}
                               </span>
                             </div>
                             <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-200">
                               <span className="block text-[10px] font-bold uppercase text-amber-700 tracking-wider">Warning (75-84%)</span>
                               <span className="block text-base font-bold text-amber-700 mt-0.5">
-                                {cumulativeData?.students?.filter((s: any) => s.riskCategory === 'WARNING').length || 0}
+                                {baseCumulativeStudents.filter((s: any) => s.riskCategory === 'WARNING').length}
                               </span>
                             </div>
                             <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 col-span-2 sm:col-span-1">
                               <span className="block text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Good (85%+)</span>
                               <span className="block text-base font-bold text-emerald-800 mt-0.5">
-                                {cumulativeData?.students?.filter((s: any) => s.riskCategory === 'GOOD').length || 0}
+                                {baseCumulativeStudents.filter((s: any) => s.riskCategory === 'GOOD').length}
                               </span>
                             </div>
                           </div>
@@ -1579,14 +1829,14 @@ export default function CoordinatorDashboard({
                                 <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
                                 Loading cumulative attendance data across all conducted sessions...
                               </div>
-                            ) : !cumulativeData || !cumulativeData.students || cumulativeData.students.length === 0 ? (
+                            ) : !cumulativeData || !cumulativeData.students || baseCumulativeStudents.length === 0 ? (
                               <div className="p-12 text-center text-slate-400">
                                 <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                <p className="font-semibold text-xs">No attendance history records logged for this slot yet.</p>
+                                <p className="font-semibold text-xs">No attendance history records logged for this room yet.</p>
                               </div>
                             ) : (
                               (() => {
-                                const cumulativeList = cumulativeData.students.filter((item: any) => {
+                                const cumulativeList = baseCumulativeStudents.filter((item: any) => {
                                   if (!item.student) return false;
                                   const regMatch = (item.student.register_no || '').toLowerCase().includes(searchQuery.toLowerCase());
                                   const nameMatch = (item.student.name || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -1697,7 +1947,8 @@ export default function CoordinatorDashboard({
                             )}
                           </div>
                         </div>
-                      ) : (
+                        );
+                      })() : (
                         /* DAILY ROSTER VIEW */
                         <div>
                           {/* Attendance Live Metrics Bar */}
@@ -2030,7 +2281,15 @@ export default function CoordinatorDashboard({
           onClose={() => setShowReportModal(false)}
           slot={activeSlot}
           entityName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.name || 'Unknown'}
-          coordinatorName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.faculty_name || 'Coordinator'}
+          coordinatorName={(() => {
+            const slotPlan = getSlotPlan(activeSlot.id);
+            const primaryName = currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.faculty_name || coordinatorName || 'Coordinator';
+            const subName = substituteStaffInfo?.name || slotPlan?.planB?.assignedStaff?.name;
+            if ((isSubstitute || (slotPlan?.planB?.assignedStaff && selectedVenueTab === 'B')) && subName) {
+              return `${primaryName} (Conducted by Substitute: ${subName})`;
+            }
+            return primaryName;
+          })()}
           date={selectedDate}
           expected={currentAllocations.filter(a => a.slot_id === activeSlot.id).length}
           present={attendanceData.filter(a => a.status === 'PRESENT').length}
@@ -2053,6 +2312,15 @@ export default function CoordinatorDashboard({
           studentId={selectedStudentForHistory.id}
           slotId={activeSlot.id}
           entityName={currentEntities.find(e => e.id === (activeSlot.club_id || activeSlot.centre_id))?.name || 'Extracurricular Entity'}
+        />
+      )}
+
+      {isAssignStaffModalOpen && slotPlanForAssign && (
+        <AssignLabStaffModal
+          isOpen={isAssignStaffModalOpen}
+          onClose={() => setIsAssignStaffModalOpen(false)}
+          slotPlan={slotPlanForAssign}
+          onStaffAssigned={handleStaffAssigned}
         />
       )}
     </div>

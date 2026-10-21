@@ -5,7 +5,7 @@ import {
   Sparkles, AlertTriangle, ArrowRight, CheckCircle2, Building2, MapPin, 
   Users, Clock, Calendar, Download, FileSpreadsheet, X, Search, Layers,
   Printer, ArrowLeftRight, ChevronRight, ShieldCheck, Zap, RefreshCw, FileText,
-  CalendarDays, Send
+  CalendarDays, Send, User
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -970,6 +970,22 @@ export default function SmartVenueOptimizationModal({
                                     </div>
                                   ))}
                                 </div>
+                                {item.planB.assignedStaff ? (
+                                  <div className="mt-1.5 pt-1.5 border-t border-emerald-200/80 flex items-center justify-between text-[10px] bg-purple-50 text-purple-900 px-2 py-1 rounded-lg border border-purple-200">
+                                    <div className="flex items-center gap-1.5 truncate" title={item.planB.assignedStaff.name}>
+                                      <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                      <span className="font-extrabold truncate">{item.planB.assignedStaff.name}</span>
+                                    </div>
+                                    <span className="text-[9px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
+                                      {item.planB.assignedStaff.mobile}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="mt-1.5 pt-1 border-t border-emerald-200/50 text-[9.5px] text-slate-400 italic flex items-center gap-1">
+                                    <User className="w-3 h-3 text-slate-300 shrink-0" />
+                                    <span>Faculty not assigned</span>
+                                  </div>
+                                )}
                               </>
                             ) : (
                               <div className="py-4 text-center">
@@ -1418,6 +1434,18 @@ export default function SmartVenueOptimizationModal({
                             <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider mb-1.5">
                               Excess Overflow Only
                             </p>
+
+                            {item.planB.assignedStaff && (
+                              <div className="mb-2 p-1.5 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-purple-900 flex items-center gap-1">
+                                  <User className="w-3.5 h-3.5 text-purple-600" />
+                                  Staff: {item.planB.assignedStaff.name}
+                                </span>
+                                <span className="font-mono font-semibold text-purple-700 bg-purple-100/80 px-1.5 py-0.2 rounded">
+                                  {item.planB.assignedStaff.mobile}
+                                </span>
+                              </div>
+                            )}
 
                             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                               {item.planB.sections.length === 0 ? (

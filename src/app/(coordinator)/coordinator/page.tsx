@@ -123,19 +123,79 @@ export default async function CoordinatorPage() {
     console.warn('No active published venue plan found:', err);
   }
 
-  const coordinatorName = profile?.full_name || profile?.name || assignedClubs[0]?.faculty_name || assignedCentres[0]?.faculty_name || 'Faculty Coordinator';
+  // Check if current user is an assigned substitute faculty in publishedVenuePlan
+  const userMobile = (user.email || '').split('@')[0];
+  const assignedSubstituteSlots: any[] = [];
+  let substituteStaffInfo: any = null;
+
+  if (publishedVenuePlan?.suggestions) {
+    publishedVenuePlan.suggestions.forEach((s: any) => {
+      const staff = s.planB?.assignedStaff;
+      if (staff && (staff.profileId === user.id || staff.mobile === userMobile)) {
+        assignedSubstituteSlots.push(s);
+        substituteStaffInfo = staff;
+      }
+    });
+  }
+
+  const isPrimary = assignedCentres.some(c => c.faculty_mobile === userMobile) || assignedClubs.some(c => c.faculty_mobile === userMobile);
+  const isSubstitute = assignedSubstituteSlots.length > 0 && !isPrimary;
+
+  let finalCentreSlots = centreSlots || [];
+  let finalCentreAllocations = centreAllocations;
+
+  if (isSubstitute) {
+    const substituteSlotIds = assignedSubstituteSlots.map(s => s.id);
+    finalCentreSlots = finalCentreSlots.filter(s => substituteSlotIds.includes(s.id));
+    
+    // Strictly filter allocations to ONLY students belonging to Lab B for the substitute
+    if (publishedVenuePlan) {
+      finalCentreAllocations = finalCentreAllocations.filter(a => {
+        if (!substituteSlotIds.includes(a.slot_id)) return false;
+        const student = a.student;
+        if (!student) return false;
+
+        const compositeKey = `${student.id}__${a.slot_id}`;
+        const mapEntry = publishedVenuePlan.studentVenueMap?.[compositeKey] || publishedVenuePlan.studentVenueMap?.[student.id];
+        if (mapEntry && mapEntry.slotId === a.slot_id) {
+          return mapEntry.labType === 'B';
+        }
+
+        const slotSug = publishedVenuePlan.suggestions?.find((s: any) => s.id === a.slot_id);
+        if (slotSug?.planB?.sections) {
+          const inB = slotSug.planB.sections.some((sec: any) => 
+            (sec.students || []).some((st: any) => st.id === student.id || (st.register_no && st.register_no === student.register_no))
+          );
+          if (inB) return true;
+
+          const c = student.course?.replace(/^B\.Tech\.\s*|^B\.E\.\s*/i, '') || 'Dept';
+          const sec = student.section ? `Sec ${student.section}` : 'General';
+          const secKey = `${c} (${sec})`;
+          const inSecB = slotSug.planB.sections.some((s: any) => s.name === secKey);
+          if (inSecB) return true;
+        }
+        return false;
+      });
+    } else {
+      finalCentreAllocations = finalCentreAllocations.filter(a => substituteSlotIds.includes(a.slot_id));
+    }
+  }
+
+  const coordinatorName = profile?.full_name || profile?.name || substituteStaffInfo?.name || assignedClubs[0]?.faculty_name || assignedCentres[0]?.faculty_name || 'Faculty Coordinator';
 
   return (
     <CoordinatorDashboard
-      assignedClubs={assignedClubs}
+      assignedClubs={isSubstitute ? [] : assignedClubs}
       assignedCentres={assignedCentres}
-      clubSlots={clubSlots || []}
-      centreSlots={centreSlots || []}
-      clubAllocations={clubAllocations}
-      centreAllocations={centreAllocations}
+      clubSlots={isSubstitute ? [] : (clubSlots || [])}
+      centreSlots={finalCentreSlots}
+      clubAllocations={isSubstitute ? [] : clubAllocations}
+      centreAllocations={finalCentreAllocations}
       holidaysList={holidaysList}
       coordinatorName={coordinatorName}
       publishedVenuePlan={publishedVenuePlan}
+      isSubstitute={isSubstitute}
+      substituteStaffInfo={substituteStaffInfo}
     />
   );
 }
