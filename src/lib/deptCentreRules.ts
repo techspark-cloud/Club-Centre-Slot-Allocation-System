@@ -70,7 +70,8 @@ export interface LockedSlotAssignment {
 export function resolveLockedCentreSlots(
   student: { course: string; section: string; allowed_day: string; activity_session: string },
   centreSlots: any[],
-  customRules: any[] = []
+  customRules: any[] = [],
+  existingAllocations: any[] = []
 ): Record<string, LockedSlotAssignment> {
   const mandatoryCentres = getMandatoryCentresForStudent(student.course, student.section);
   if (mandatoryCentres.length === 0) return {};
@@ -97,6 +98,21 @@ export function resolveLockedCentreSlots(
   const usedDays = new Set<string>();
 
   for (const cName of mandatoryCentres) {
+    // If student already has this centre allocated in existing allocations, record it and don't re-lock another
+    const alreadyAllocated = existingAllocations.find(a => 
+      a.slot?.centre?.name === cName || a.slot?.centre_id === cName
+    );
+    if (alreadyAllocated && alreadyAllocated.slot) {
+      usedDays.add(alreadyAllocated.slot.day);
+      assignments[alreadyAllocated.slot.day] = {
+        slotId: alreadyAllocated.slot.id,
+        centreName: cName,
+        day: alreadyAllocated.slot.day,
+        timing: `${alreadyAllocated.slot.start_time.slice(0, 5)} - ${alreadyAllocated.slot.end_time.slice(0, 5)}`
+      };
+      continue;
+    }
+
     const validSlots = centreSlots.filter(s => {
       if (s.centre?.name !== cName) return false;
       if (!availableCentreDays.includes(s.day)) return false;
@@ -113,7 +129,8 @@ export function resolveLockedCentreSlots(
       return s.session === student.activity_session;
     });
 
-    const availSlot = validSlots.find(s => !usedDays.has(s.day));
+    // Only assign a slot if it has capacity remaining (prevent trapping students on full slots)
+    const availSlot = validSlots.find(s => !usedDays.has(s.day) && (s.capacity - (s.allocated_count || 0) > 0));
     if (availSlot) {
       usedDays.add(availSlot.day);
       assignments[availSlot.day] = {

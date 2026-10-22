@@ -96,11 +96,6 @@ export default async function StudentDashboard() {
     }
   }
 
-  // Calculate mandatory department locked centre slots
-  const lockedSlotAssignments = student.activity_session 
-    ? resolveLockedCentreSlots(student, centreSlots, customRules)
-    : {};
-
   // Fetch student's attendance records and published venue plans using admin client to bypass RLS
   const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -174,6 +169,11 @@ export default async function StudentDashboard() {
 
   const existingClubBookings = allocations?.filter(a => a.slot.club_id !== null) || [];
   const existingCentreBookings = allocations?.filter(a => a.slot.centre_id !== null) || [];
+
+  // Calculate mandatory department locked centre slots (taking existing allocations into account)
+  const lockedSlotAssignments = student.activity_session 
+    ? resolveLockedCentreSlots(student, centreSlots, customRules, allocations)
+    : {};
 
   const { data: attendance } = await supabaseAdmin
     .from('attendance')

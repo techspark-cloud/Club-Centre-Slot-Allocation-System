@@ -42,7 +42,9 @@ export default function BookingClient({
   if (lockedSlotAssignments) {
     Object.entries(lockedSlotAssignments).forEach(([day, info]) => {
       const alreadyBooked = existingCentreBookings.some(b => b.slot.day === day);
-      if (!alreadyBooked) {
+      const slotObj = centreSlots.find(s => s.id === info.slotId);
+      const isFull = slotObj && slotObj.allocated_count >= slotObj.capacity;
+      if (!alreadyBooked && !isFull) {
         initialCentreSelections[day] = info.slotId;
       }
     });
@@ -58,14 +60,16 @@ export default function BookingClient({
       let changed = false;
       Object.entries(lockedSlotAssignments).forEach(([day, info]) => {
         const alreadyBooked = existingCentreBookings.some(b => b.slot.day === day);
-        if (!alreadyBooked && updated[day] !== info.slotId) {
+        const slotObj = centreSlots.find(s => s.id === info.slotId);
+        const isFull = slotObj && slotObj.allocated_count >= slotObj.capacity;
+        if (!alreadyBooked && !isFull && updated[day] !== info.slotId) {
           updated[day] = info.slotId;
           changed = true;
         }
       });
       return changed ? updated : prev;
     });
-  }, [lockedSlotAssignments, existingCentreBookings]);
+  }, [lockedSlotAssignments, existingCentreBookings, centreSlots]);
   
   const [showPreview, setShowPreview] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
@@ -131,9 +135,9 @@ export default function BookingClient({
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'slots' }, (payload) => {
         const updatedSlot = payload.new;
         
-        if (updatedSlot.type === 'CLUB') {
+        if (updatedSlot.club_id) {
           setLiveClubSlots(prev => prev.map(slot => slot.id === updatedSlot.id ? { ...slot, allocated_count: updatedSlot.allocated_count } : slot));
-        } else if (updatedSlot.type === 'CENTRE') {
+        } else if (updatedSlot.centre_id) {
           setLiveCentreSlots(prev => prev.map(slot => slot.id === updatedSlot.id ? { ...slot, allocated_count: updatedSlot.allocated_count } : slot));
         }
       })
@@ -184,7 +188,7 @@ export default function BookingClient({
   const hasAnyBookings = existingClubBookings.length > 0 || existingCentreBookings.length > 0;
   const hasNewSelections = Object.keys(selectedClubIds).length > 0 || Object.keys(selectedCentreIds).length > 0;
 
-  const isReadyToProceed = (requiredDays.length > 0 && requiredDays.every(day => {
+  const isReadyToProceed = hasNewSelections || (requiredDays.length > 0 && requiredDays.every(day => {
     if (day === 'ANY') {
       const hasClub = Object.keys(selectedClubIds).length > 0 || existingClubBookings.length > 0;
       const hasCentre = Object.keys(selectedCentreIds).length > 0 || existingCentreBookings.length > 0;
@@ -197,7 +201,7 @@ export default function BookingClient({
     const hasClub = !dayHasClub || selectedClubIds[day] || existingClubBookings.some(b => b.slot.day === day);
     const hasCentre = !dayHasCentre || selectedCentreIds[day] || existingCentreBookings.some(b => b.slot.day === day);
     return hasClub && hasCentre;
-  })) || (requiredDays.length === 0 && hasNewSelections);
+  }));
 
   const allBookingDays = Array.from(new Set([
     ...requiredDays,
@@ -209,24 +213,8 @@ export default function BookingClient({
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
-  const isDayLocked = (currentDay: string) => {
-    if (student.allowed_day === 'ANY') return false;
-    
-    const dayIndex = requiredDays.indexOf(currentDay);
-    if (dayIndex <= 0) return false; // First day (or not in requiredDays) is always unlocked
-  
-    for (let i = 0; i < dayIndex; i++) {
-      const prevDay = requiredDays[i];
-      const prevDayHasClub = sortedClubSlots.some(s => s.day === prevDay);
-      const prevDayHasCentre = sortedCentreSlots.some(s => s.day === prevDay);
-      
-      const prevClub = !prevDayHasClub || selectedClubIds[prevDay] || existingClubBookings.some(b => b.slot.day === prevDay);
-      const prevCentre = !prevDayHasCentre || selectedCentreIds[prevDay] || existingCentreBookings.some(b => b.slot.day === prevDay);
-      
-      if (!prevClub || !prevCentre) {
-        return true; // A previous day is incomplete, so this day is locked
-      }
-    }
+  const isDayLocked = (_currentDay: string) => {
+    // Allow students to select their allowed slots freely without cascading locks
     return false;
   };
 
@@ -299,17 +287,46 @@ export default function BookingClient({
           ...existingCentreBookings.map((b: any) => b.slot_id),
         ]);
 
+        const successfulSlotIds: string[] = [];
+        const errorMessages: string[] = [];
+
         for (const slotId of Object.values(selectedClubIds)) {
           if (alreadyBookedSlotIds.has(slotId)) continue;
-          const res = await supabase.rpc('book_slot', { p_student_id: studentId, p_slot_id: slotId });
-          if (res.error) throw res.error;
-          if (!res.data?.success) throw new Error(res.data?.message || 'Club booking failed');
+          try {
+            const res = await supabase.rpc('book_slot', { p_student_id: studentId, p_slot_id: slotId });
+            if (res.error) {
+              errorMessages.push(res.error.message);
+            } else if (!res.data?.success) {
+              errorMessages.push(res.data?.message || 'Club booking failed');
+            } else {
+              successfulSlotIds.push(slotId);
+            }
+          } catch (e: any) {
+            errorMessages.push(e.message || 'Club booking error');
+          }
         }
         for (const slotId of Object.values(selectedCentreIds)) {
           if (alreadyBookedSlotIds.has(slotId)) continue;
-          const res = await supabase.rpc('book_slot', { p_student_id: studentId, p_slot_id: slotId });
-          if (res.error) throw res.error;
-          if (!res.data?.success) throw new Error(res.data?.message || 'Centre booking failed');
+          try {
+            const res = await supabase.rpc('book_slot', { p_student_id: studentId, p_slot_id: slotId });
+            if (res.error) {
+              errorMessages.push(res.error.message);
+            } else if (!res.data?.success) {
+              errorMessages.push(res.data?.message || 'Centre booking failed');
+            } else {
+              successfulSlotIds.push(slotId);
+            }
+          } catch (e: any) {
+            errorMessages.push(e.message || 'Centre booking error');
+          }
+        }
+
+        if (errorMessages.length > 0) {
+          if (successfulSlotIds.length === 0) {
+            throw new Error(errorMessages.join('. '));
+          } else {
+            alert(`Notice: Some slot(s) were booked, but: ${errorMessages.join('. ')}`);
+          }
         }
       })();
 
