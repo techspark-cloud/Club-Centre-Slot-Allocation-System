@@ -181,6 +181,7 @@ export default function BookingClient({
     return hasBookedClub && hasBookedCentre;
   });
 
+  const hasAnyBookings = existingClubBookings.length > 0 || existingCentreBookings.length > 0;
   const hasNewSelections = Object.keys(selectedClubIds).length > 0 || Object.keys(selectedCentreIds).length > 0;
 
   const isReadyToProceed = (requiredDays.length > 0 && requiredDays.every(day => {
@@ -616,14 +617,31 @@ export default function BookingClient({
         document.body
       )}
 
-      {/* OFFICIAL TIMETABLE & ATTENDANCE SECTION (Shown when fully booked) */}
-      {mounted && isFullyBooked && (
+      {/* OFFICIAL TIMETABLE & ATTENDANCE SECTION */}
+      {mounted && (isFullyBooked || hasAnyBookings) && (
         <div className="animate-in zoom-in duration-500">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center mb-8 shadow-sm">
-            <CheckCircle className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
-            <h3 className="text-2xl font-extrabold text-emerald-900 tracking-tight">Booking Confirmed!</h3>
-            <p className="text-emerald-700 font-medium mt-1">Your Club and Centre allocations are finalized.</p>
-          </div>
+          {isFullyBooked ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center mb-8 shadow-sm">
+              <CheckCircle className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
+              <h3 className="text-2xl font-extrabold text-emerald-900 tracking-tight">Booking Confirmed!</h3>
+              <p className="text-emerald-700 font-medium mt-1">Your Club and Centre allocations are finalized.</p>
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 sm:p-6 mb-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-left">
+                <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <CalendarClock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Current Allocated Timetable</h3>
+                  <p className="text-slate-600 text-xs sm:text-sm font-medium">Your confirmed activity slots are shown below. If you have any remaining balance slots, you can select them below.</p>
+                </div>
+              </div>
+              <div className="px-3.5 py-1.5 rounded-full bg-blue-100 text-blue-800 text-xs font-black uppercase tracking-wider shrink-0 border border-blue-200">
+                {existingClubBookings.length + existingCentreBookings.length} Slots Allocated
+              </div>
+            </div>
+          )}
 
           {/* DIGITAL ID FOR ATTENDANCE */}
           {(existingClubBookings.length > 0 || existingCentreBookings.length > 0) && (
